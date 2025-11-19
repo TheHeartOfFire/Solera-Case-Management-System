@@ -314,7 +314,7 @@ public class AutomateFormsOrgVariables : IOrgVariables
              properName: "SelectedNote:NotableDealersAndCompanies",
              name: "selectednote",
              prefix: "notabledealersandcompanies:",
-             description: "User Input - No value",
+             description: "Notable dealers and companies in d1_1,2, d2_3,4 format.",
              aliases: ["serversandcompanies"],
              getValue: () =>
              {
