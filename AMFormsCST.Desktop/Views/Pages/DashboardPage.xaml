@@ -145,6 +145,9 @@
             <ui:TextBox Text="{Binding SelectedNote.SelectedDealer.ServerCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
                             ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="64" 
                         Margin="0,0,0,0"  Grid.Row="3" Grid.Column="1" HorizontalAlignment="Left" ToolTip="Server ID for the dealership."/>
+            <ToggleButton Grid.Row="3" Grid.Column="1" Margin="0,0,10,0" IsChecked="{Binding SelectedNote.SelectedDealer.Notable, Mode=TwoWay}" ToolTip="Mark this form as notable." HorizontalAlignment="Right">
+                <ui:SymbolIcon Symbol="Note24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
+            </ToggleButton>
             <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedDealer.ServerCode}" Grid.Row="3" 
                         Grid.Column="2" HorizontalAlignment="right" Margin="5,0,0,0" ToolTip="Copy server ID to clipboard."/>
             
@@ -158,6 +161,9 @@
             <Label Content="Company Number: " VerticalAlignment="Center" HorizontalAlignment="Right" Grid.Row="5"/>
             <ui:TextBox Text="{Binding SelectedNote.SelectedDealer.Companies.SelectedItem.CompanyCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
                         ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="32" Margin="0,0,0,0" Grid.Row="5" Grid.Column="1" HorizontalAlignment="Left" ToolTip="Company number."/>
+            <ToggleButton Grid.Row="5" Grid.Column="1" Margin="0,0,10,0" IsChecked="{Binding SelectedNote.SelectedDealer.SelectedCompany.Notable, Mode=TwoWay}" ToolTip="Mark this form as notable." HorizontalAlignment="Right">
+                <ui:SymbolIcon Symbol="Note24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
+            </ToggleButton>
             <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedDealer.SelectedCompany.CompanyCode}" Grid.Row="5" 
                         Grid.Column="2" HorizontalAlignment="right" Margin="5,0,0,0" ToolTip="Copy company number to clipboard."/>
         </Grid>

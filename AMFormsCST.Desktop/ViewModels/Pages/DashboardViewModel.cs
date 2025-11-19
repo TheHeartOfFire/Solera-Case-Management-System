@@ -122,7 +122,7 @@ public partial class DashboardViewModel : ViewModel
 
             _notes = new ManagedObservableCollection<NoteModel>(
                 () => new NoteModel(_supportTool.Settings.UserSettings.ExtSeparator, _logger),
-                notes,
+                notes.Where(c => !c.IsBlank),
                 _logger,
                 postCreationAction
             );

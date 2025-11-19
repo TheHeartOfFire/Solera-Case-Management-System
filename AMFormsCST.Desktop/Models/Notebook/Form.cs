@@ -47,7 +47,7 @@ public partial class Form : ManagedObservableCollectionItem
     {
         get
         {
-            if (!string.IsNullOrEmpty(Name) || !string.IsNullOrEmpty(GetFlowDocumentPlainText(Notes ?? new())))
+            if (!string.IsNullOrEmpty(Name) || !string.IsNullOrWhiteSpace(GetFlowDocumentPlainText(Notes ?? new())))
                 return false;
             if (TestDeals.Any(td => !td.IsBlank))
                 return false;
