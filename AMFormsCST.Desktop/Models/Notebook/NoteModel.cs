@@ -80,7 +80,7 @@ public partial class NoteModel : ManagedObservableCollectionItem
     {
         get
         {
-            if (!string.IsNullOrEmpty(CaseNumber) || Notes != null)
+            if (!string.IsNullOrEmpty(CaseNumber) || !string.IsNullOrWhiteSpace(GetFlowDocumentPlainText(Notes ?? new())))
                 return false;
             if (Dealers.Any(d => !d.IsBlank) ||
                 Contacts.Any(c => !c.IsBlank) ||

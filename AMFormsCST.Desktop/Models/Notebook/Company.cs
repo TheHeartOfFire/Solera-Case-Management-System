@@ -15,7 +15,7 @@ public partial class Company : ManagedObservableCollectionItem
     [ObservableProperty]
     private string? _companyCode = string.Empty;
     [ObservableProperty]
-    private bool _notable;
+    private bool _notable = true;
 
     public override bool IsBlank { get { return string.IsNullOrEmpty(Name) && string.IsNullOrEmpty(CompanyCode); }}
     public override Guid Id { get; } = Guid.NewGuid();

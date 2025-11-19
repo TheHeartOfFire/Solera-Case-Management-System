@@ -18,7 +18,7 @@ namespace AMFormsCST.Desktop.Models
         [ObservableProperty]
         private string? _serverCode = string.Empty;
         [ObservableProperty]
-        private bool _notable;
+        private bool _notable = true;
 
         public ManagedObservableCollection<Company> Companies { get; set; }
 

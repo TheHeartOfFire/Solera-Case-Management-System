@@ -120,14 +120,18 @@ public class AutomateFormsOrgVariables : IOrgVariables
              ?? string.Empty
             ),
             new TextTemplateVariable(
-             properName: "Notes:Phone",
+             properName: "SelectedContact:Phone",
              name: "phone",
              prefix: "selectedcontact:",
              description: "Phone#",
              aliases: [],
              getValue: () =>
-             _supportToolFactory()?.Notebook.Notes.SelectedItem?.Contacts.SelectedItem?.Phone
-             ?? string.Empty
+             {
+                 var contact = _supportToolFactory()?.Notebook.Notes.SelectedItem?.Contacts.SelectedItem;
+                 return contact?.Phone +
+                 (!string.IsNullOrWhiteSpace(contact?.PhoneExtension) ? $" {contact.PhoneExtensionDelimiter}" : string.Empty) +
+                 contact?.PhoneExtension;
+             }
             ),
             new TextTemplateVariable(
              properName: "SelectedNote:Notes",
@@ -136,7 +140,7 @@ public class AutomateFormsOrgVariables : IOrgVariables
              description: "Notes",
              aliases: [],
              getValue: () =>
-             !string.IsNullOrWhiteSpace(_supportToolFactory()?.Notebook.Notes.SelectedItem?.NotesText) 
+             !string.IsNullOrWhiteSpace(_supportToolFactory()?.Notebook.Notes.SelectedItem?.NotesText)
                 ? _supportToolFactory()!.Notebook.Notes.SelectedItem!.NotesText
                 : string.Empty
             ),
@@ -305,7 +309,47 @@ public class AutomateFormsOrgVariables : IOrgVariables
              description: "User Input - No value",
              aliases: [],
              getValue: () => "[User Input]"
-            )
+            ),
+            new TextTemplateVariable(
+             properName: "SelectedNote:NotableDealersAndCompanies",
+             name: "selectednote",
+             prefix: "notabledealersandcompanies:",
+             description: "Notable dealers and companies in d1_1,2, d2_3,4 format.",
+             aliases: ["serversandcompanies"],
+             getValue: () =>
+             {
+                var dealers = _supportToolFactory()?.Notebook?.Notes.SelectedItem?.Dealers;
+                 foreach(var dealer in dealers?
+                 .Where(d => d.Notable)
+                 .Where(d => !string.IsNullOrWhiteSpace(d.ServerCode)) ?? [])
+                 {
+                    var companies = dealer.Companies
+                     .Where(c => c.Notable)
+                     .Where(c => !string.IsNullOrEmpty(c.CompanyCode));
+                    if (companies.Any())
+                    {
+                        return string.Join(", ", dealers
+                            .Where(d => d.Notable)
+                            .Where(d => !string.IsNullOrWhiteSpace(d.ServerCode))
+                            .Select(d => $"{d.ServerCode}_{string.Join(',', d.Companies
+                                .Where(c => c.Notable)
+                                .Where(c => !string.IsNullOrEmpty(c.CompanyCode))
+                                .Select(c => c.CompanyCode))}"));
+                    }
+                 }
+                 return string.Empty;
+
+             }
+             
+            ),
+            new TextTemplateVariable(
+             properName: "SelectedDealer:NotableCompanies",
+             name: "notablecompanies",
+             prefix: "selecteddealer:",
+             description: "Notable companies for selected dealer",
+             aliases: ["companies"],
+             getValue: () =>
+             string.Join(',', _supportToolFactory()?.Notebook.Notes.SelectedItem?.Dealers.SelectedItem?.Companies.Where(c => c.Notable).Where(c => !string.IsNullOrEmpty(c.CompanyCode)).Select(c => c.CompanyCode) ?? []))
         };
 
         _logger?.LogInfo($"Registered {variables.Count} text template variables.");
