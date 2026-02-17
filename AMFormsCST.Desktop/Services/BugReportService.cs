@@ -75,6 +75,13 @@ public class BugReportService(ILogService? logger, IDialogService dialogService)
             else
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
+
+                // If it's 401 Unauthorized, offer a clear message
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized || (int)response.StatusCode == 401)
+                {
+                    errorContent = "The system is unable to authenticate with the bug report service. The internal token may have expired. Please contact support.";
+                }
+
                 _dialogService.ShowMessageBox($"Failed to submit bug report. Status: {response.StatusCode}\n{errorContent}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 _logger?.LogError($"Failed to submit bug report. Status: {response.StatusCode}, Response: {errorContent}");
             }

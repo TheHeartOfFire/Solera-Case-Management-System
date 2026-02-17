@@ -41,9 +41,9 @@ public class CreateBugReport
             return badRequestResponse;
         }
         // Get secrets from environment variables (Application Settings in Azure)
-        var pat = Environment.GetEnvironmentVariable("GITHUB_PAT");
-        var repoOwner = Environment.GetEnvironmentVariable("GITHUB_REPO_OWNER");
-        var repoName = Environment.GetEnvironmentVariable("GITHUB_REPO_NAME");
+        var pat = Environment.GetEnvironmentVariable("GITHUB_PAT")?.Trim();
+        var repoOwner = Environment.GetEnvironmentVariable("GITHUB_REPO_OWNER")?.Trim();
+        var repoName = Environment.GetEnvironmentVariable("GITHUB_REPO_NAME")?.Trim();
 
         if (string.IsNullOrEmpty(pat) || string.IsNullOrEmpty(repoOwner) || string.IsNullOrEmpty(repoName))
         {
@@ -51,14 +51,10 @@ public class CreateBugReport
             return req.CreateResponse(HttpStatusCode.InternalServerError);
         }
 
-        _httpClient.DefaultRequestHeaders.UserAgent.Clear();
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("AMFormsCST-BugReportFunction", "1.0"));
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", pat);
-
         try
         {
             // 1. Create Gist
-            var gistUrl = await CreateGistAsync(data.LogContent, logger);
+            var gistUrl = await CreateGistAsync(data.LogContent, pat, logger);
             if (gistUrl == null)
             {
                 var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
@@ -85,14 +81,21 @@ public class CreateBugReport
 
             var jsonPayload = JsonSerializer.Serialize(dispatchPayload);
             var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync(dispatchUrl, content);
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, dispatchUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("token", pat);
+            request.Headers.UserAgent.Add(new ProductInfoHeaderValue("AMFormsCST-BugReportFunction", "1.0"));
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
 
             var clientResponse = req.CreateResponse(response.StatusCode);
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                logger.LogError("Failed to trigger repository dispatch. Status: {StatusCode}, Response: {ErrorContent}", response.StatusCode, errorContent);
-                await clientResponse.WriteStringAsync($"Failed to trigger repository dispatch: {errorContent}");
+                logger.LogError("Failed to trigger repository dispatch. RepoOwner: {RepoOwner}, RepoName: {RepoName}, Status: {StatusCode}, Response: {ErrorContent}", 
+                                    repoOwner, repoName, response.StatusCode, errorContent);
+                await clientResponse.WriteStringAsync($"Failed to trigger repository dispatch for {repoOwner}/{repoName}: {errorContent}");
             }
             else
             {
@@ -107,7 +110,7 @@ public class CreateBugReport
         }
     }
 
-    private static async Task<string?> CreateGistAsync(string logContent, ILogger log)
+    private static async Task<string?> CreateGistAsync(string logContent, string pat, ILogger log)
     {
         var gistPayload = new
         {
@@ -121,7 +124,13 @@ public class CreateBugReport
 
         var jsonPayload = JsonSerializer.Serialize(gistPayload);
         var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync("https://api.github.com/gists", content);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.github.com/gists");
+        request.Headers.Authorization = new AuthenticationHeaderValue("token", pat);
+        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("AMFormsCST-BugReportFunction", "1.0"));
+        request.Content = content;
+
+        var response = await _httpClient.SendAsync(request);
 
         if (response.IsSuccessStatusCode)
         {
