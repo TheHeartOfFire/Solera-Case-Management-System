@@ -169,7 +169,7 @@
         </Grid>
 
 
-        <Grid Grid.Row="1" Grid.Column="3" Margin="0,0,0,0" VerticalAlignment="Center">
+        <Grid Grid.Row="1" Grid.Column="3" Margin="0,0,0,0" VerticalAlignment="Stretch">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="auto"/>
                 <ColumnDefinition Width="*"/>
@@ -182,8 +182,8 @@
                 <RowDefinition Height="auto" />
                 <RowDefinition Height="auto" />
                 <RowDefinition Height="auto" />
-                <RowDefinition Height="*" />
                 <RowDefinition Height="auto" />
+                <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
             <controls:ManagedObservableCollectionSelector ItemsSource="{Binding SelectedNote.Forms}" 
@@ -222,18 +222,10 @@
             <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedForm.SelectedTestDeal.DealNumber}" Grid.Row="3" Grid.Column="2" 
                                  HorizontalAlignment="Left" Margin="5,0,0,0" ToolTip="Copy deal number to clipboard."/>
 
-            <Label Content="Notes: " VerticalAlignment="Top" HorizontalAlignment="Center"  Grid.Row="4" Grid.Column="0"/>
-            <controls:RichTextToolbar Grid.Row="4" Grid.Column="1" Target="{Binding ElementName=FormNotesRichTextBox}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,0,0,2"/>
-            <ui:RichTextBox x:Name="FormNotesRichTextBox" 
-                            helpers:RichTextBoxHelper.Document="{Binding SelectedNote.SelectedForm.Notes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                            helpers:RichTextBoxHelper.TextChangedCommand="{Binding DataContext.FormNotesChangedCommand, RelativeSource={RelativeSource AncestorType={x:Type local:DashboardPage}}}"
-                            VerticalAlignment="Stretch" MinWidth="256" 
-                            Margin="0,0,0,0" AcceptsReturn="True" MinHeight="100" Grid.Row="5" 
-                            Grid.Column="1" HorizontalAlignment="Stretch" ToolTip="Notes specific to this form." VerticalScrollBarVisibility="Auto" />
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedForm.Notes, Converter={StaticResource FlowDocumentToTextConverter}}" Grid.Row="5" Grid.Column="2" 
-                                 HorizontalAlignment="Left" Margin="5,0,0,0" VerticalAlignment="Top" ToolTip="Copy form notes to clipboard."/>
-
-            <StackPanel Orientation="Horizontal" Margin="0,5,0,0" Grid.Row="6" Grid.Column="1">
+            <Label Content="Notes: " VerticalAlignment="Top" HorizontalAlignment="Center"  Grid.Row="6" Grid.Column="0"/>
+            <controls:RichTextToolbar Grid.Row="5" Grid.Column="1" Target="{Binding ElementName=FormNotesRichTextBox}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,0,0,2"/>
+            
+            <StackPanel Orientation="Horizontal" Margin="0,5,0,0" Grid.Row="4" Grid.Column="1">
                 <Label Content="Pdf" VerticalAlignment="Center"/>
                 <ui:ToggleSwitch IsChecked="{Binding SelectedNote.SelectedForm.IsImpact, Mode=TwoWay}" Margin="5,0,5,0" ToolTip="Toggle PDF/Impact form type."/>
                 <Label Content="Impact" Margin="0,0,5,0" VerticalAlignment="Center"/>
@@ -244,6 +236,15 @@
                     <ui:SymbolIcon Symbol="TextT12" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
                 </ui:Button>
             </StackPanel>
+            
+            <ui:RichTextBox x:Name="FormNotesRichTextBox" 
+                            helpers:RichTextBoxHelper.Document="{Binding SelectedNote.SelectedForm.Notes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                            helpers:RichTextBoxHelper.TextChangedCommand="{Binding DataContext.FormNotesChangedCommand, RelativeSource={RelativeSource AncestorType={x:Type local:DashboardPage}}}"
+                            VerticalAlignment="Stretch" Margin="0" AcceptsReturn="True" Grid.Row="6" 
+                            Grid.Column="1" HorizontalAlignment="Stretch" ToolTip="Notes specific to this form." VerticalScrollBarVisibility="Auto" />
+            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedForm.Notes, Converter={StaticResource FlowDocumentToTextConverter}}" Grid.Row="6" Grid.Column="2" 
+                                 HorizontalAlignment="Left" Margin="5,0,0,0" VerticalAlignment="Top" ToolTip="Copy form notes to clipboard."/>
+
         </Grid>
 
         <Grid Margin="0,0,0,0" HorizontalAlignment="Left" Grid.Row="2" Grid.Column="3" VerticalAlignment="Center">
