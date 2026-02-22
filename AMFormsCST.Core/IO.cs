@@ -7,6 +7,7 @@ using AMFormsCST.Core.Types.BestPractices.TextTemplates.Models;
 using AMFormsCST.Core.Utils;
 using System.Text.Json;
 using System.Xml;
+using System.IO;
 
 namespace AMFormsCST.Core;
 

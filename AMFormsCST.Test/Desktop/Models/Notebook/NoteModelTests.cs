@@ -2,6 +2,7 @@ using AMFormsCST.Desktop.Interfaces;
 using AMFormsCST.Desktop.Models;
 using System.Linq;
 using System.Windows.Documents;
+using System.Windows.Markup;
 using Xunit;
 using CoreNote = AMFormsCST.Core.Types.Notebook.Note;
 
@@ -68,7 +69,8 @@ public class NoteModelTests
 
         // Act
         note.CaseNumber = caseNumber;
-        note.Notes = new FlowDocument(new Paragraph(new Run(notes)));
+        if (notes != null)
+            note.NotesXaml = XamlWriter.Save(new FlowDocument(new Paragraph(new Run(notes))));
 
         // Assert
         Assert.False(note.IsBlank);
@@ -113,7 +115,7 @@ public class NoteModelTests
         var noteModel = new NoteModel(TestExtSeparator, null)
         {
             CaseNumber = "98765",
-            Notes = new FlowDocument(new Paragraph(new Run("Test case notes.")))
+            NotesXaml = XamlWriter.Save(new FlowDocument(new Paragraph(new Run("Test case notes."))))
         };
 
         var dealer = new Dealer(null) { Name = "Test Dealer", ServerCode = "SVR1" };
@@ -171,7 +173,7 @@ public class NoteModelTests
 
         // Act
         noteModel.CaseNumber = "CS123";
-        noteModel.Notes = new FlowDocument(new Paragraph(new Run("Test Notes")));
+        noteModel.NotesXaml = XamlWriter.Save(new FlowDocument(new Paragraph(new Run("Test Notes"))));
 
         // Assert
         Assert.Equal("CS123", coreNote.CaseText);

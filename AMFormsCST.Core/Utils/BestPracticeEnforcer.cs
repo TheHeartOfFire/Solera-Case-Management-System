@@ -66,19 +66,20 @@ public class BestPracticeEnforcer : IBestPracticeEnforcer
         try
         {
             var existingTemplate = Templates.FirstOrDefault(t => t.Id == updatedTemplate.Id);
-            if (existingTemplate != null)
-            {
-                existingTemplate.Name = updatedTemplate.Name;
-                existingTemplate.Description = updatedTemplate.Description;
-                existingTemplate.Text = updatedTemplate.Text;
 
-                _templateRepository.SaveTemplates(Templates);
-                _logger?.LogInfo($"Template updated: {updatedTemplate.Name} ({updatedTemplate.Id})");
-            }
-            else
-            {
+            if (existingTemplate is null) 
+            { 
                 _logger?.LogWarning($"UpdateTemplate called but template not found: {updatedTemplate.Id}");
+                return;
             }
+
+            existingTemplate.Name = updatedTemplate.Name;
+            existingTemplate.Description = updatedTemplate.Description;
+            existingTemplate.Text = updatedTemplate.Text;
+
+            _templateRepository.SaveTemplates(Templates);
+            _logger?.LogInfo($"Template updated: {updatedTemplate.Name} ({updatedTemplate.Id})");
+
         }
         catch (Exception ex)
         {

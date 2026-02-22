@@ -89,10 +89,11 @@
 
             <Label Content="Notes:"  Margin=" 0, 0, 0, 0" Grid.Row="1" VerticalAlignment="Bottom"/>
             <controls:RichTextToolbar Grid.Row="2" Target="{Binding ElementName=NoteRichTextBox}" Margin="0,0,0,2" HorizontalAlignment="Left"/>
-            <ui:RichTextBox x:Name="NoteRichTextBox" helpers:RichTextBoxHelper.Document="{Binding SelectedNote.Notes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+            <ui:RichTextBox x:Name="NoteRichTextBox" helpers:RichTextBoxHelper.Xaml="{Binding SelectedNote.NotesXaml, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                            helpers:RichTextBoxHelper.TextChangedCommand="{Binding DataContext.GeneralNotesChangedCommand, RelativeSource={RelativeSource AncestorType={x:Type local:DashboardPage}}}"
                             AcceptsReturn="True" VerticalAlignment="Stretch" Grid.Row="3"
                             Margin="0,0,0,10" ToolTip="General notes for this case." VerticalScrollBarVisibility="Auto"/>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.Notes, Converter={StaticResource FlowDocumentToTextConverter}}" 
+            <controls:CopyButton TextToCopy="{Binding SelectedNote.NotesXaml, Converter={StaticResource FlowDocumentToTextConverter}}"
                                  Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="5" Grid.RowSpan="2" ToolTip="Copy notes to clipboard."/>
         </Grid>
 
@@ -223,7 +224,7 @@
                                  HorizontalAlignment="Left" Margin="5,0,0,0" ToolTip="Copy deal number to clipboard."/>
 
             <Label Content="Notes: " VerticalAlignment="Top" HorizontalAlignment="Center"  Grid.Row="6" Grid.Column="0"/>
-            <controls:RichTextToolbar Grid.Row="5" Grid.Column="1" Target="{Binding ElementName=FormNotesRichTextBox}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,0,0,2"/>
+            <controls:RichTextToolbar Grid.Row="5" Grid.Column="0" Target="{Binding ElementName=FormNotesRichTextBox}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,0,0,2" Grid.ColumnSpan="3" />
             
             <StackPanel Orientation="Horizontal" Margin="0,5,0,0" Grid.Row="4" Grid.Column="1">
                 <Label Content="Pdf" VerticalAlignment="Center"/>

@@ -4,6 +4,7 @@ using System.Linq;
 using CoreNote = AMFormsCST.Core.Types.Notebook.Note;
 using Assert = Xunit.Assert;
 using System.Windows.Documents;
+using System.Windows.Markup;
 
 namespace AMFormsCST.Test.Desktop.Models.Notebook;
 
@@ -18,7 +19,7 @@ public class NoteModelConversionTests
         var noteModel = new NoteModel(TestExtSeparator)
         {
             CaseNumber = "CS12345",
-            Notes = new FlowDocument(new Paragraph(new Run("This is a test note."))),
+            NotesXaml = XamlWriter.Save(new FlowDocument(new Paragraph(new Run("This is a test note.")))),
         };
 
         // Populate a dealer and its company

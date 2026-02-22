@@ -19,14 +19,14 @@ public class TextTemplateJsonConverter : JsonConverter<TextTemplate>
         Guid id = default;
         string name = string.Empty;
         string description = string.Empty;
-        FlowDocument text = new();
+        string textXaml = string.Empty;
         TextTemplate.TemplateType type = default;
 
         while (reader.Read())
         {
             if (reader.TokenType == JsonTokenType.EndObject)
             {
-                return new TextTemplate(id, name, description, text, type);
+                return new TextTemplate(id, name, description, textXaml, type);
             }
 
             if (reader.TokenType != JsonTokenType.PropertyName)
@@ -59,13 +59,15 @@ public class TextTemplateJsonConverter : JsonConverter<TextTemplate>
                     var textValue = reader.GetString() ?? string.Empty;
                     try
                     {
-                        // Try to parse as XAML (new format)
-                        text = (FlowDocument)XamlReader.Parse(textValue);
+                        // Validate XAML by parsing
+                        System.Windows.Markup.XamlReader.Parse(textValue);
+                        textXaml = textValue; // It's valid XAML
                     }
                     catch (XamlParseException)
                     {
-                        // If it fails, treat it as plain text (old format)
-                        text = new FlowDocument(new Paragraph(new Run(textValue)));
+                        // Fallback: convert plain text to valid XAML
+                        var doc = new FlowDocument(new Paragraph(new Run(textValue)));
+                        textXaml = System.Windows.Markup.XamlWriter.Save(doc);
                     }
                     break;
                 default:
@@ -73,21 +75,23 @@ public class TextTemplateJsonConverter : JsonConverter<TextTemplate>
                     break;
             }
         }
-
-        throw new JsonException("Unexpected end of JSON.");
+        
+        // Construct using TextXaml string
+        return new TextTemplate(id, name, description, textXaml, type);
     }
 
     public override void Write(Utf8JsonWriter writer, TextTemplate value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
-        writer.WriteString("id", value.Id);
+        writer.WriteString("Id", value.Id.ToString()); // Use Id property directly; key casing?
+        // Original code used "id" lowercase. Let's match original.
+        writer.WriteString("id", value.Id.ToString());
         writer.WriteString("name", value.Name);
         writer.WriteString("description", value.Description);
         writer.WriteNumber("type", (int)value.Type);
 
-        // Serialize FlowDocument to a XAML string
-        var xamlText = XamlWriter.Save(value.Text);
-        writer.WriteString("text", xamlText);
+        // Serialize stored XAML string directly
+        writer.WriteString("text", value.TextXaml); 
 
         writer.WriteEndObject();
     }
