@@ -78,7 +78,7 @@ public class FieldPropertiesTests
         var displayProperties = wrapper.GetDisplayProperties().ToList();
 
         // Assert
-        Assert.Equal(9, displayProperties.Count);
+        Assert.Equal(13, displayProperties.Count);
         Assert.Contains(displayProperties, dp => dp.Name == "Expression" && dp.Value == "MyExpr");
         Assert.Contains(displayProperties, dp => dp.Name == "SampleData" && dp.Value == "MyData");
         Assert.Contains(displayProperties, dp => dp.Name == "FormattingOption" && dp.Value.ToString() == "NAIfBlank");
@@ -88,5 +88,27 @@ public class FieldPropertiesTests
         Assert.Contains(displayProperties, dp => dp.Name == "FontAlignment" && dp.Value.ToString() == "RIGHT");
         Assert.Contains(displayProperties, dp => dp.Name == "Bold" && dp.Value.Equals(true));
         Assert.Contains(displayProperties, dp => dp.Name == "ShrinkToFit" && dp.Value.Equals(false));
+        Assert.Contains(displayProperties, dp => dp.Name == "LaserRectY");
+        Assert.Contains(displayProperties, dp => dp.Name == "LaserRectHeight");
+        Assert.Contains(displayProperties, dp => dp.Name == "LaserRectX");
+        Assert.Contains(displayProperties, dp => dp.Name == "LaserRectWidth");
+    }
+
+    [Fact]
+    public void LaserRectX_SetProperty_UpdatesCoreModel()
+    {
+        // Arrange
+        var coreField = new CoreField();
+        // Initialize LaserRect in Settings
+        var rect = new System.Drawing.Rectangle(10, 20, 100, 50);
+        coreField.Settings.LaserRect = rect;
+        
+        var wrapper = new FieldProperties(coreField);
+
+        // Act
+        wrapper.LaserRectX = 99;
+
+        // Assert
+        Assert.Equal(99, coreField.Settings.LaserRect.X);
     }
 }

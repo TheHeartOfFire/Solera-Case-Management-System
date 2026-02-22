@@ -344,6 +344,8 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         {
             foreach (var p in properties.Settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
             {
+                if (p.Name == "LaserRect") continue;
+
                 bool isReadOnly = readOnlyNames.Contains(p.Name) || !p.CanWrite;
                 displayProps.Add(new DisplayProperty(properties.Settings, p, isReadOnly, _logger));
             }
