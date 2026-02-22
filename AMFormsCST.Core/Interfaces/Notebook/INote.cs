@@ -8,6 +8,7 @@ public interface INote : INotebookItem<INote>
 {
     string CaseText { get; set; }
     string NotesText { get; set; }
+    string NotesXaml { get; set; }
     SelectableList<IDealer> Dealers { get; set; }
     SelectableList<IContact> Contacts { get; set; }
     SelectableList<IForm> Forms { get; set; }

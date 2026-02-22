@@ -13,6 +13,7 @@ public class Note : INote
 
     public string CaseText { get; set; } = string.Empty;
     public string NotesText { get; set; } = string.Empty;
+    public string NotesXaml { get; set; } = string.Empty;
 
     public SelectableList<IDealer> Dealers { get; set; }
     public SelectableList<IContact> Contacts { get; set; }
@@ -46,6 +47,7 @@ public class Note : INote
         {
             CaseText = CaseText,
             NotesText = NotesText,
+            NotesXaml = NotesXaml,
             Dealers = new SelectableList<IDealer>(Dealers.Select(d => d.Clone()), _logger),
             Contacts = new SelectableList<IContact>(Contacts.Select(c => c.Clone()), _logger),
             Forms = new SelectableList<IForm>(Forms.Select(f => f.Clone()), _logger)

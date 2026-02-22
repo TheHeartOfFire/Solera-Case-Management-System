@@ -6,6 +6,7 @@ using Moq;
 using System;
 using System.Collections.Generic;
 using System.Windows.Documents;
+using System.Windows.Markup;
 using Assert = Xunit.Assert;
 
 namespace AMFormsCST.Test.Core.Types.BestPractices.TextTemplates.Models;
@@ -173,7 +174,7 @@ public class TextTemplateTests
         var flowDoc = new FlowDocument(new Paragraph(new Run("Text")));
 
         // Act
-        var template = new TextTemplate(id, "Name", "Desc", flowDoc, TextTemplate.TemplateType.Email);
+        var template = new TextTemplate(id, "Name", "Desc", XamlWriter.Save(flowDoc), TextTemplate.TemplateType.Email);
 
         // Assert
         Assert.Equal(id, template.Id);

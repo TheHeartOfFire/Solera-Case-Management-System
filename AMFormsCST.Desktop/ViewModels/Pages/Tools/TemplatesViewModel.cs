@@ -214,6 +214,8 @@ public partial class TemplatesViewModel : ViewModel
         {
             if (SelectedTemplate == null) return;
 
+            // Template.Text now returns a fresh FlowDocument from stored XAML string, 
+            // so no manual cloning is needed to avoid parenting issues.
             var dialog = new NewTemplateDialog(
                 SelectedTemplate.Template.Name,
                 SelectedTemplate.Template.Description,
@@ -226,6 +228,7 @@ public partial class TemplatesViewModel : ViewModel
 
             SelectedTemplate.Template.Name = dialog.TemplateName;
             SelectedTemplate.Template.Description = dialog.TemplateDescription;
+            // Setting .Text will serialize the document to XAML string for storage
             SelectedTemplate.Template.Text = ((NewTemplateDialogViewModel)dialog.DataContext).TemplateContent;
             SelectedTemplate.Template.Type = dialog.Type;
 

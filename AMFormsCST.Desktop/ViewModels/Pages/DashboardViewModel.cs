@@ -17,6 +17,7 @@ using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Documents;
+using System.Windows.Markup;
 using Wpf.Ui;
 
 namespace AMFormsCST.Desktop.ViewModels.Pages;
@@ -52,12 +53,12 @@ public partial class DashboardViewModel : ViewModel
         var note1 = new NoteModel("x")
         {
             CaseNumber = "00123456",
-            Notes = new() { Blocks = { new Paragraph(new Run("This is the first sample note.")) } }
+            NotesXaml = XamlWriter.Save(new FlowDocument(new Paragraph(new Run("This is the first sample note.")))),
         };
         var note2 = new NoteModel("x")
         {
             CaseNumber = "00234567",
-            Notes = new() { Blocks = { new Paragraph(new Run("This is the second sample note.")) } }
+            NotesXaml = XamlWriter.Save(new FlowDocument(new Paragraph(new Run("This is the second sample note.")))),
         };
 
         var contact1 = new Models.Contact("x") { Name = "John Doe", Email = "john.doe@email.com", Phone = "888-555-1234", PhoneExtension = "1234" };
@@ -883,6 +884,14 @@ public partial class DashboardViewModel : ViewModel
         SelectedNote?.SelectedForm?.UpdateCore();
         UpdateTemplatesVM();
     }
+
+    [RelayCommand]
+    private void GeneralNotesChanged()
+    {
+        SelectedNote?.UpdateCore();
+        UpdateTemplatesVM();
+    }
+
     public NoteModel ParseCaseText(string caseText)
     {
         var note = new NoteModel(_supportTool.Settings.UserSettings.ExtSeparator, _logger);
@@ -905,8 +914,6 @@ public partial class DashboardViewModel : ViewModel
 
             var submittedValuesIdx = lines.FindIndex(l => l.Trim().Equals("Submitted Values:", StringComparison.OrdinalIgnoreCase));
             var serverValuesIdx = lines.FindIndex(l => l.Trim().Equals("Server-Provided Values:", StringComparison.OrdinalIgnoreCase));
-            var descriptionIdx = lines.FindIndex(l => l.Trim().Equals("Description", StringComparison.OrdinalIgnoreCase));
-            var separatorIdx = lines.FindIndex(l => l.Trim().Equals("====================", StringComparison.OrdinalIgnoreCase));
 
             var submittedValues = submittedValuesIdx != -1
                 ? lines.Skip(submittedValuesIdx + 1).Take(serverValuesIdx != -1 ? serverValuesIdx - submittedValuesIdx - 1 : lines.Count).ToList()
@@ -918,12 +925,20 @@ public partial class DashboardViewModel : ViewModel
 
             note.CaseNumber = GetValueAfter("Case Number");
             var subject = GetValueAfter("Subject");
-            var description = descriptionIdx != -1 && separatorIdx != -1
+            var description = GetValueAfter("Description:");
+            
+            // Handle multi-line description if separated by blank line or next key
+            var descriptionIdx = lines.FindIndex(l => l.Trim().Equals("Description", StringComparison.OrdinalIgnoreCase));
+            var separatorIdx = lines.FindIndex(descriptionIdx + 1, l => l.Trim().StartsWith("Severity:") || string.IsNullOrWhiteSpace(l));
+            if (separatorIdx == -1) separatorIdx = lines.Count;
+            
+            description = (descriptionIdx != -1 && descriptionIdx + 1 < lines.Count) 
                 ? string.Join(Environment.NewLine, lines.Skip(descriptionIdx + 1).Take(separatorIdx - descriptionIdx - 1)).Trim()
                 : string.Empty;
 
-            note.Notes = new FlowDocument();
-            note.Notes.Blocks.Add(new Paragraph(new Run($"{subject}{Environment.NewLine}{description}".Trim())));
+            var doc = new FlowDocument();
+            doc.Blocks.Add(new Paragraph(new Run($"{subject}{Environment.NewLine}{description}".Trim())));
+            note.NotesXaml = XamlWriter.Save(doc);
 
             var contact = note.Contacts[0];
             contact.Name = GetValueAfter("Contact Name");
@@ -967,7 +982,7 @@ public partial class DashboardViewModel : ViewModel
         if (recipient is null) return;
 
         recipient.CaseNumber = newNote.CaseNumber;
-        recipient.Notes = newNote.Notes;
+        recipient.NotesXaml = newNote.NotesXaml;
 
         var recipientContact = recipient.Contacts.FirstOrDefault(c => c.IsBlank);
         var sourceContact = newNote.Contacts.FirstOrDefault();

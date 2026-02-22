@@ -409,7 +409,7 @@ AMPS: 3.06.0386
 Tomcat: 3.6.389a
 Web Browser: 11
 ",
-        "12453488", "Jane Doe", "Request for new forms\r\nPlease add the attached forms for our dealership.", "jane.doe@exampledealership.com", "5551234567", "123", "Example Dealership", "4", "G030"
+        "12453488", "Jane Doe", "<FlowDocument xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><Paragraph xml:space=\"preserve\">Request for new forms\r\nPlease add the attached forms for our dealership.</Paragraph></FlowDocument>", "jane.doe@exampledealership.com", "5551234567", "123", "Example Dealership", "4", "G030"
 )]
     [InlineData(
     @"
@@ -450,7 +450,7 @@ AMPS: 3.06.0386
 Tomcat: 3.6.389a
 Web Browser: 11
 ",
-        "12455241", "John Smith", "Title Application Request\r\nPlease add the state title application.", "john.smith@anotherauto.com", "5559876543", "", "Another Auto Group", "1", "T751"
+        "12455241", "John Smith", "<FlowDocument xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><Paragraph xml:space=\"preserve\">Title Application Request\r\nPlease add the state title application.</Paragraph></FlowDocument>", "john.smith@anotherauto.com", "5559876543", "", "Another Auto Group", "1", "T751"
 )]
     [InlineData(
     @"
@@ -494,7 +494,7 @@ AMPS: 3.06.0386
 Tomcat: 3.6.389a
 Web Browser: 11
 ",
-        "12459417", "Susan Jones", "Generic Form Issue\r\nA field is not printing correctly on the form.\r\nAlso, another field should be blank.\r\nPlease assist.", "susan.jones@genericauto.com", "5555551212", "101", "Generic Auto Mall", "3", "M450"
+        "12459417", "Susan Jones", "<FlowDocument xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><Paragraph xml:space=\"preserve\">Generic Form Issue\r\nA field is not printing correctly on the form.\r\nAlso, another field should be blank.\r\nPlease assist.</Paragraph></FlowDocument>", "susan.jones@genericauto.com", "5555551212", "101", "Generic Auto Mall", "3", "M450"
 )]
     public void ParseCaseText_WithVariousInputs_CorrectlyPopulatesNoteModel(
                 string caseText,
@@ -517,7 +517,7 @@ Web Browser: 11
         // Assert
         Assert.NotNull(note);
         Assert.Equal(expectedCaseNumber, note.CaseNumber);
-        Assert.Equal(expectedNotes, TextTemplate.GetFlowDocumentPlainText(note.Notes).Trim());
+        Assert.Equal(expectedNotes, note.NotesXaml.Trim());
 
         Assert.Equal(2, note.Dealers.Count);
         var dealer = note.Dealers[0];

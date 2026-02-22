@@ -1,7 +1,10 @@
+using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Markup;
 
 namespace AMFormsCST.Desktop.Helpers;
 
@@ -66,6 +69,67 @@ public static class RichTextBoxHelper
             {
                 command.Execute(null);
             }
+        }
+    }
+
+    public static readonly DependencyProperty XamlProperty = DependencyProperty.RegisterAttached(
+        "Xaml",
+        typeof(string),
+        typeof(RichTextBoxHelper),
+        new FrameworkPropertyMetadata(
+            null,
+            FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
+            OnXamlChanged));
+
+    public static string GetXaml(DependencyObject obj)
+    {
+        return (string)obj.GetValue(XamlProperty);
+    }
+
+    public static void SetXaml(DependencyObject obj, string value)
+    {
+        obj.SetValue(XamlProperty, value);
+    }
+
+    private static void OnXamlChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is RichTextBox rtb)
+        {
+            string xaml = GetXaml(rtb);
+            string currentXaml = XamlWriter.Save(rtb.Document);
+
+            if (xaml == currentXaml)
+                return;
+
+            rtb.TextChanged -= RichTextBox_TextChanged_UpdateXaml;
+            if (string.IsNullOrWhiteSpace(xaml))
+            {
+                rtb.Document = new FlowDocument();
+            }
+            else
+            {
+                try
+                {
+                    using (MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xaml)))
+                    {
+                        rtb.Document = (FlowDocument)XamlReader.Load(stream);
+                    }
+                }
+                catch
+                {
+                    rtb.Document = new FlowDocument();
+                }
+            }
+            rtb.TextChanged += RichTextBox_TextChanged_UpdateXaml;
+        }
+    }
+
+    private static void RichTextBox_TextChanged_UpdateXaml(object sender, TextChangedEventArgs e)
+    {
+        if (sender is RichTextBox rtb)
+        {
+            string xaml = XamlWriter.Save(rtb.Document);
+            SetXaml(rtb, xaml);
         }
     }
 }
