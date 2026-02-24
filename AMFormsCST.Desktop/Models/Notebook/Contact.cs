@@ -74,7 +74,7 @@ public partial class Contact : ManagedObservableCollectionItem
     }
     partial void OnNameChanged(string value)
     {
-        Name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(value).Equals(value) ? value : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(value);
+        Name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(value.ToLower()).Equals(value) ? value : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(value.ToLower());
         OnPropertyChanged(nameof(IsBlank));
         UpdateCore();
         using (LogContext.PushProperty("ContactId", Id))
