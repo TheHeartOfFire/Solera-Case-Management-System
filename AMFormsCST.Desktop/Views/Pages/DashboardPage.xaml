@@ -31,9 +31,9 @@
             <RowDefinition Height="auto" />
         </Grid.RowDefinitions>
 
-        <ui:SymbolIcon Symbol="BuildingPeople20" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="2" Grid.Column="2" Margin="0,0,15,0" ToolTip="Dealership and company information" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <ui:SymbolIcon Symbol="BuildingPeople20" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="2" Grid.Column="0" Margin="0,0,15,0" ToolTip="Dealership and company information" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
         <ui:SymbolIcon Symbol="Note24" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="1" Margin="0,0,15,0" ToolTip="Case and general notes" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-        <ui:SymbolIcon Symbol="ContactCardGroup16" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="2" Grid.Column="0" Margin="0,0,15,0" ToolTip="Contact information" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <ui:SymbolIcon Symbol="ContactCardGroup16" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="2" Grid.Column="2" Margin="0,0,15,0" ToolTip="Contact information" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
         <ui:SymbolIcon Symbol="FormMultiple20" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="1" Grid.Column="2" Margin="0,0,15,0" ToolTip="Form and deal information" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
 
         <Separator Grid.Row="2" Grid.Column="2" HorizontalAlignment="Right" Margin="5" BorderThickness="2"/>
