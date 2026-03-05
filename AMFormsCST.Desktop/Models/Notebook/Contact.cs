@@ -2,6 +2,7 @@
 using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Desktop.BaseClasses;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Humanizer;
 using Serilog.Context;
 using System;
 using System.Globalization;
@@ -74,7 +75,7 @@ public partial class Contact : ManagedObservableCollectionItem
     }
     partial void OnNameChanged(string value)
     {
-        Name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(value.ToLower()).Equals(value) ? value : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(value.ToLower());
+        Name = NameCase.NameCaser.ToNameCase(Name);
         OnPropertyChanged(nameof(IsBlank));
         UpdateCore();
         using (LogContext.PushProperty("ContactId", Id))
