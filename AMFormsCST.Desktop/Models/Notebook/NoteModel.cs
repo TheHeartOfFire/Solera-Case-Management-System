@@ -8,7 +8,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Serilog.Context;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
+using System.Text;
 using System.Windows.Documents;
+using System.Windows.Markup;
 
 namespace AMFormsCST.Desktop.Models;
 public partial class NoteModel : ManagedObservableCollectionItem
@@ -31,7 +34,7 @@ public partial class NoteModel : ManagedObservableCollectionItem
                 UpdateCore();
 
                 using (LogContext.PushProperty("NoteId", Id))
-                using (LogContext.PushProperty("Notes", Notes))
+                using (LogContext.PushProperty("Notes", NotesXaml))
                 using (LogContext.PushProperty("Dealers", Dealers.Count))
                 using (LogContext.PushProperty("Contacts", Contacts.Count))
                 using (LogContext.PushProperty("Forms", Forms.Count))
@@ -43,14 +46,14 @@ public partial class NoteModel : ManagedObservableCollectionItem
             }
         }
     }
-    private FlowDocument? _notes; 
-    public FlowDocument? Notes
+    private string _notesXaml = string.Empty; 
+    public string NotesXaml
     {
-        get => _notes;
+        get => _notesXaml;
         set
         {
-            var oldValue = _notes;
-            if (SetProperty(ref _notes, value))
+            var oldValue = _notesXaml;
+            if (SetProperty(ref _notesXaml, value))
             {
                 OnPropertyChanged(nameof(IsBlank));
                 UpdateCore();
@@ -63,7 +66,7 @@ public partial class NoteModel : ManagedObservableCollectionItem
                 using (LogContext.PushProperty("Old Value", oldValue))
                 using (LogContext.PushProperty("New Value", value))
                 {
-                    _logger?.LogInfo($"Notes changed: {value}");
+                    _logger?.LogInfo($"Notes changed.");
                 }
             }
         }
@@ -80,14 +83,34 @@ public partial class NoteModel : ManagedObservableCollectionItem
     {
         get
         {
-            if (!string.IsNullOrEmpty(CaseNumber) || !string.IsNullOrWhiteSpace(GetFlowDocumentPlainText(Notes ?? new())))
+            if (!string.IsNullOrEmpty(CaseNumber))
                 return false;
+            
+            // Check if XAML is effectively empty (contains no text)
+            // This is a naive check; for robust check, parsing is needed but expensive.
+            // Assuming empty doc XAML is minimal.
+            if (!string.IsNullOrWhiteSpace(_notesXaml) && !IsXamlEmpty(_notesXaml))
+                return false;
+
             if (Dealers.Any(d => !d.IsBlank) ||
                 Contacts.Any(c => !c.IsBlank) ||
                 Forms.Any(f => !f.IsBlank))
                 return false;
             return true;
         }
+    }
+
+    private static bool IsXamlEmpty(string xaml)
+    {
+        try {
+            if (string.IsNullOrWhiteSpace(xaml)) return true;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xaml));
+            if (XamlReader.Load(stream) is FlowDocument doc)
+            {
+                return string.IsNullOrWhiteSpace(GetFlowDocumentPlainText(doc));
+            }
+        } catch { } // If parse fails, treat as empty or not? best to assume empty.
+        return true;
     }
 
     internal INote? CoreType { get; set; }
@@ -107,7 +130,7 @@ public partial class NoteModel : ManagedObservableCollectionItem
 
         using (LogContext.PushProperty("NoteId", Id))
         using (LogContext.PushProperty("Case#", CaseNumber))
-        using (LogContext.PushProperty("Notes", Notes))
+        using (LogContext.PushProperty("Notes", NotesXaml))
         using (LogContext.PushProperty("Dealers", Dealers.Count))
         using (LogContext.PushProperty("Contacts", Contacts.Count))
         using (LogContext.PushProperty("Forms", Forms.Count))
@@ -126,15 +149,26 @@ public partial class NoteModel : ManagedObservableCollectionItem
         InitForms();
 
         CaseNumber = note.CaseText;
-        Notes = new FlowDocument();
-        Notes.Blocks.Add(new Paragraph(new Run(note.NotesText)));
+        
+        // Initialize NotesXaml. Prefer stored Xaml, fallback to Text turned into Xaml.
+        if (!string.IsNullOrEmpty(note.NotesXaml))
+        {
+            NotesXaml = note.NotesXaml;
+        }
+        else
+        {
+            var doc = new FlowDocument();
+            doc.Blocks.Add(new Paragraph(new Run(note.NotesText)));
+            NotesXaml = XamlWriter.Save(doc);
+        }
+
         _isInit = false;
         UpdateCore();
 
         { 
             using (LogContext.PushProperty("NoteId", Id))
             using (LogContext.PushProperty("Case#", CaseNumber))
-            using (LogContext.PushProperty("Notes", Notes))
+            using (LogContext.PushProperty("Notes", NotesXaml))
             using (LogContext.PushProperty("Dealers", Dealers.Count))
             using (LogContext.PushProperty("Contacts", Contacts.Count))
             using (LogContext.PushProperty("Forms", Forms.Count))
@@ -295,7 +329,21 @@ public partial class NoteModel : ManagedObservableCollectionItem
     {
         if (CoreType == null || _isInit) return;
         CoreType.CaseText = CaseNumber ?? string.Empty;
-        CoreType.NotesText = GetFlowDocumentPlainText(Notes ?? new()) ?? string.Empty;
+        CoreType.NotesXaml = NotesXaml ?? string.Empty;
+
+        // Sync plaintext for search/compat
+        try {
+             if (!string.IsNullOrEmpty(NotesXaml)) {
+                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(NotesXaml));
+                if (XamlReader.Load(stream) is FlowDocument doc)
+                {
+                    CoreType.NotesText = GetFlowDocumentPlainText(doc);
+                }
+             } else {
+                 CoreType.NotesText = string.Empty;
+             }
+        } catch { CoreType.NotesText = string.Empty; }
+
         CoreType.Dealers.Clear();
         CoreType.Dealers.AddRange(Dealers.Select(d => (Core.Types.Notebook.Dealer)d));
         CoreType.Dealers.SelectedItem = Dealers?.SelectedItem?.CoreType;
@@ -325,7 +373,11 @@ public partial class NoteModel : ManagedObservableCollectionItem
         return new Note(note.CoreType.Id)
         {
             CaseText = note.CaseNumber ?? string.Empty,
-            NotesText = GetFlowDocumentPlainText(note.Notes ?? new()) ?? string.Empty,
+            NotesText = note.CoreType.NotesText, // Use cached plain text ? Or re-extract from Xaml?
+            // Actually CoreType should already be updated if UpdateCore was called. 
+            // Better to re-derive to be safe or trust CoreType.
+            // Let's trust CoreType or re-parse if needed. Simpler to trust since UpdateCore runs.
+            NotesXaml = note.NotesXaml,
             Dealers = [..note.Dealers.Select(d => (Core.Types.Notebook.Dealer)d)],
             Contacts = [..note.Contacts.Select(c => (Core.Types.Notebook.Contact)c)],
             Forms = [..note.Forms.Select(f => (Core.Types.Notebook.Form)f)]

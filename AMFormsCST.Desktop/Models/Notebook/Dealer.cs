@@ -148,14 +148,15 @@ namespace AMFormsCST.Desktop.Models
         }
         partial void OnServerCodeChanged(string? value)
         {
+            ServerCode = value.ToUpperInvariant().Equals(value) ? value : value?.ToUpperInvariant();
             OnPropertyChanged(nameof(IsBlank));
             UpdateCore();
             using (LogContext.PushProperty("DealerId", Id))
             using (LogContext.PushProperty("Name", Name))
-            using (LogContext.PushProperty("ServerCode", value))
+            using (LogContext.PushProperty("ServerCode", ServerCode))
             using (LogContext.PushProperty("Companies", Companies.Count))
             {
-                _logger?.LogInfo($"Dealer server code changed: {value}");
+                _logger?.LogInfo($"Dealer server code changed: {ServerCode}");
             }
         }
 

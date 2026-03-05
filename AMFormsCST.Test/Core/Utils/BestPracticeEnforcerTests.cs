@@ -4,6 +4,7 @@ using AMFormsCST.Core.Types.BestPractices.TextTemplates.Models;
 using AMFormsCST.Core.Utils;
 using Moq;
 using System.Windows.Documents;
+using System.Windows.Markup;
 using Assert = Xunit.Assert;
 
 namespace AMFormsCST.Test.Core.Utils;
@@ -19,7 +20,8 @@ public class BestPracticeEnforcerTests
     {
         _mockFormNamePractice = new Mock<IFormNameBestPractice>();
         _mockTemplateRepository = new Mock<ITemplateRepository>();
-        _templateList = [new TextTemplate("Existing", "Desc", new FlowDocument(new Paragraph(new Run("Text"))), TextTemplate.TemplateType.Other)];
+        var flowDoc = new FlowDocument(new Paragraph(new Run("Text")));
+        _templateList = [new TextTemplate("Existing", "Desc", flowDoc, TextTemplate.TemplateType.Other)];
 
         // Configure the mock repository to return our in-memory list
         _mockTemplateRepository.Setup(repo => repo.LoadTemplates()).Returns(_templateList);
@@ -106,7 +108,7 @@ public class BestPracticeEnforcerTests
     public void RemoveTemplate_WithNonExistingTemplate_ThrowsArgumentException()
     {
         // Arrange
-        var nonExistingTemplate = new TextTemplate("Non-existent", "Desc", new FlowDocument(new Paragraph(new Run("Text"))), TextTemplate.TemplateType.Other);
+        var nonExistingTemplate = new TextTemplate("Non-existent", "Desc", XamlWriter.Save(new FlowDocument(new Paragraph(new Run("Text")))), TextTemplate.TemplateType.Other);
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _enforcer.RemoveTemplate(nonExistingTemplate));
@@ -117,7 +119,7 @@ public class BestPracticeEnforcerTests
     {
         // Arrange
         var originalTemplate = _templateList[0];
-        var updatedTemplate = new TextTemplate(originalTemplate.Id, "Updated Name", "Updated Desc", new FlowDocument(new Paragraph(new Run("Updated Text"))), TextTemplate.TemplateType.Other);
+        var updatedTemplate = new TextTemplate(originalTemplate.Id, "Updated Name", "Updated Desc", XamlWriter.Save(new FlowDocument(new Paragraph(new Run("Updated Text")))), TextTemplate.TemplateType.Other);
 
         // Act
         _enforcer.UpdateTemplate(updatedTemplate);
@@ -135,7 +137,7 @@ public class BestPracticeEnforcerTests
     {
         // Arrange
         // Create a template with a new, unknown Guid
-        var nonExistingTemplate = new TextTemplate(Guid.NewGuid(), "Non-existent", "Desc", new FlowDocument(new Paragraph(new Run("Text"))), TextTemplate.TemplateType.Other);
+        var nonExistingTemplate = new TextTemplate(Guid.NewGuid(), "Non-existent", "Desc", XamlWriter.Save(new FlowDocument(new Paragraph(new Run("Text")))), TextTemplate.TemplateType.Other);
 
         // Act
         // This should not throw an exception.
@@ -146,5 +148,18 @@ public class BestPracticeEnforcerTests
         _mockTemplateRepository.Verify(repo => repo.SaveTemplates(It.IsAny<List<TextTemplate>>()), Times.Never);
         // Verify the original template is unchanged.
         Assert.Equal("Existing", _templateList[0].Name);
+    }
+
+
+    [Fact]
+    public void TestNonExistentTemplate()
+    {
+        var nonExistingTemplate = new TextTemplate(Guid.NewGuid(), "Non-existent", "Desc", XamlWriter.Save(new FlowDocument(new Paragraph(new Run("Text")))), TextTemplate.TemplateType.Other);
+
+        // Act
+        _enforcer.UpdateTemplate(nonExistingTemplate);
+
+        // Assert
+        _mockTemplateRepository.Verify(repo => repo.SaveTemplates(It.IsAny<List<TextTemplate>>()), Times.Never);
     }
 }

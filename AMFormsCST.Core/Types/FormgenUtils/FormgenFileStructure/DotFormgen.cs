@@ -2,6 +2,7 @@
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Text;
 using System.Xml;
+using System.IO;
 
 namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
 {

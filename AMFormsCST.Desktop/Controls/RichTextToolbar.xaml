@@ -77,6 +77,10 @@
             <Button x:Name="BtnDecreaseFont" Click="BtnDecreaseFont_Click" Margin="5,0,0,0" ToolTip="Decrease Font Size">
                 <ui:SymbolIcon Symbol="FontDecrease24" />
             </Button>
+            <Separator Margin="5,0,5,0"/>
+            <Button x:Name="BtnTextColor" Click="BtnTextColor_Click" Margin="5,0,0,0" ToolTip="Text Color">
+                <ui:SymbolIcon Symbol="TextColor24" />
+            </Button>
         </StackPanel>
     </StackPanel>
 </UserControl>

@@ -2,6 +2,8 @@
 using AMFormsCST.Core.Interfaces.BestPractices;
 using System.Text.Json.Serialization;
 using System.Windows.Documents;
+using System.IO;
+using System.Text;
 
 namespace AMFormsCST.Core.Types.BestPractices.TextTemplates.Models;
 public class TextTemplate : IEquatable<TextTemplate>
@@ -10,7 +12,28 @@ public class TextTemplate : IEquatable<TextTemplate>
     public Guid Id { get; private set; }// Default to empty GUID for new templates
     public string Name { get; set; }
     public string Description { get; set; }
-    public FlowDocument Text { get; set; }
+    public string TextXaml { get; set; }
+
+    [JsonIgnore]
+    public FlowDocument Text 
+    { 
+        get
+        {
+             if (string.IsNullOrWhiteSpace(TextXaml)) return new FlowDocument();
+             try 
+             {
+                 using var stream = new MemoryStream(Encoding.UTF8.GetBytes(TextXaml));
+                 return System.Windows.Markup.XamlReader.Load(stream) as FlowDocument ?? new FlowDocument();
+             } 
+             catch { return new FlowDocument(); }
+        }
+        set
+        {
+             if (value == null) TextXaml = string.Empty;
+             else TextXaml = System.Windows.Markup.XamlWriter.Save(value);
+        }
+    }
+
     public TemplateType Type { get; set; } 
     public enum TemplateType
     {
@@ -20,21 +43,33 @@ public class TextTemplate : IEquatable<TextTemplate>
         Email,
         Other
     }
+    public TextTemplate(string name, string description, string textXaml, TemplateType type)
+    {
+        Id = Guid.NewGuid(); 
+        Name = name;
+        Description = description;
+        TextXaml = textXaml;
+        Type = type;
+    }
+    
+    // Kept for compatibility if needed, or update consumers
     public TextTemplate(string name, string description, FlowDocument text, TemplateType type)
     {
-        Id = Guid.NewGuid(); // Or pass in an existing ID for editing
+        Id = Guid.NewGuid();
         Name = name;
         Description = description;
         Text = text;
+        TextXaml = System.Windows.Markup.XamlWriter.Save(text);
         Type = type;
     }
+
     [JsonConstructor]
-    public TextTemplate(Guid id, string name, string description, FlowDocument text, TemplateType type)
+    public TextTemplate(Guid id, string name, string description, string textXaml, TemplateType type)
     {
         Id = id;
         Name = name;
         Description = description;
-        Text = text;
+        TextXaml = textXaml;
         Type = type;
     }
 
@@ -148,7 +183,7 @@ public class TextTemplate : IEquatable<TextTemplate>
     public static string GetFlowDocumentPlainText(FlowDocument document)
     {
         // Create a TextRange from the beginning (ContentStart) to the end (ContentEnd) of the document.
-        TextRange textRange = new TextRange(
+        TextRange textRange = new(
             document.ContentStart,
             document.ContentEnd
         );

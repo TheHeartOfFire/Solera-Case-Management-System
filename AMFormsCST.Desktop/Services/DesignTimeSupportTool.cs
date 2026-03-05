@@ -57,9 +57,9 @@ public class DesignTimeSupportTool : ISupportTool
 
         var templates = new List<TextTemplate>
         {
-            new("Case Intro", "Standard introduction for a new case.", new() { Blocks = { new Paragraph(new Run("Hello {FirstName}, this is in regards to case #{CaseNumber}.")) } }, TemplateType.InternalComments),
-            new("Form Issue", "Template for reporting a form issue.", new() { Blocks = { new Paragraph(new Run("The form {FormName} is having an issue. Details: {IssueDetails}")) } }, TemplateType.Other),
-            new("Closing", "Standard case closing.", new() { Blocks = { new Paragraph(new Run("Thank you for your time. Case #{CaseNumber} will now be closed.")) } }, TemplateType.Email)
+            new("Case Intro", "Standard introduction for a new case.", new FlowDocument() { Blocks = { new Paragraph(new Run("Hello {FirstName}, this is in regards to case #{CaseNumber}.")) } }, TextTemplate.TemplateType.InternalComments),
+            new("Form Issue", "Template for reporting a form issue.", new FlowDocument() { Blocks = { new Paragraph(new Run("The form {FormName} is having an issue. Details: {IssueDetails}")) } }, TextTemplate.TemplateType.Other),
+            new("Closing", "Standard case closing.", new FlowDocument() { Blocks = { new Paragraph(new Run("Thank you for your time. Case #{CaseNumber} will now be closed.")) } }, TextTemplate.TemplateType.Email)
         };
         mockEnforcer.Setup(e => e.Templates).Returns(templates);
 

@@ -2,8 +2,10 @@
 using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Desktop.BaseClasses;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Humanizer;
 using Serilog.Context;
 using System;
+using System.Globalization;
 
 namespace AMFormsCST.Desktop.Models;
 public partial class Contact : ManagedObservableCollectionItem
@@ -73,15 +75,16 @@ public partial class Contact : ManagedObservableCollectionItem
     }
     partial void OnNameChanged(string value)
     {
+        Name = NameCase.NameCaser.ToNameCase(Name);
         OnPropertyChanged(nameof(IsBlank));
         UpdateCore();
         using (LogContext.PushProperty("ContactId", Id))
-        using (LogContext.PushProperty("Name", value))
+        using (LogContext.PushProperty("Name", Name))
         using (LogContext.PushProperty("Email", Email))
         using (LogContext.PushProperty("Phone", Phone))
         using (LogContext.PushProperty("PhoneExtension", PhoneExtension))
         {
-            _logger?.LogInfo($"Contact name changed: {value}");
+            _logger?.LogInfo($"Contact name changed: {Name}");
         }
     }
     partial void OnEmailChanged(string value)

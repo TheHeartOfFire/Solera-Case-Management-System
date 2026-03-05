@@ -1,4 +1,5 @@
 ﻿using AMFormsCST.Core.Interfaces;
+using System.Drawing;
 using AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure;
 using AMFormsCST.Desktop.Interfaces;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -42,6 +43,74 @@ public partial class FieldProperties : ObservableObject, IFormgenFileProperties
         }
     }
 
+    public int LaserRectX
+    {
+        get => _coreField.Settings.LaserRect.X;
+        set
+        {
+            if (_coreField.Settings.LaserRect.X != value)
+            {
+                var rect = _coreField.Settings.LaserRect;
+                rect.X = value;
+                _coreField.Settings.LaserRect = rect;
+                if (Settings is FieldSettings fs) fs.LaserRect = rect;
+                OnPropertyChanged();
+                _logger?.LogInfo($"Field LaserRectX changed: {value}");
+            }
+        }
+    }
+
+    public int LaserRectY
+    {
+        get => _coreField.Settings.LaserRect.Y;
+        set
+        {
+            if (_coreField.Settings.LaserRect.Y != value)
+            {
+                var rect = _coreField.Settings.LaserRect;
+                rect.Y = value;
+                _coreField.Settings.LaserRect = rect;
+                if (Settings is FieldSettings fs) fs.LaserRect = rect;
+                OnPropertyChanged();
+                _logger?.LogInfo($"Field LaserRectY changed: {value}");
+            }
+        }
+    }
+
+    public int LaserRectWidth
+    {
+        get => _coreField.Settings.LaserRect.Width;
+        set
+        {
+            if (_coreField.Settings.LaserRect.Width != value)
+            {
+                var rect = _coreField.Settings.LaserRect;
+                rect.Width = value;
+                _coreField.Settings.LaserRect = rect;
+                if (Settings is FieldSettings fs) fs.LaserRect = rect;
+                OnPropertyChanged();
+                _logger?.LogInfo($"Field LaserRectWidth changed: {value}");
+            }
+        }
+    }
+
+    public int LaserRectHeight
+    {
+        get => _coreField.Settings.LaserRect.Height;
+        set
+        {
+            if (_coreField.Settings.LaserRect.Height != value)
+            {
+                var rect = _coreField.Settings.LaserRect;
+                rect.Height = value;
+                _coreField.Settings.LaserRect = rect;
+                if (Settings is FieldSettings fs) fs.LaserRect = rect;
+                OnPropertyChanged();
+                _logger?.LogInfo($"Field LaserRectHeight changed: {value}");
+            }
+        }
+    }
+
     public FieldProperties(FormField field, ILogService? logger = null)
     {
         _coreField = field;
@@ -64,6 +133,24 @@ public partial class FieldProperties : ObservableObject, IFormgenFileProperties
         var formatOptionProp = fieldType.GetProperty(nameof(FormField.FormattingOption));
         if (formatOptionProp != null)
             yield return new DisplayProperty(_coreField, formatOptionProp, false, _logger);
+
+        var selfType = typeof(FieldProperties);
+
+        var laserRectXProp = selfType.GetProperty(nameof(LaserRectX));
+        if (laserRectXProp != null)
+            yield return new DisplayProperty(this, laserRectXProp, false, _logger);
+
+        var laserRectYProp = selfType.GetProperty(nameof(LaserRectY));
+        if (laserRectYProp != null)
+            yield return new DisplayProperty(this, laserRectYProp, false, _logger);
+
+        var laserRectWidthProp = selfType.GetProperty(nameof(LaserRectWidth));
+        if (laserRectWidthProp != null)
+            yield return new DisplayProperty(this, laserRectWidthProp, false, _logger);
+
+        var laserRectHeightProp = selfType.GetProperty(nameof(LaserRectHeight));
+        if (laserRectHeightProp != null)
+            yield return new DisplayProperty(this, laserRectHeightProp, false, _logger);
 
         if (Settings is FieldSettings fieldSettings)
         {
