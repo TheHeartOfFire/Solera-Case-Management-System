@@ -496,6 +496,53 @@ Web Browser: 11
 ",
         "12459417", "Susan Jones", "<FlowDocument xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><Paragraph xml:space=\"preserve\">Generic Form Issue\r\nA field is not printing correctly on the form.\r\nAlso, another field should be blank.\r\nPlease assist.</Paragraph></FlowDocument>", "susan.jones@genericauto.com", "5555551212", "101", "Generic Auto Mall", "3", "M450"
 )]
+    [InlineData(
+    @"
+Case Number
+12860150
+Case Owner
+Agent Name
+Agent Name
+Status
+New
+Priority
+Standard
+Contact Name
+First Last
+Subject
+FORM ADD AND ADJUSTMENT
+Description
+Hello,
+Please add the two forms attached to this email to our list.
+
+Also, it appears that the 'temp tag' and expiration within the vehicle information aren't pushing anywhere. More specifically, I need it to push to the prompts for the Vermont temporary registration/report of sale, and the Vermont in-transit plate permit.
+
+Thank you!
+
+====================
+
+Submitted Values:
+Name: First Last
+Title: BD
+Email: first.grp@dealer.com
+Phone: 11122244444
+Company Number: 1
+Company Name: Dealership
+
+Server-Provided Values:
+HAC: H0CB7EFP
+Server ID: F640
+Username: first
+Name: First Last
+Email: first.grp@dealer.com
+
+Versions:
+AMPS: 3.06.0451
+Tomcat: 3.6.454a
+Web Browser: 11
+",
+        "12860150", "Agent Name", "<FlowDocument xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><Paragraph xml:space=\"preserve\">FORM ADD AND ADJUSTMENT\r\nHello,\r\nPlease add the two forms attached to this email to our list.\r\n\r\nAlso, it appears that the 'temp tag' and expiration within the vehicle information aren't pushing anywhere. More specifically, I need it to push to the prompts for the Vermont temporary registration/report of sale, and the Vermont in-transit plate permit.\r\n\r\nThank you!</Paragraph></FlowDocument>", "first.grp@dealer.com", "11122244444", "", "Dealership", "1", "F640"
+)]
     public void ParseCaseText_WithVariousInputs_CorrectlyPopulatesNoteModel(
                 string caseText,
                 string expectedCaseNumber,

@@ -929,7 +929,10 @@ public partial class DashboardViewModel : ViewModel
             
             // Handle multi-line description if separated by blank line or next key
             var descriptionIdx = lines.FindIndex(l => l.Trim().Equals("Description", StringComparison.OrdinalIgnoreCase));
-            var separatorIdx = lines.FindIndex(descriptionIdx + 1, l => l.Trim().StartsWith("Severity:") || string.IsNullOrWhiteSpace(l));
+            var separatorIdx = lines.FindIndex(descriptionIdx + 1, l => 
+                l.Trim().StartsWith("Severity:", StringComparison.OrdinalIgnoreCase) || 
+                l.Trim().StartsWith("====================") ||
+                l.Trim().StartsWith("Submitted Values:", StringComparison.OrdinalIgnoreCase));
             if (separatorIdx == -1) separatorIdx = lines.Count;
             
             description = (descriptionIdx != -1 && descriptionIdx + 1 < lines.Count) 
