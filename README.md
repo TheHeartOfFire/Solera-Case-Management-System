@@ -43,7 +43,7 @@ To compile the environment locally, you require:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/TheHeartOfFire/Solera-Case-Management-System
 ```
 1. Open the solution file (.sln) in Visual Studio.
 
