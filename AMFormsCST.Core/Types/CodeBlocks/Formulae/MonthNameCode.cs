@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Types.CodeBlocks.Functions;
+using AMFormsCST.Core.Types.CodeBlocks.Functions;
 
 namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
 {
@@ -11,14 +11,14 @@ namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
             AddInput("Date Field");
         }
 
-        public override string GetCode()
+        public override CodeBase? GetStructure()
         {
-            if (HasNoInputs()) return string.Empty;
+            if (HasNoInputs()) return null;
 
             return new CaseCode()
                 .AddExtraInputs(10)
                 .SetInputValue(0, new MonthCode()
-                    .SetInputValue(0, GetInput(0) as string ?? string.Empty))
+                    .SetInputFrom(0, Inputs[0]))
                 .SetInputValue(1, "1")
                 .SetInputValue(2, "\'JANUARY\'")
                 .SetInputValue(3, "2")

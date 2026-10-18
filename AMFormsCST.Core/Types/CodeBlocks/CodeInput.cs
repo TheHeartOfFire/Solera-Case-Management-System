@@ -1,10 +1,12 @@
-﻿namespace AMFormsCST.Core.Types.CodeBlocks
+namespace AMFormsCST.Core.Types.CodeBlocks
 {
     public class CodeInput : IComparable<CodeInput>
     {
         public object Value { get; private set; }
         public string Description { get; set; }
         public int Index { get; set; }
+        public bool IsExposedInput { get; set; }
+        public string? ExposedGroupKey { get; set; }
 
         public CodeInput(string value, string description, int index)
         {

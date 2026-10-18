@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces.CodeBlocks;
+using AMFormsCST.Core.Interfaces.CodeBlocks;
 using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Types.CodeBlocks.Formulae;
 using AMFormsCST.Core.Types.CodeBlocks.Functions;
@@ -28,6 +28,13 @@ public class CodeBlocks : ICodeBlocks
         AddDefaultBlock(new CaseCode());
         AddDefaultBlock(new IfCode());
         AddDefaultBlock(new SeplistCode());
+        AddDefaultBlock(new ContainsCode());
+        AddDefaultBlock(new DayCode());
+        AddDefaultBlock(new MonthCode());
+        AddDefaultBlock(new YearCode());
+        AddDefaultBlock(new RoundCode());
+        AddDefaultBlock(new TextCode());
+        AddDefaultBlock(new OperatorCode());
 
         _logger?.LogInfo($"Default blocks initialized: {_defaultBlocks.Count} blocks.");
     }

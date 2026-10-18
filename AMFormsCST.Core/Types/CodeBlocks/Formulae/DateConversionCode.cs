@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Types.CodeBlocks.Functions;
+using AMFormsCST.Core.Types.CodeBlocks.Functions;
 
 namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
 {
@@ -11,19 +11,21 @@ namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
             AddInput("Date Field");
         }
 
-        public override string GetCode()
+        public override CodeBase? GetStructure()
         {
-            if (HasNoInputs()) return string.Empty;
+            if (HasNoInputs()) return null;
 
             return new SeplistCode()
                 .AddExtraInputs(1)
                 .SetInputValue(0, "'/'")
                 .SetInputValue(1, new MonthCode()
-                    .SetInputValue(0, GetInput(0) as string ?? string.Empty))
+                    .SetInputFrom(0, Inputs[0]))
                 .SetInputValue(2, new DayCode()
-                    .SetInputValue(0, GetInput(0) as string ?? string.Empty))
-                .SetInputValue(3, new YearCode()
-                    .SetInputValue(0, GetInput(0) as string ?? string.Empty) + " % 100");
+                    .SetInputFrom(0, Inputs[0]))
+                .SetInputValue(3, new OperatorCode("%")
+                    .SetInputValue(0, new YearCode()
+                        .SetInputFrom(0, Inputs[0]))
+                    .SetInputValue(1, "100"));
         }
     }
 }

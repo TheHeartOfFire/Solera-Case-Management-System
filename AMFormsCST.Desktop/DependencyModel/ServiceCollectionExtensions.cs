@@ -1,6 +1,7 @@
 ﻿using AMFormsCST.Desktop.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace AMFormsCST.Desktop.DependencyModel;
 
@@ -18,6 +19,9 @@ internal static class ServiceCollectionExtensions
                 .GetTypes()
                 .Where(x =>
                     x.IsClass
+                    && !x.IsAbstract
+                    && !x.IsNested
+                    && !Attribute.IsDefined(x, typeof(CompilerGeneratedAttribute))
                     && x.Namespace != null
                     && x.Namespace.StartsWith(namespaceName, StringComparison.InvariantCultureIgnoreCase)
                 );

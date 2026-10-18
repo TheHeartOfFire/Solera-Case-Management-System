@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Types.CodeBlocks;
+using AMFormsCST.Core.Types.CodeBlocks;
 
 namespace AMFormsCST.Core.Interfaces.CodeBlocks;
 
@@ -25,4 +25,11 @@ public interface ICodeBase
     CodeBase SetInputs(List<string> inputs);
     CodeBase SetInputValue(int index, CodeBase value);
     CodeBase SetInputValue(int index, string value);
+    CodeBase? GetStructure() => null;
+    bool HasStructure => GetStructure() is not null;
+    CodeBase Clone();
+    IReadOnlyList<CodeDiagnostic> Validate() => [];
+    IReadOnlyList<string> GetVariables() => [];
+    CodeEvaluationResult Evaluate(IReadOnlyDictionary<string, string>? testValues = null) =>
+        new(true, GetCode(), "Evaluated code representation.", Validate());
 }

@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Types.CodeBlocks.Functions;
+using AMFormsCST.Core.Types.CodeBlocks.Functions;
 
 namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
 {
@@ -14,14 +14,14 @@ namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
             AddInput("Decimal Places");
         }
 
-        public override string GetCode()
+        public override CodeBase? GetStructure()
         {
-            if (HasNoInputs()) return string.Empty;
+            if (HasNoInputs()) return null;
 
             return new TextCode()
                 .SetInputValue(0, new RoundCode()
-                    .SetInputValue(0, GetInput(0) as string ?? string.Empty)
-                    .SetInputValue(1, GetInput(1) as string ?? string.Empty));
+                    .SetInputFrom(0, Inputs[0])
+                    .SetInputFrom(1, Inputs[1]));
         }
     }
 }

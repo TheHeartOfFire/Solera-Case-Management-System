@@ -1,105 +1,896 @@
-﻿<Page
-    x:Class="AMFormsCST.Desktop.Views.Pages.Tools.CodeSnippetsPage"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:AMFormsCST.Desktop.Controls"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="clr-namespace:AMFormsCST.Desktop.Views.Pages.Tools"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-    xmlns:viewmodels="clr-namespace:AMFormsCST.Desktop.ViewModels.Pages.Tools"
-    Title="CodeSnippetsPage"
-    d:DataContext="{d:DesignInstance Type=viewmodels:CodeSnippetsViewModel,
+<Page x:Class="AMFormsCST.Desktop.Views.Pages.Tools.CodeSnippetsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:controls="clr-namespace:AMFormsCST.Desktop.Controls"
+      xmlns:converters="clr-namespace:AMFormsCST.Desktop.Converters"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:local="clr-namespace:AMFormsCST.Desktop.Views.Pages.Tools"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:viewmodels="clr-namespace:AMFormsCST.Desktop.ViewModels.Pages.Tools"
+      xmlns:snippets="clr-namespace:AMFormsCST.Desktop.ViewModels.Pages.Tools.CodeSnippets"
+      xmlns:nodify="clr-namespace:Nodify;assembly=Nodify"
+      Title="CodeSnippetsPage"
+      d:DataContext="{d:DesignInstance Type=viewmodels:CodeSnippetsViewModel,
                                      IsDesignTimeCreatable=True}"
-    d:DesignHeight="450"
-    d:DesignWidth="800"
-    ui:Design.Background="{DynamicResource ApplicationBackgroundBrush}"
-    ui:Design.Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-    mc:Ignorable="d">
+      d:DesignHeight="800"
+      d:DesignWidth="1200"
+      mc:Ignorable="d">
 
-    <Grid Margin="10">
+    <Page.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <converters:BooleanToVisibilityConverter x:Key="InverseBoolToVis" Invert="True" />
+
+        <!-- Subtle Dot/Grid Workspace Background -->
+        <DrawingBrush x:Key="GridBackground" TileMode="Tile" Viewport="0,0,40,40" ViewportUnits="Absolute" Opacity="0.12">
+            <DrawingBrush.Drawing>
+                <GeometryDrawing>
+                    <GeometryDrawing.Geometry>
+                        <GeometryGroup>
+                            <RectangleGeometry Rect="0,0,40,40" />
+                            <GeometryGroup>
+                                <RectangleGeometry Rect="0,0,40,1" />
+                                <RectangleGeometry Rect="0,0,1,40" />
+                            </GeometryGroup>
+                        </GeometryGroup>
+                    </GeometryDrawing.Geometry>
+                    <GeometryDrawing.Brush>
+                        <SolidColorBrush Color="Gray" />
+                    </GeometryDrawing.Brush>
+                </GeometryDrawing>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+
+        <!-- Puzzle Input Socket Template (CodeInputViewModel) -->
+        <DataTemplate DataType="{x:Type snippets:CodeInputViewModel}">
+            <Border x:Name="SocketBorder"
+                    Tag="PuzzleSocket"
+                    AllowDrop="True"
+                    DragEnter="SocketBorder_DragEnter"
+                    DragOver="SocketBorder_DragOver"
+                    DragLeave="SocketBorder_DragLeave"
+                    Drop="SocketBorder_Drop"
+                    CornerRadius="6"
+                    Margin="4,2,4,2"
+                    Padding="7,4"
+                    VerticalAlignment="Center"
+                    BorderThickness="1.5"
+                    Background="#26000000"
+                    BorderBrush="#44FFFFFF"
+                    ToolTip="{Binding Description}">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsDragOver}" Value="True">
+                                <Setter Property="BorderBrush" Value="#FF38BDF8" />
+                                <Setter Property="Background" Value="#3338BDF8" />
+                                <Setter Property="BorderThickness" Value="2" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                <Setter Property="Background" Value="#14000000" />
+                                <Setter Property="BorderBrush" Value="#66FFFFFF" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Female Puzzle Socket Notch Indicator -->
+                    <Path Grid.Column="0"
+                          Data="M 0,4 L 5,4 L 5,12 L 0,12 Z"
+                          Fill="#55FFFFFF"
+                          VerticalAlignment="Center"
+                          Margin="-7,0,5,0" />
+
+                    <!-- Slot Label -->
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Title}"
+                               FontWeight="SemiBold"
+                               FontSize="11"
+                               Foreground="#E0FFFFFF"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0" />
+
+                    <!-- Inline Literal/Field TextBox when no child puzzle block is snapped in -->
+                    <ui:TextBox Grid.Column="2"
+                                Text="{Binding BindableValue, UpdateSourceTrigger=PropertyChanged}"
+                                Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVis}}"
+                                MinWidth="95"
+                                FontSize="12"
+                                Padding="6,2"
+                                VerticalAlignment="Center"
+                                PlaceholderText="Value / Field..." />
+
+                    <!-- Teaching Warning Indicator on Slot -->
+                    <Border Grid.Column="3"
+                            Visibility="{Binding HasWarning, Converter={StaticResource BoolToVis}}"
+                            ToolTip="{Binding WarningMessage}"
+                            Background="#44F59E0B"
+                            BorderBrush="#FFF59E0B"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="5,1"
+                            Margin="4,0,0,0"
+                            VerticalAlignment="Center"
+                            Cursor="Help">
+                        <TextBlock Text="⚠ Why?"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="#FFFDE68A" />
+                    </Border>
+
+                    <!-- Quick '+' Button to snap a block into this socket via menu -->
+                    <Button Grid.Column="4"
+                            Content="+"
+                            Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVis}}"
+                            Click="SlotInsertButton_Click"
+                            Padding="5,1"
+                            Margin="5,0,0,0"
+                            FontSize="11"
+                            FontWeight="Bold"
+                            VerticalAlignment="Center"
+                            ToolTip="Insert a puzzle block into this slot" />
+
+                    <!-- Nested Child Puzzle Block when ConnectedNode is present -->
+                    <ContentControl Grid.Column="2"
+                                    Grid.ColumnSpan="3"
+                                    Content="{Binding ConnectedNode}"
+                                    Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}"
+                                    VerticalAlignment="Center"
+                                    Margin="2,0,0,0" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Typed Value / Field Puzzle Block Template (UserInputViewModel) -->
+        <DataTemplate DataType="{x:Type snippets:UserInputViewModel}">
+            <Grid Margin="0,2" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Male Puzzle Tab -->
+                <Border Grid.Column="0"
+                        Width="10"
+                        Height="20"
+                        VerticalAlignment="Center"
+                        Margin="0,0,-2,0"
+                        CornerRadius="5,0,0,5"
+                        Background="#FF16A34A"
+                        BorderBrush="#FF15803D"
+                        BorderThickness="1.5,1.5,0,1.5"
+                        Panel.ZIndex="2" />
+
+                <!-- Value Block Body -->
+                <Border Grid.Column="1"
+                        CornerRadius="7"
+                        Background="#FF14532D"
+                        BorderBrush="#FF22C55E"
+                        BorderThickness="2"
+                        Padding="0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Draggable Puzzle Header -->
+                        <Border Background="#FF16A34A"
+                                CornerRadius="5,0,0,5"
+                                Padding="8,4"
+                                Cursor="SizeAll"
+                                PreviewMouseLeftButtonDown="PuzzleHeader_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PuzzleHeader_PreviewMouseMove">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Background="#33000000"
+                                        CornerRadius="4"
+                                        Padding="5,1"
+                                        Margin="0,0,6,0"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="VALUE"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="White" />
+                                </Border>
+
+                                <Button Content="↗"
+                                        Command="{Binding UndockCommand}"
+                                        Visibility="{Binding IsDocked, Converter={StaticResource BoolToVis}}"
+                                        Padding="4,1"
+                                        Margin="2,0,0,0"
+                                        FontSize="10"
+                                        ToolTip="Undock to canvas" />
+
+                                <Button Content="✕"
+                                        Command="{Binding RemoveCommand}"
+                                        Padding="4,1"
+                                        Margin="2,0,0,0"
+                                        FontSize="10"
+                                        ToolTip="Remove block" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Value Input & Data Type -->
+                        <StackPanel Orientation="Horizontal" Margin="6,4" VerticalAlignment="Center">
+                            <ComboBox ItemsSource="{Binding AvailableTypes}"
+                                      SelectedItem="{Binding SelectedType, Mode=TwoWay}"
+                                      MinWidth="125"
+                                      FontSize="11"
+                                      Margin="0,0,6,0"
+                                      VerticalAlignment="Center" />
+                            <ui:TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                        MinWidth="100"
+                                        FontSize="12"
+                                        Padding="6,2"
+                                        PlaceholderText="Enter value..."
+                                        VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Recursive Scratch-Style Function / Snippet / Operator Puzzle Block Template (CodeSnippetViewModel) -->
+        <DataTemplate DataType="{x:Type snippets:CodeSnippetViewModel}">
+            <Grid Margin="0,2" VerticalAlignment="Center" ToolTip="{Binding Description}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Male Puzzle Tab -->
+                <Border x:Name="PuzzleTab"
+                        Grid.Column="0"
+                        Width="10"
+                        Height="24"
+                        VerticalAlignment="Center"
+                        Margin="0,0,-2,0"
+                        CornerRadius="5,0,0,5"
+                        Background="#FF0D9488"
+                        BorderBrush="#FF14B8A6"
+                        BorderThickness="1.5,1.5,0,1.5"
+                        Panel.ZIndex="2" />
+
+                <!-- Main Puzzle Card -->
+                <Border x:Name="PuzzleBody"
+                        Grid.Column="1"
+                        CornerRadius="8"
+                        Background="#FF1E293B"
+                        BorderBrush="#FF14B8A6"
+                        BorderThickness="2">
+                    <StackPanel>
+                        <!-- Puzzle Block Header Bar -->
+                        <Border x:Name="PuzzleHeaderBar"
+                                Background="#FF0D9488"
+                                CornerRadius="6,6,0,0"
+                                Padding="10,5"
+                                Cursor="SizeAll"
+                                PreviewMouseLeftButtonDown="PuzzleHeader_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PuzzleHeader_PreviewMouseMove">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Prefix Badge -->
+                                <Border Grid.Column="0"
+                                        Background="#33000000"
+                                        CornerRadius="4"
+                                        Padding="6,2"
+                                        Margin="0,0,8,0"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding PrefixBadge}"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="White" />
+                                </Border>
+
+                                <!-- Block Title -->
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding Title}"
+                                           FontWeight="Bold"
+                                           FontSize="12"
+                                           Foreground="White"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0" />
+
+                                <!-- Operator Selector Dropdown (only for OperatorCode blocks) -->
+                                <ComboBox Grid.Column="2"
+                                          ItemsSource="{Binding AvailableOperators}"
+                                          SelectedItem="{Binding SelectedOperator, Mode=TwoWay}"
+                                          Visibility="{Binding IsOperator, Converter={StaticResource BoolToVis}}"
+                                          MinWidth="70"
+                                          FontSize="11"
+                                          FontWeight="Bold"
+                                          Margin="0,0,6,0"
+                                          VerticalAlignment="Center" />
+
+                                <!-- Deconstruct / Reconstruct Buttons -->
+                                <StackPanel Grid.Column="3"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <Button Content="Deconstruct"
+                                            Command="{Binding DeconstructCommand}"
+                                            Visibility="{Binding CanDeconstruct, Converter={StaticResource BoolToVis}}"
+                                            Padding="7,2"
+                                            Margin="4,0,0,0"
+                                            FontSize="11"
+                                            ToolTip="Break this snippet apart into its underlying Function blocks" />
+                                    <Button Content="Reconstruct"
+                                            Command="{Binding ReconstructCommand}"
+                                            Visibility="{Binding CanReconstruct, Converter={StaticResource BoolToVis}}"
+                                            Padding="7,2"
+                                            Margin="4,0,0,0"
+                                            FontSize="11"
+                                            ToolTip="Collapse this function and its nested blocks into a single block" />
+                                </StackPanel>
+
+                                <!-- Extendable Input Controls (+ / -) for IExtendableCode blocks -->
+                                <StackPanel Grid.Column="4"
+                                            Orientation="Horizontal"
+                                            Visibility="{Binding IsExtendable, Converter={StaticResource BoolToVis}}"
+                                            Margin="4,0,0,0">
+                                    <Button Content="+ Slot"
+                                            Command="{Binding AddExtraInputCommand}"
+                                            Padding="6,2"
+                                            FontSize="11"
+                                            Margin="0,0,3,0"
+                                            ToolTip="Add extra input slot(s)" />
+                                    <Button Content="- Slot"
+                                            Command="{Binding RemoveExtraInputCommand}"
+                                            Padding="6,2"
+                                            FontSize="11"
+                                            ToolTip="Remove extra input slot(s)" />
+                                </StackPanel>
+
+                                <!-- Undock Button when nested inside a parent slot -->
+                                <Button Grid.Column="5"
+                                        Content="↗"
+                                        Command="{Binding UndockCommand}"
+                                        Visibility="{Binding IsDocked, Converter={StaticResource BoolToVis}}"
+                                        Padding="6,2"
+                                        Margin="4,0,0,0"
+                                        FontSize="11"
+                                        ToolTip="Undock block to canvas" />
+
+                                <!-- Remove Block Button -->
+                                <Button Grid.Column="6"
+                                        Content="✕"
+                                        Command="{Binding RemoveCommand}"
+                                        Padding="6,2"
+                                        Margin="4,0,0,0"
+                                        FontSize="11"
+                                        ToolTip="Remove block" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Teaching Description Subtitle (shown on root block so nested horizontal chains stay single-line compact) -->
+                        <TextBlock Text="{Binding Description}"
+                                   Visibility="{Binding IsDocked, Converter={StaticResource InverseBoolToVis}}"
+                                   FontSize="11"
+                                   Foreground="#B0FFFFFF"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="650"
+                                   HorizontalAlignment="Left"
+                                   Margin="10,4,10,0" />
+
+                        <!-- Horizontal Input Sockets Row (expands left-to-right!) -->
+                        <ItemsControl ItemsSource="{Binding Inputs}"
+                                      Margin="6,4,6,6">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Scratch Category Color Triggers -->
+            <DataTemplate.Triggers>
+                <!-- Snippet / Formula (Purple) -->
+                <DataTrigger Binding="{Binding Category}" Value="Snippet">
+                    <Setter TargetName="PuzzleHeaderBar" Property="Background" Value="#FF6D28D9" />
+                    <Setter TargetName="PuzzleTab" Property="Background" Value="#FF6D28D9" />
+                    <Setter TargetName="PuzzleTab" Property="BorderBrush" Value="#FF8B5CF6" />
+                    <Setter TargetName="PuzzleBody" Property="BorderBrush" Value="#FF8B5CF6" />
+                    <Setter TargetName="PuzzleBody" Property="Background" Value="#FF2E1065" />
+                </DataTrigger>
+                <!-- Logic / Control: IF, CASE, CONTAINS (Amber / Orange) -->
+                <DataTrigger Binding="{Binding Category}" Value="Logic">
+                    <Setter TargetName="PuzzleHeaderBar" Property="Background" Value="#FFD97706" />
+                    <Setter TargetName="PuzzleTab" Property="Background" Value="#FFD97706" />
+                    <Setter TargetName="PuzzleTab" Property="BorderBrush" Value="#FFF59E0B" />
+                    <Setter TargetName="PuzzleBody" Property="BorderBrush" Value="#FFF59E0B" />
+                    <Setter TargetName="PuzzleBody" Property="Background" Value="#FF451A03" />
+                </DataTrigger>
+                <!-- Date: MONTH, DAY, YEAR (Sky / Cyan) -->
+                <DataTrigger Binding="{Binding Category}" Value="Date">
+                    <Setter TargetName="PuzzleHeaderBar" Property="Background" Value="#FF0284C7" />
+                    <Setter TargetName="PuzzleTab" Property="Background" Value="#FF0284C7" />
+                    <Setter TargetName="PuzzleTab" Property="BorderBrush" Value="#FF38BDF8" />
+                    <Setter TargetName="PuzzleBody" Property="BorderBrush" Value="#FF38BDF8" />
+                    <Setter TargetName="PuzzleBody" Property="Background" Value="#FF082F49" />
+                </DataTrigger>
+                <!-- Math: ROUND (Blue) -->
+                <DataTrigger Binding="{Binding Category}" Value="Math">
+                    <Setter TargetName="PuzzleHeaderBar" Property="Background" Value="#FF2563EB" />
+                    <Setter TargetName="PuzzleTab" Property="Background" Value="#FF2563EB" />
+                    <Setter TargetName="PuzzleTab" Property="BorderBrush" Value="#FF60A5FA" />
+                    <Setter TargetName="PuzzleBody" Property="BorderBrush" Value="#FF60A5FA" />
+                    <Setter TargetName="PuzzleBody" Property="Background" Value="#FF172554" />
+                </DataTrigger>
+                <!-- Operator: +, -, =, !=, % (Rose / Pink) -->
+                <DataTrigger Binding="{Binding Category}" Value="Operator">
+                    <Setter TargetName="PuzzleHeaderBar" Property="Background" Value="#FFBE185D" />
+                    <Setter TargetName="PuzzleTab" Property="Background" Value="#FFBE185D" />
+                    <Setter TargetName="PuzzleTab" Property="BorderBrush" Value="#FFF43F5E" />
+                    <Setter TargetName="PuzzleBody" Property="BorderBrush" Value="#FFF43F5E" />
+                    <Setter TargetName="PuzzleBody" Property="Background" Value="#FF500724" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="auto" />
+            <ColumnDefinition Width="280" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!--  Code Snippet List  -->
-        <ListBox
-            Grid.Column="0"
-            ItemsSource="{Binding CodeSnippets}"
-            SelectedItem="{Binding SelectedCodeSnippet, Mode=TwoWay}">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <Label Content="{Binding Name, Mode=OneWay}" />
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+        <!-- Left Sidebar: Categorized Puzzle Block Toolbox -->
+        <Border Grid.Column="0"
+                BorderThickness="0,0,1,0"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                Padding="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Puzzle Toolbox"
+                               Margin="4,4,4,2"
+                               FontWeight="Bold"
+                               FontSize="16" />
+                    <TextBlock Text="Click or drag blocks onto the workspace or into any slot."
+                               Margin="4,0,4,10"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
 
-        <!--  Selected Snippet Details  -->
-        <Grid Grid.Column="1" Margin="10,0,0,0">
+                    <!-- 1. Snippets (Formulae) -->
+                    <Expander Header="Snippets (Formulae)" IsExpanded="True" Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Text="Click a snippet to load it as the preset, or drag/+ to add it:"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="4,4,4,6"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <ListBox ItemsSource="{Binding CodeSnippets}"
+                                     SelectedItem="{Binding SelectedCodeSnippet, Mode=TwoWay}"
+                                     BorderThickness="0"
+                                     Background="Transparent">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type snippets:CodeSnippetItemViewModel}">
+                                        <Border Background="#336D28D9"
+                                                BorderBrush="#FF8B5CF6"
+                                                BorderThickness="1"
+                                                CornerRadius="6"
+                                                Padding="8,5"
+                                                Margin="0,2"
+                                                Cursor="Hand"
+                                                ToolTip="{Binding Description}"
+                                                PreviewMouseLeftButtonDown="ToolboxItem_PreviewMouseLeftButtonDown"
+                                                PreviewMouseMove="ToolboxItem_PreviewMouseMove">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Name}"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" />
+                                                <Button Grid.Column="1"
+                                                        Content="+"
+                                                        Padding="6,1"
+                                                        Margin="6,0,0,0"
+                                                        FontSize="11"
+                                                        ToolTip="Add a copy of this snippet to the canvas"
+                                                        Command="{Binding DataContext.AddNodeCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding CodeBase}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- 2. Functions -->
+                    <Expander Header="Functions" IsExpanded="True" Margin="0,0,0,8">
+                        <ItemsControl ItemsSource="{Binding AvailableBlocks}" Margin="0,4,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#220D9488"
+                                            BorderBrush="#FF14B8A6"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="8,5"
+                                            Margin="0,2"
+                                            Cursor="Hand"
+                                            ToolTip="{Binding Description}"
+                                            PreviewMouseLeftButtonDown="ToolboxItem_PreviewMouseLeftButtonDown"
+                                            PreviewMouseMove="ToolboxItem_PreviewMouseMove">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0"
+                                                    Background="#44000000"
+                                                    CornerRadius="4"
+                                                    Padding="5,1"
+                                                    Margin="0,0,6,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Prefix}"
+                                                           FontSize="10"
+                                                           FontWeight="Bold" />
+                                            </Border>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Name}"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center" />
+                                            <Button Grid.Column="2"
+                                                    Content="+"
+                                                    Padding="6,1"
+                                                    Margin="6,0,0,0"
+                                                    FontSize="11"
+                                                    ToolTip="Add Function block to canvas"
+                                                    Command="{Binding DataContext.AddBlockCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Expander>
+
+                    <!-- 3. Values & Operators -->
+                    <Expander Header="Values &amp; Operators" IsExpanded="True" Margin="0,0,0,8">
+                        <StackPanel Margin="0,4,0,0">
+                            <Button Content="+ Add Value / Field Block"
+                                    Command="{Binding AddUserInputCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    Margin="0,0,0,6"
+                                    PreviewMouseLeftButtonDown="ToolboxValueButton_PreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="ToolboxValueButton_PreviewMouseMove" />
+
+                            <TextBlock Text="Quick Operators:"
+                                       FontSize="11"
+                                       Margin="2,2,2,4"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <WrapPanel>
+                                <Button Content="+" Command="{Binding AddOperatorCommand}" CommandParameter="+" Margin="2" Padding="8,3" />
+                                <Button Content="-" Command="{Binding AddOperatorCommand}" CommandParameter="-" Margin="2" Padding="8,3" />
+                                <Button Content="*" Command="{Binding AddOperatorCommand}" CommandParameter="*" Margin="2" Padding="8,3" />
+                                <Button Content="/" Command="{Binding AddOperatorCommand}" CommandParameter="/" Margin="2" Padding="8,3" />
+                                <Button Content="%" Command="{Binding AddOperatorCommand}" CommandParameter="%" Margin="2" Padding="8,3" />
+                                <Button Content="=" Command="{Binding AddOperatorCommand}" CommandParameter="=" Margin="2" Padding="8,3" />
+                                <Button Content="!=" Command="{Binding AddOperatorCommand}" CommandParameter="!=" Margin="2" Padding="8,3" />
+                                <Button Content="&lt;" Command="{Binding AddOperatorCommand}" CommandParameter="&lt;" Margin="2" Padding="8,3" />
+                                <Button Content="&gt;" Command="{Binding AddOperatorCommand}" CommandParameter="&gt;" Margin="2" Padding="8,3" />
+                                <Button Content="AND" Command="{Binding AddOperatorCommand}" CommandParameter="AND" Margin="2" Padding="8,3" />
+                                <Button Content="OR" Command="{Binding AddOperatorCommand}" CommandParameter="OR" Margin="2" Padding="8,3" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- 4. Custom Snippets (Session) -->
+                    <Expander Header="Custom Snippets (Session)" IsExpanded="True" Margin="0,0,0,8">
+                        <StackPanel Margin="0,4,0,0">
+                            <ItemsControl ItemsSource="{Binding CustomSnippets}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#336D28D9"
+                                                BorderBrush="#FF8B5CF6"
+                                                BorderThickness="1"
+                                                CornerRadius="6"
+                                                Padding="8,5"
+                                                Margin="0,2"
+                                                Cursor="Hand"
+                                                ToolTip="{Binding Description}"
+                                                PreviewMouseLeftButtonDown="ToolboxItem_PreviewMouseLeftButtonDown"
+                                                PreviewMouseMove="ToolboxItem_PreviewMouseMove">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Name}"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" />
+                                                <Button Grid.Column="1"
+                                                        Content="+"
+                                                        Padding="6,1"
+                                                        Margin="6,0,0,0"
+                                                        FontSize="11"
+                                                        Command="{Binding DataContext.AddNodeCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Right Column: Workspace Canvas + Docked Live Code Preview Bar -->
+        <Grid Grid.Column="1">
             <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="auto" />
             </Grid.RowDefinitions>
 
-            <TextBlock
-                Grid.Row="0"
-                FontSize="16"
-                FontWeight="Bold"
-                Text="{Binding SelectedCodeSnippet.Name}"  Foreground="White"/>
-            <TextBlock
-                Grid.Row="1"
-                Margin="0,5,0,10"
-                Text="{Binding SelectedCodeSnippet.Description}"
-                TextWrapping="Wrap"  Foreground="White"/>
+            <!-- Nodify Infinite Pan/Zoom Workspace Canvas for Root Puzzle Blocks -->
+            <nodify:NodifyEditor x:Name="NodifyEditorControl"
+                                 Grid.Row="0"
+                                 ItemsSource="{Binding Nodes}"
+                                 Background="{StaticResource GridBackground}"
+                                 AllowDrop="True"
+                                 DragOver="NodifyEditorControl_DragOver"
+                                 Drop="NodifyEditorControl_Drop"
+                                 PreviewMouseMove="NodifyEditorControl_PreviewMouseMove"
+                                 PreviewMouseLeftButtonUp="NodifyEditorControl_PreviewMouseLeftButtonUp">
 
-            <!--  Inputs Section with constrained height -->
-            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding SelectedCodeSnippet.Inputs}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <ui:TextBox HorizontalAlignment="Stretch" PlaceholderText="{Binding Description}" Margin="0,0,10,0" Text="{Binding BindableValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <VirtualizingStackPanel Orientation="Horizontal"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-            </ScrollViewer>
+                <nodify:NodifyEditor.ItemContainerStyle>
+                    <Style TargetType="{x:Type nodify:ItemContainer}">
+                        <Setter Property="Location" Value="{Binding Location, Mode=TwoWay}" />
+                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <EventSetter Event="PreviewMouseLeftButtonDown" Handler="ItemContainer_PreviewMouseLeftButtonDown" />
+                    </Style>
+                </nodify:NodifyEditor.ItemContainerStyle>
 
-            <StackPanel
-                Grid.Row="3"
-                Margin="0,10,0,5"
-                Orientation="Horizontal">
-                <ui:TextBlock
-                    VerticalAlignment="Center"
-                    FontWeight="Bold"
-                    Text="Output" Foreground="White"/>
-                <Button
-                    Margin="10,0,0,0"
-                    Command="{Binding CopyOutputCommand}"
-                    Content="Copy" />
+                <nodify:NodifyEditor.InputBindings>
+                    <KeyBinding Key="Delete" Command="{Binding DeleteNodeCommand}" />
+                </nodify:NodifyEditor.InputBindings>
+
+                <ContextMenuService.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Add Snippet" ItemsSource="{Binding AvailableSnippets}">
+                            <MenuItem.ItemContainerStyle>
+                                <Style TargetType="MenuItem">
+                                    <Setter Property="Header" Value="{Binding Name}" />
+                                    <Setter Property="Command" Value="{Binding DataContext.AddNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Setter Property="CommandParameter" Value="{Binding}" />
+                                </Style>
+                            </MenuItem.ItemContainerStyle>
+                        </MenuItem>
+                        <MenuItem Header="Add Function Block" ItemsSource="{Binding AvailableBlocks}">
+                            <MenuItem.ItemContainerStyle>
+                                <Style TargetType="MenuItem">
+                                    <Setter Property="Header" Value="{Binding Name}" />
+                                    <Setter Property="Command" Value="{Binding DataContext.AddBlockCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Setter Property="CommandParameter" Value="{Binding}" />
+                                </Style>
+                            </MenuItem.ItemContainerStyle>
+                        </MenuItem>
+                        <MenuItem Header="Add Value / Field Block" Command="{Binding AddUserInputCommand}" />
+                        <Separator />
+                        <MenuItem Header="Clear Canvas" Command="{Binding ClearCanvasCommand}" />
+                    </ContextMenu>
+                </ContextMenuService.ContextMenu>
+            </nodify:NodifyEditor>
+
+            <!-- Top-Right Canvas Action Overlay -->
+            <StackPanel Grid.Row="0"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="12">
+                <Button Command="{Binding ClearCanvasCommand}"
+                        Content="Clear Canvas"
+                        Margin="0,0,6,0" />
             </StackPanel>
 
-            <ui:TextBox
-                Grid.Row="4"
-                AcceptsReturn="True"
-                IsReadOnly="True"
-                Text="{Binding SelectedCodeSnippet.Output}"
-                TextWrapping="Wrap"
-                VerticalScrollBarVisibility="Auto" 
-                IsReadOnlyCaretVisible="True"/>
+            <!-- Docked Live FormGen Code Output, Formula Tester (Test Bench), & Coach Bar -->
+            <Border Grid.Row="1"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    Padding="12,10">
+                <StackPanel>
+                    <!-- 1. Formula Coach & Step-by-Step Explanation Banner -->
+                    <Border Background="#1A38BDF8"
+                            BorderBrush="#5538BDF8"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10,6"
+                            Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Text="{Binding CoachMessage}"
+                                       FontWeight="SemiBold"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding TestEvaluationExplanation}"
+                                       FontSize="11"
+                                       Margin="0,2,0,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <ItemsControl ItemsSource="{Binding ActiveDiagnostics}" Margin="0,4,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Message, StringFormat='⚠ {0}'}"
+                                                   FontSize="11"
+                                                   Foreground="#FFF59E0B"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,1" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 2. Interactive Formula Tester: Variable & F-Field Substitution -->
+                    <Border Background="#14000000"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10,6"
+                            Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                <TextBlock Text="Formula Tester"
+                                           FontWeight="Bold"
+                                           FontSize="12" />
+                                <TextBlock Text="Substitute F-fields &amp; inputs:"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+
+                            <ItemsControl Grid.Column="1"
+                                          ItemsSource="{Binding TestVariables}"
+                                          VerticalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type snippets:TestVariableViewModel}">
+                                        <Border Background="#22FFFFFF"
+                                                CornerRadius="5"
+                                                Padding="6,3"
+                                                Margin="0,2,8,2"
+                                                ToolTip="{Binding Hint}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0" />
+                                                <TextBlock Text="="
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"
+                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                <ui:TextBox Text="{Binding SampleValue, UpdateSourceTrigger=PropertyChanged}"
+                                                            MinWidth="85"
+                                                            FontSize="11"
+                                                            Padding="5,2" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Grid.Column="2"
+                                       Text="Test Result:"
+                                       FontWeight="SemiBold"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Margin="10,0,8,0" />
+
+                            <ui:TextBox Grid.Column="3"
+                                        Text="{Binding TestEvaluatedResult, Mode=OneWay}"
+                                        IsReadOnly="True"
+                                        FontFamily="Consolas"
+                                        FontWeight="Bold"
+                                        FontSize="13"
+                                        VerticalAlignment="Center"
+                                        ToolTip="{Binding TestEvaluationExplanation}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 3. Live Generated FormGen Code & Copy Button -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="Generated Code:"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,10,0" />
+
+                        <ui:TextBox Grid.Column="1"
+                                    Text="{Binding ActiveOutputCode, Mode=OneWay}"
+                                    IsReadOnly="True"
+                                    FontFamily="Consolas"
+                                    FontSize="13"
+                                    Margin="0,0,10,0"
+                                    PlaceholderText="Snap blocks together to generate FormGen code..." />
+
+                        <Button Grid.Column="2"
+                                Command="{Binding CopyOutputCommand}"
+                                Content="Copy"
+                                Padding="14,6"
+                                FontWeight="SemiBold"
+                                ToolTip="Copy generated FormGen code to clipboard" />
+                    </Grid>
+
+                    <!-- 4. Save Active Puzzle Tree as Session Custom Snippet -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="Save as Custom Snippet:"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+                        <ui:TextBox Grid.Column="1"
+                                    Text="{Binding NewCustomSnippetName, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="Snippet Name..."
+                                    FontSize="12"
+                                    Margin="0,0,8,0" />
+
+                        <ui:TextBox Grid.Column="2"
+                                    Text="{Binding NewCustomSnippetDescription, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="Optional description (empty slots become snippet inputs)..."
+                                    FontSize="12"
+                                    Margin="0,0,8,0" />
+
+                        <Button Grid.Column="3"
+                                Command="{Binding SaveCustomSnippetCommand}"
+                                Content="Save Snippet"
+                                Padding="12,5"
+                                ToolTip="Save the active puzzle tree into Custom Snippets for this session" />
+                    </Grid>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </Page>
+
