@@ -1,12 +1,13 @@
-﻿using AMFormsCST.Core.Interfaces.CodeBlocks;
+using AMFormsCST.Core.Interfaces.CodeBlocks;
 using AMFormsCST.Desktop.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
 
 namespace AMFormsCST.Desktop.ViewModels.Pages.Tools.CodeSnippets;
+
 public partial class CodeSnippetItemViewModel : ObservableObject, ISelectable
 {
-    public ICodeBase CodeBase { get; } 
+    public ICodeBase CodeBase { get; }
 
     [ObservableProperty]
     private ObservableCollection<CodeInputViewModel> _inputs = [];
@@ -15,10 +16,11 @@ public partial class CodeSnippetItemViewModel : ObservableObject, ISelectable
     private string _output = string.Empty;
     public string? Name => CodeBase.Name;
     public string? Description => CodeBase.Description;
+    public string DetailedExplanation => CodeBase.DetailedExplanation;
 
     [ObservableProperty]
     private bool _isSelected;
-    private Guid _id = Guid.NewGuid();
+    private readonly Guid _id = Guid.NewGuid();
 
     public Guid Id => _id;
 
@@ -45,5 +47,5 @@ public partial class CodeSnippetItemViewModel : ObservableObject, ISelectable
     {
         Output = CodeBase.GetCode();
     }
-
 }
+

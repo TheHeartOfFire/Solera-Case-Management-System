@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Types.CodeBlocks.Functions;
+using AMFormsCST.Core.Types.CodeBlocks.Functions;
 
 namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
 {
@@ -11,9 +11,9 @@ namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
                           "This serves as the default value for a dropdown named \"FUELTYPE\" with \"Gas\", \"Diesel\", \"Propane\", \"Hybrid\", \"Electric\", and \"Other\" as its options.";
         }
 
-        public override string GetCode()
+        public override CodeBase GetStructure()
         {
-            return "FUELTYPE = " + new IfCode()
+            var ifChain = new IfCode()
                .SetInputValue(0, new ContainsCode()
                    .SetInputValue(0, "F776")
                    .SetInputValue(1, "'GAS'"))
@@ -44,6 +44,10 @@ namespace AMFormsCST.Core.Types.CodeBlocks.Formulae
                                        .SetInputValue(1, "'OTHER'"))
                                    .SetInputValue(1, "'Other'")
                                    .SetInputValue(2, "' '"))))));
+
+            return new OperatorCode("=")
+                .SetInputValue(0, "FUELTYPE")
+                .SetInputValue(1, ifChain);
         }
     }
 }
