@@ -32,6 +32,9 @@ public partial class CodeSnippetsViewModel : ViewModel
     private ObservableCollection<ICodeBase> _availableBlocks = [];
 
     [ObservableProperty]
+    private ObservableCollection<FunctionCategoryViewModel> _functionCategories = [];
+
+    [ObservableProperty]
     private ObservableCollection<ICodeBase> _availableSnippets = [];
 
     [ObservableProperty]
@@ -44,6 +47,9 @@ public partial class CodeSnippetsViewModel : ViewModel
     private string _activeOutputCode = string.Empty;
 
     [ObservableProperty]
+    private ObservableCollection<CodeTokenSegmentViewModel> _generatedCodeSegments = [];
+
+    [ObservableProperty]
     private string _newCustomSnippetName = string.Empty;
 
     [ObservableProperty]
@@ -53,12 +59,14 @@ public partial class CodeSnippetsViewModel : ViewModel
     private ObservableCollection<TestVariableViewModel> _testVariables = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveDiagnostics))]
     private ObservableCollection<CodeDiagnostic> _activeDiagnostics = [];
 
     [ObservableProperty]
     private string _testEvaluatedResult = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTestEvaluationExplanation))]
     private string _testEvaluationExplanation = string.Empty;
 
     [ObservableProperty]
@@ -66,6 +74,212 @@ public partial class CodeSnippetsViewModel : ViewModel
 
     [ObservableProperty]
     private string _coachMessage = "Select or snap blocks together to build a FormGen expression.";
+
+    [ObservableProperty]
+    private bool _isExplainerExpanded = true;
+
+    [ObservableProperty]
+    private string _explainerTitle = "Formula & Block Guide";
+
+    [ObservableProperty]
+    private string _explainerCategoryBadge = "GUIDE";
+
+    [ObservableProperty]
+    private string _explainerSummary = "Select or snap blocks together to build a FormGen expression.";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasExplainerSyntax))]
+    private string _explainerSyntax = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasExplainerExample))]
+    private string _explainerExample = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasExplainerNotes))]
+    private string _explainerNotes = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasExplainerPseudoCode))]
+    private string _explainerPseudoCode = string.Empty;
+
+    [ObservableProperty]
+    private bool _isPasteAssistantVisible;
+
+    [ObservableProperty]
+    private string _pasteEditorText = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPasteStatusUnrecognized))]
+    [NotifyPropertyChangedFor(nameof(IsPasteStatusMalformed))]
+    [NotifyPropertyChangedFor(nameof(IsPasteStatusValid))]
+    private FormgenParseStatus _pasteParseStatus = FormgenParseStatus.Unrecognized;
+
+    [ObservableProperty]
+    private string _pasteStatusTitle = string.Empty;
+
+    [ObservableProperty]
+    private string _pasteDiagnosticMessage = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPasteSuggestedFix))]
+    private string _pasteSuggestedFix = string.Empty;
+
+    [ObservableProperty]
+    private bool _isPasteRecognizedAlert;
+
+    private bool _isUpdatingPasteTextInternally;
+
+    public bool HasExplainerSyntax => !string.IsNullOrWhiteSpace(ExplainerSyntax);
+    public bool HasExplainerExample => !string.IsNullOrWhiteSpace(ExplainerExample);
+    public bool HasExplainerNotes => !string.IsNullOrWhiteSpace(ExplainerNotes);
+    public bool HasExplainerPseudoCode => !string.IsNullOrWhiteSpace(ExplainerPseudoCode);
+    public bool HasTestEvaluationExplanation => !string.IsNullOrWhiteSpace(TestEvaluationExplanation);
+    public bool HasActiveDiagnostics => ActiveDiagnostics.Count > 0;
+    public bool HasGeneratedCode => GeneratedCodeSegments.Count > 0;
+
+    public bool HasPasteSuggestedFix => !string.IsNullOrWhiteSpace(PasteSuggestedFix);
+    public bool IsPasteStatusUnrecognized => PasteParseStatus == FormgenParseStatus.Unrecognized;
+    public bool IsPasteStatusMalformed => PasteParseStatus == FormgenParseStatus.MalformedSimilar;
+    public bool IsPasteStatusValid => PasteParseStatus == FormgenParseStatus.Valid;
+
+    [ObservableProperty]
+    private Point _viewportLocation = new(0, 0);
+
+    [ObservableProperty]
+    private double _viewportZoom = 1.0;
+
+    public event Action? RecenterRequested;
+
+    [RelayCommand]
+    public void RecenterCanvas()
+    {
+        ViewportZoom = 1.0;
+        var target = ActiveRootNode ?? Nodes.OfType<INodeViewModel>().FirstOrDefault();
+        if (target != null)
+        {
+            ViewportLocation = new Point(target.Location.X - 80, target.Location.Y - 60);
+        }
+        else
+        {
+            ViewportLocation = new Point(0, 0);
+        }
+        RecenterRequested?.Invoke();
+    }
+
+    [RelayCommand]
+    public void ToggleExplainer()
+    {
+        IsExplainerExpanded = !IsExplainerExpanded;
+    }
+
+    [RelayCommand]
+    public void PasteFromClipboard()
+    {
+        try
+        {
+            var clipText = Clipboard.ContainsText() ? Clipboard.GetText() : string.Empty;
+            PasteFormulaText(clipText);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error reading text from clipboard.", ex);
+        }
+    }
+
+    public FormgenParseResult PasteFormulaText(string? rawText)
+    {
+        var result = FormgenCodeParser.Parse(rawText);
+
+        if (result.Status == FormgenParseStatus.Valid && result.CondensedBlock != null)
+        {
+            // Succeed quietly and produce a fully formed condensed block ready for expansion and examination
+            IsPasteAssistantVisible = false;
+            IsPasteRecognizedAlert = false;
+            PasteSuggestedFix = string.Empty;
+
+            var addedVm = AddBlockToCanvas(result.CondensedBlock, GetNextCanvasLocation());
+            OnNodeSelected(addedVm);
+            RecenterCanvas();
+            CoachMessage = $"Parsed '{addedVm.Title}' into a condensed block. Click '⤢ Deconstruct' to expand and examine all of its branches!";
+            return result;
+        }
+
+        // Either MalformedSimilar (inform what is wrong & suggest corrections)
+        // or Unrecognized (fail loudly and present pasted text in an editable box that monitors changes)
+        _isUpdatingPasteTextInternally = true;
+        try
+        {
+            PasteEditorText = rawText ?? string.Empty;
+        }
+        finally
+        {
+            _isUpdatingPasteTextInternally = false;
+        }
+
+        PasteParseStatus = result.Status;
+        PasteStatusTitle = result.StatusTitle;
+        PasteDiagnosticMessage = result.DiagnosticMessage;
+        PasteSuggestedFix = result.SuggestedFix ?? string.Empty;
+        IsPasteRecognizedAlert = false;
+        IsPasteAssistantVisible = true;
+        CoachMessage = result.DiagnosticMessage;
+        return result;
+    }
+
+    partial void OnPasteEditorTextChanged(string value)
+    {
+        if (_isUpdatingPasteTextInternally) return;
+
+        var liveResult = FormgenCodeParser.Parse(value);
+        PasteParseStatus = liveResult.Status;
+        PasteSuggestedFix = liveResult.SuggestedFix ?? string.Empty;
+
+        if (liveResult.Status == FormgenParseStatus.Valid && liveResult.CondensedBlock != null)
+        {
+            IsPasteRecognizedAlert = true;
+            PasteStatusTitle = "✓ Valid FormGen Function Recognized!";
+            PasteDiagnosticMessage = $"Recognized as '{liveResult.CondensedBlock.Name}' ({liveResult.ParsedTree?.GetCode()}). Click 'Load Condensed Block' to place it on the canvas!";
+            CoachMessage = PasteDiagnosticMessage;
+        }
+        else
+        {
+            IsPasteRecognizedAlert = false;
+            PasteStatusTitle = liveResult.StatusTitle;
+            PasteDiagnosticMessage = liveResult.DiagnosticMessage;
+        }
+    }
+
+    [RelayCommand]
+    public void ApplyPasteSuggestion()
+    {
+        if (string.IsNullOrWhiteSpace(PasteSuggestedFix)) return;
+        PasteEditorText = PasteSuggestedFix;
+    }
+
+    [RelayCommand]
+    public void CommitParsedPaste()
+    {
+        var result = FormgenCodeParser.Parse(PasteEditorText);
+        if (result.Status == FormgenParseStatus.Valid && result.CondensedBlock != null)
+        {
+            IsPasteAssistantVisible = false;
+            IsPasteRecognizedAlert = false;
+            PasteSuggestedFix = string.Empty;
+
+            var addedVm = AddBlockToCanvas(result.CondensedBlock, GetNextCanvasLocation());
+            OnNodeSelected(addedVm);
+            RecenterCanvas();
+            CoachMessage = $"Loaded '{addedVm.Title}' onto the canvas as a condensed block ready for expansion and examination.";
+        }
+    }
+
+    [RelayCommand]
+    public void DismissPasteAssistant()
+    {
+        IsPasteAssistantVisible = false;
+        IsPasteRecognizedAlert = false;
+    }
 
     public CodeSnippetsViewModel(ISupportTool supportTool, ILogService? logger = null)
     {
@@ -102,6 +316,8 @@ public partial class CodeSnippetsViewModel : ViewModel
 
         AvailableSnippets = new ObservableCollection<ICodeBase>(snippets.OrderBy(x => x.Name));
         AvailableBlocks = new ObservableCollection<ICodeBase>(functions.OrderBy(x => x.Name));
+        BuildFunctionCategories(functions);
+
         CustomSnippets = _codeBlocks.CustomBlocks != null
             ? new ObservableCollection<ICodeBase>(_codeBlocks.CustomBlocks)
             : [];
@@ -122,6 +338,43 @@ public partial class CodeSnippetsViewModel : ViewModel
         {
             _logger?.LogInfo("CodeSnippetsViewModel initialized with no snippets.");
         }
+    }
+
+    private void BuildFunctionCategories(IReadOnlyCollection<ICodeBase> functions)
+    {
+        static string GetFunctionGroupKey(ICodeBase block)
+        {
+            if (block is OperatorCode) return "Math";
+            return block.Prefix switch
+            {
+                "IF" or "XIF" or "XXIF" or "CASE" or "CASELTE" or "MATCHRANGE" or "CONTAINS" or "NOT" or "AND" or "OR" or "BLANK" or "NOTBLANK" => "Logic",
+                "TODAY" or "MONTH" or "DAY" or "YEAR" or "DATE" or "ADDDAYS" or "ADDWEEKS" or "ADDMONTHS" or "ADDYEARS" => "Date",
+                "SIN" or "COS" or "TAN" or "ASIN" or "ACOS" or "ATAN" or "SINH" or "COSH" or "TANH" or "RAD" or "DEG" => "Trig",
+                "ROUND" or "NUM" or "FLOOR" or "CEILING" or "ABS" or "MAX" or "MIN" or "SQRT" or "LOG" or "LOG10" or "RANDOM" or "PI" => "Math",
+                _ => "Text"
+            };
+        }
+
+        var grouped = functions.GroupBy(GetFunctionGroupKey)
+                               .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Name).ToList());
+
+        var categories = new List<FunctionCategoryViewModel>();
+
+        void AddCategoryIfAny(string key, string displayName, string bgHex, string borderHex, string badgeHex, bool expanded)
+        {
+            if (grouped.TryGetValue(key, out var list) && list.Count > 0)
+            {
+                categories.Add(new FunctionCategoryViewModel(displayName, list, bgHex, borderHex, badgeHex, expanded));
+            }
+        }
+
+        AddCategoryIfAny("Logic", "Logic & Conditionals", "#1FD97706", "#CCD97706", "#FFD97706", expanded: true);
+        AddCategoryIfAny("Text", "Text & Formatting", "#1F0D9488", "#CC0D9488", "#FF0D9488", expanded: true);
+        AddCategoryIfAny("Date", "Date & Time", "#1F0284C7", "#CC0284C7", "#FF0284C7", expanded: false);
+        AddCategoryIfAny("Math", "Math & Numbers", "#1F2563EB", "#CC2563EB", "#FF2563EB", expanded: false);
+        AddCategoryIfAny("Trig", "Trigonometry", "#1F4F46E5", "#CC4F46E5", "#FF4F46E5", expanded: false);
+
+        FunctionCategories = new ObservableCollection<FunctionCategoryViewModel>(categories);
     }
 
     private bool _isSyncingOutput;
@@ -218,6 +471,7 @@ public partial class CodeSnippetsViewModel : ViewModel
 
     public CodeSnippetViewModel AddBlockToCanvas(ICodeBase template, Point location)
     {
+        bool wasEmpty = Nodes.Count == 0;
         var cloned = CloneTemplate(template);
         var vm = new CodeSnippetViewModel(cloned, this)
         {
@@ -225,6 +479,10 @@ public partial class CodeSnippetsViewModel : ViewModel
         };
         Nodes.Add(vm);
         SetActiveRoot(vm);
+        if (wasEmpty)
+        {
+            RecenterCanvas();
+        }
         return vm;
     }
 
@@ -236,6 +494,7 @@ public partial class CodeSnippetsViewModel : ViewModel
 
     public UserInputViewModel AddUserInputAt(Point location, string initialType = UserInputViewModel.TypeFieldRaw)
     {
+        bool wasEmpty = Nodes.Count == 0;
         var userInput = new UserInputViewModel
         {
             Workspace = this,
@@ -244,6 +503,10 @@ public partial class CodeSnippetsViewModel : ViewModel
         };
         Nodes.Add(userInput);
         SetActiveRoot(userInput);
+        if (wasEmpty)
+        {
+            RecenterCanvas();
+        }
         return userInput;
     }
 
@@ -260,6 +523,16 @@ public partial class CodeSnippetsViewModel : ViewModel
         Nodes.Clear();
         ActiveRootNode = null;
         ActiveOutputCode = string.Empty;
+        GeneratedCodeSegments = [];
+        OnPropertyChanged(nameof(HasGeneratedCode));
+        TestVariables = [];
+        ActiveDiagnostics = [];
+        TestEvaluatedResult = string.Empty;
+        TestEvaluationExplanation = string.Empty;
+        TestEvaluationHasError = false;
+        CoachMessage = "Select or snap blocks together to build a FormGen expression.";
+        UpdateStructuredExplainer(null);
+        RecenterCanvas();
     }
 
     [RelayCommand]
@@ -289,13 +562,13 @@ public partial class CodeSnippetsViewModel : ViewModel
 
     public void LoadGraph(ICodeBase? root)
     {
-        Nodes.Clear();
         if (root == null)
         {
-            ActiveRootNode = null;
-            ActiveOutputCode = string.Empty;
+            ClearCanvas();
             return;
         }
+
+        Nodes.Clear();
 
         var cloned = CloneTemplate(root);
         var rootVm = new CodeSnippetViewModel(cloned, this)
@@ -305,6 +578,8 @@ public partial class CodeSnippetsViewModel : ViewModel
         };
         Nodes.Add(rootVm);
         SetActiveRoot(rootVm);
+        UpdateStructuredExplainer(rootVm);
+        RecenterCanvas();
     }
 
     public bool DockBlockIntoSlot(INodeViewModel block, CodeInputViewModel targetSlot)
@@ -315,6 +590,7 @@ public partial class CodeSnippetsViewModel : ViewModel
         if (IsSlotDescendantOfNode(targetSlot, block))
         {
             CoachMessage = $"Cannot dock '{block.Title}' into '{targetSlot.Title}' because '{targetSlot.Title}' is inside '{block.Title}' (blocks cannot contain themselves).";
+            ExplainerSummary = CoachMessage;
             return false;
         }
 
@@ -359,6 +635,7 @@ public partial class CodeSnippetsViewModel : ViewModel
             RefreshActiveOutput();
         }
 
+        UpdateStructuredExplainer(block);
         return true;
     }
 
@@ -452,6 +729,7 @@ public partial class CodeSnippetsViewModel : ViewModel
         ReplaceBlockInPlace(block, expandedVm);
 
         CoachMessage = $"Deconstructed '{block.Title}' into its underlying primitive Function blocks so you can see and edit how it works!";
+        UpdateStructuredExplainer(expandedVm);
     }
 
     public void ReconstructBlock(CodeSnippetViewModel block)
@@ -477,6 +755,7 @@ public partial class CodeSnippetsViewModel : ViewModel
         ReplaceBlockInPlace(block, collapsedVm);
 
         CoachMessage = $"Reconstructed '{collapsedVm.Title}' into a single block with {collapsedVm.Inputs.Count} input slot(s). Click Deconstruct anytime to expand it again!";
+        UpdateStructuredExplainer(collapsedVm);
     }
 
     private void ReplaceBlockInPlace(CodeSnippetViewModel oldBlock, CodeSnippetViewModel newBlock)
@@ -524,6 +803,8 @@ public partial class CodeSnippetsViewModel : ViewModel
 
         var customSnippet = new CustomSnippetCode(name, desc, rootCodeBase);
         _codeBlocks.CustomBlocks?.Add(customSnippet);
+        _codeBlocks.SaveCustomBlocks();
+
         CustomSnippets.Add(customSnippet);
         AvailableSnippets.Add(customSnippet);
         CodeSnippets.Add(new CodeSnippetItemViewModel(customSnippet));
@@ -535,6 +816,25 @@ public partial class CodeSnippetsViewModel : ViewModel
         _logger?.LogInfo($"Saved custom snippet: {customSnippet.Name}");
     }
 
+    [RelayCommand]
+    public void DeleteCustomSnippet(ICodeBase? snippet)
+    {
+        if (snippet == null) return;
+
+        _codeBlocks.CustomBlocks?.Remove(snippet);
+        _codeBlocks.SaveCustomBlocks();
+
+        CustomSnippets.Remove(snippet);
+        AvailableSnippets.Remove(snippet);
+        var itemVm = CodeSnippets.FirstOrDefault(x => ReferenceEquals(x.CodeBase, snippet));
+        if (itemVm != null)
+        {
+            CodeSnippets.Remove(itemVm);
+        }
+
+        CoachMessage = $"Removed custom snippet '{snippet.Name}'.";
+    }
+
     public void OnNodeSelected(INodeViewModel node)
     {
         foreach (var root in Nodes.OfType<INodeViewModel>())
@@ -544,9 +844,17 @@ public partial class CodeSnippetsViewModel : ViewModel
                 root.IsSelected = false;
             }
         }
-        CoachMessage = !string.IsNullOrWhiteSpace(node.Description)
-            ? $"{node.Title}: {node.Description}"
-            : $"Selected {node.Title}.";
+        if (node is CodeSnippetViewModel snippetNode)
+        {
+            CoachMessage = snippetNode.DetailedExplanation;
+        }
+        else
+        {
+            CoachMessage = !string.IsNullOrWhiteSpace(node.Description)
+                ? $"{node.Title}: {node.Description}"
+                : $"Selected {node.Title}.";
+        }
+        UpdateStructuredExplainer(node);
         SetActiveRoot(GetRootNode(node));
     }
 
@@ -572,7 +880,7 @@ public partial class CodeSnippetsViewModel : ViewModel
     public void RefreshActiveOutput()
     {
         var target = ActiveRootNode ?? Nodes.OfType<INodeViewModel>().FirstOrDefault();
-        ActiveOutputCode = target?.GetCode() ?? SelectedCodeSnippet?.Output ?? string.Empty;
+        ActiveOutputCode = target?.GetCode() ?? string.Empty;
 
         if (SelectedCodeSnippet != null)
         {
@@ -588,6 +896,14 @@ public partial class CodeSnippetsViewModel : ViewModel
         }
 
         SyncTestVariablesAndEvaluate(target);
+        if (target != null && string.Equals(ExplainerTitle, "Formula & Block Guide", StringComparison.Ordinal))
+        {
+            UpdateStructuredExplainer(target);
+        }
+        else if (target is CodeSnippetViewModel snippetTarget)
+        {
+            ExplainerPseudoCode = snippetTarget.CodeBase.GetPseudoCode();
+        }
     }
 
     private void SyncTestVariablesAndEvaluate(INodeViewModel? rootNode)
@@ -598,41 +914,64 @@ public partial class CodeSnippetsViewModel : ViewModel
             var existingByName = TestVariables.ToDictionary(v => v.Name, v => v, StringComparer.OrdinalIgnoreCase);
 
             var updatedList = new List<TestVariableViewModel>();
-            foreach (var varName in discoveredVars)
+            for (int i = 0; i < discoveredVars.Count; i++)
             {
+                var varName = discoveredVars[i];
                 if (existingByName.TryGetValue(varName, out var existingVm))
                 {
+                    existingVm.AssignColorIndex(i);
                     updatedList.Add(existingVm);
                 }
                 else
                 {
-                    var hint = CodeBase.IsLikelyFieldReference(varName) ? "FormGen Field" : "Variable / Slot";
+                    var fieldInfo = FormgenReferenceCatalog.TryGetField(varName);
+                    string hint;
+                    if (fieldInfo != null)
+                    {
+                        hint = $"{fieldInfo.Description} • {fieldInfo.VmStatusBadge}";
+                    }
+                    else if (CodeBase.IsLikelyFieldReference(varName))
+                    {
+                        hint = "⚠ Unknown F-Field (Not in fields.json)";
+                    }
+                    else
+                    {
+                        hint = "Variable / Slot";
+                    }
+
                     updatedList.Add(new TestVariableViewModel(
                         varName,
-                        GetDefaultSampleValue(varName),
+                        GetDefaultSampleValue(varName, fieldInfo),
                         hint,
-                        EvaluateActiveFormulaOnly));
+                        EvaluateActiveFormulaOnly,
+                        fieldInfo?.VerboseTooltip,
+                        fieldInfo?.IsVehicleMerchandisingSafe ?? false,
+                        colorIndex: i));
                 }
             }
 
             TestVariables = new ObservableCollection<TestVariableViewModel>(updatedList);
             EvaluateActiveFormulaOnly();
+            RebuildGeneratedCodeSegments();
         }
         else if (rootNode is UserInputViewModel userRoot)
         {
-            TestVariables.Clear();
-            ActiveDiagnostics.Clear();
+            TestVariables = [];
+            ActiveDiagnostics = [];
             TestEvaluatedResult = userRoot.GetCode();
             TestEvaluationExplanation = $"Value Block ({userRoot.SelectedType}): outputs {TestEvaluatedResult}";
             TestEvaluationHasError = false;
+            RebuildGeneratedCodeSegments();
         }
         else
         {
-            TestVariables.Clear();
-            ActiveDiagnostics.Clear();
+            TestVariables = [];
+            ActiveDiagnostics = [];
             TestEvaluatedResult = string.Empty;
             TestEvaluationExplanation = string.Empty;
             TestEvaluationHasError = false;
+            CoachMessage = "Select or snap blocks together to build a FormGen expression.";
+            RebuildGeneratedCodeSegments();
         }
     }
 
@@ -652,11 +991,180 @@ public partial class CodeSnippetsViewModel : ViewModel
             TestEvaluationExplanation = evalResult.Explanation;
             TestEvaluationHasError = !evalResult.IsSuccess || evalResult.Diagnostics.Any(d => d.Severity == CodeDiagnosticSeverity.Error);
             ActiveDiagnostics = new ObservableCollection<CodeDiagnostic>(evalResult.Diagnostics);
+            RebuildGeneratedCodeSegments();
         }
     }
 
-    private static string GetDefaultSampleValue(string varName)
+    public void RebuildGeneratedCodeSegments()
     {
+        var code = ActiveOutputCode ?? string.Empty;
+        if (string.IsNullOrEmpty(code))
+        {
+            GeneratedCodeSegments = [];
+            OnPropertyChanged(nameof(HasGeneratedCode));
+            return;
+        }
+
+        if (TestVariables.Count == 0)
+        {
+            GeneratedCodeSegments = [new CodeTokenSegmentViewModel(code)];
+            OnPropertyChanged(nameof(HasGeneratedCode));
+            return;
+        }
+
+        var varLookup = TestVariables.ToDictionary(v => v.Name, v => v, StringComparer.OrdinalIgnoreCase);
+        var segments = new List<CodeTokenSegmentViewModel>();
+        var plainBuffer = new System.Text.StringBuilder();
+
+        void FlushPlain()
+        {
+            if (plainBuffer.Length > 0)
+            {
+                segments.Add(new CodeTokenSegmentViewModel(plainBuffer.ToString()));
+                plainBuffer.Clear();
+            }
+        }
+
+        int i = 0;
+        while (i < code.Length)
+        {
+            char c = code[i];
+
+            // Keep single-quoted string literals intact so text inside quotes is never highlighted as a variable
+            if (c == '\'')
+            {
+                int quoteStart = i++;
+                while (i < code.Length && code[i] != '\'')
+                {
+                    i++;
+                }
+                if (i < code.Length && code[i] == '\'')
+                {
+                    i++;
+                }
+                plainBuffer.Append(code, quoteStart, i - quoteStart);
+                continue;
+            }
+
+            if (char.IsLetter(c) || c == '_')
+            {
+                int start = i++;
+                while (i < code.Length && (char.IsLetterOrDigit(code[i]) || code[i] == '_'))
+                {
+                    i++;
+                }
+
+                string token = code[start..i];
+
+                // Check if followed by '(' (which means it is a function call like DAY(...) or MONTH(...), not a variable slot)
+                int peek = i;
+                while (peek < code.Length && char.IsWhiteSpace(code[peek]))
+                {
+                    peek++;
+                }
+                bool isFunctionCall = peek < code.Length && code[peek] == '(';
+
+                if (!isFunctionCall && varLookup.TryGetValue(token, out var matchedVar))
+                {
+                    FlushPlain();
+                    segments.Add(new CodeTokenSegmentViewModel(token, matchedVar));
+                }
+                else
+                {
+                    plainBuffer.Append(token);
+                }
+                continue;
+            }
+
+            plainBuffer.Append(c);
+            i++;
+        }
+
+        FlushPlain();
+        GeneratedCodeSegments = new ObservableCollection<CodeTokenSegmentViewModel>(segments);
+        OnPropertyChanged(nameof(HasGeneratedCode));
+    }
+
+    private void UpdateStructuredExplainer(INodeViewModel? node)
+    {
+        if (node is CodeSnippetViewModel snippetNode)
+        {
+            var cb = snippetNode.CodeBase;
+            ExplainerCategoryBadge = snippetNode.PrefixBadge;
+            ExplainerPseudoCode = cb.GetPseudoCode();
+
+            if (!string.IsNullOrWhiteSpace(cb.Prefix))
+            {
+                var funcDoc = FormgenReferenceCatalog.TryGetFunctionDoc(cb.Prefix);
+                if (funcDoc != null)
+                {
+                    ExplainerTitle = funcDoc.FullName;
+                    ExplainerSummary = funcDoc.HowItWorks;
+                    ExplainerSyntax = funcDoc.Syntax;
+                    ExplainerExample = funcDoc.Example;
+                    ExplainerNotes = funcDoc.FormgenNotes ?? string.Empty;
+                    return;
+                }
+
+                var opDoc = FormgenReferenceCatalog.TryGetOperatorDoc(cb.Prefix);
+                if (opDoc != null)
+                {
+                    ExplainerTitle = opDoc.FullName;
+                    ExplainerSummary = opDoc.HowItWorks;
+                    ExplainerSyntax = opDoc.Syntax;
+                    ExplainerExample = opDoc.Example;
+                    ExplainerNotes = opDoc.FormgenNotes ?? string.Empty;
+                    return;
+                }
+            }
+
+            ExplainerTitle = cb.Name ?? cb.Prefix ?? "Formula Snippet";
+            ExplainerSummary = !string.IsNullOrWhiteSpace(cb.Description)
+                ? cb.Description!
+                : "Composite FormGen formula block.";
+
+            var structure = cb.GetStructure();
+            ExplainerSyntax = structure != null ? structure.GetCode() : cb.GetCode();
+            ExplainerExample = cb.Inputs.Count > 0
+                ? "Inputs: " + string.Join(", ", cb.Inputs.Select(inp => inp.Description))
+                : string.Empty;
+            ExplainerNotes = structure != null
+                ? "Click 'Deconstruct' on the block header to expand it into primitive Function blocks, or 'Reconstruct' to collapse it back."
+                : string.Empty;
+        }
+        else if (node is UserInputViewModel userNode)
+        {
+            ExplainerCategoryBadge = "VALUE";
+            ExplainerTitle = $"Value / Field ({userNode.SelectedType})";
+            ExplainerSummary = "Represents a literal value or FormGen F-field reference that can be snapped into any function or operator slot.";
+            ExplainerSyntax = userNode.GetCode();
+            ExplainerExample = "F776 (Field), 'GAS' (Quoted String), 100 (Number)";
+            ExplainerNotes = string.Empty;
+            ExplainerPseudoCode = $"OUTPUT LITERAL OR FIELD VALUE:\n  ➜ {userNode.GetCode()}";
+        }
+        else
+        {
+            ExplainerCategoryBadge = "GUIDE";
+            ExplainerTitle = "Formula & Block Guide";
+            ExplainerSummary = "Select any block on the canvas to inspect its syntax, examples, and step-by-step evaluation.";
+            ExplainerSyntax = string.Empty;
+            ExplainerExample = string.Empty;
+            ExplainerNotes = string.Empty;
+            ExplainerPseudoCode = string.Empty;
+        }
+    }
+
+    private static string GetDefaultSampleValue(string varName, FormgenFieldInfo? fieldInfo = null)
+    {
+        if (string.Equals(varName, "F776", StringComparison.OrdinalIgnoreCase)) return "GAS";
+        if (fieldInfo != null)
+        {
+            if (fieldInfo.Description.Contains("City", StringComparison.OrdinalIgnoreCase)) return "Austin";
+            if (fieldInfo.Description.Contains("State", StringComparison.OrdinalIgnoreCase)) return "TX";
+            if (fieldInfo.Description.Contains("Zip", StringComparison.OrdinalIgnoreCase)) return "78701";
+            if (fieldInfo.IsDateField) return "04/15/2026";
+            if (fieldInfo.IsNumeric) return "100";
+        }
         if (varName.Contains("Date", StringComparison.OrdinalIgnoreCase)) return "04/15/2026";
         if (string.Equals(varName, "City", StringComparison.OrdinalIgnoreCase)) return "Austin";
         if (string.Equals(varName, "State", StringComparison.OrdinalIgnoreCase)) return "TX";
@@ -664,7 +1172,6 @@ public partial class CodeSnippetsViewModel : ViewModel
         if (varName.Contains("Day", StringComparison.OrdinalIgnoreCase)) return "21";
         if (varName.Contains("Decimal", StringComparison.OrdinalIgnoreCase)) return "2";
         if (varName.Contains("Number", StringComparison.OrdinalIgnoreCase) || varName.Contains("Numeric", StringComparison.OrdinalIgnoreCase)) return "123.456";
-        if (string.Equals(varName, "F776", StringComparison.OrdinalIgnoreCase)) return "GAS";
         if (CodeBase.IsLikelyFieldReference(varName)) return "100";
         return "Sample";
     }

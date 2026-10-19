@@ -27,7 +27,11 @@ public class CustomSnippetCode : CodeBase
     private void DiscoverExposedLeafSlots(CodeBase root)
     {
         var candidates = new List<(int[] Path, CodeInput Input)>();
-        CollectLeafSlots(root, [], candidates);
+        CollectLeafSlots(root, [], candidates, exposeAllLeaves: false);
+        if (_exposeVariableIdentifiers && candidates.Count == 0)
+        {
+            CollectLeafSlots(root, [], candidates, exposeAllLeaves: true);
+        }
 
         var groupedEntries = new List<(List<int[]> Paths, string Description, string InitialValue, string? GroupKey)>();
 
@@ -38,12 +42,16 @@ public class CustomSnippetCode : CodeBase
                 ? $"Input {groupedEntries.Count + 1}"
                 : input.Description;
             var groupKey = input.ExposedGroupKey;
+            if (string.IsNullOrWhiteSpace(groupKey) && _exposeVariableIdentifiers && !string.IsNullOrWhiteSpace(strVal))
+            {
+                groupKey = $"var:{strVal.Trim().ToUpperInvariant()}";
+            }
 
             if (!string.IsNullOrWhiteSpace(groupKey))
             {
                 var existingIdx = groupedEntries.FindIndex(g =>
-                    string.Equals(g.GroupKey, groupKey, StringComparison.Ordinal) &&
-                    string.Equals(g.InitialValue, strVal, StringComparison.Ordinal));
+                    string.Equals(g.GroupKey, groupKey, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(g.InitialValue, strVal, StringComparison.OrdinalIgnoreCase));
 
                 if (existingIdx >= 0)
                 {
@@ -74,7 +82,7 @@ public class CustomSnippetCode : CodeBase
         }
     }
 
-    private void CollectLeafSlots(CodeBase node, List<int> currentPath, List<(int[] Path, CodeInput Input)> results)
+    private void CollectLeafSlots(CodeBase node, List<int> currentPath, List<(int[] Path, CodeInput Input)> results, bool exposeAllLeaves = false)
     {
         for (int i = 0; i < node.Inputs.Count; i++)
         {
@@ -83,12 +91,13 @@ public class CustomSnippetCode : CodeBase
 
             if (input.Value is CodeBase childBlock)
             {
-                CollectLeafSlots(childBlock, nextPath, results);
+                CollectLeafSlots(childBlock, nextPath, results, exposeAllLeaves);
             }
             else
             {
                 var strVal = input.Value?.ToString() ?? string.Empty;
                 bool shouldExpose =
+                    exposeAllLeaves ||
                     input.IsExposedInput ||
                     string.IsNullOrEmpty(strVal) ||
                     (_exposeVariableIdentifiers && IsVariableIdentifierValue(strVal));
@@ -105,6 +114,12 @@ public class CustomSnippetCode : CodeBase
     {
         var trimmed = strVal.Trim();
         if (string.IsNullOrEmpty(trimmed)) return false;
+        if (string.Equals(trimmed, "TODAY()", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "RANDOM()", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "PI", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
         return !IsSingleQuoted(trimmed) && !IsNumericLiteral(trimmed) && !IsBooleanLiteral(trimmed);
     }
 
@@ -169,5 +184,153 @@ public class CustomSnippetCode : CodeBase
         }
         return clone;
     }
+
+    public SavedCustomSnippetDto ToDto()
+    {
+        return new SavedCustomSnippetDto
+        {
+            Name = Name ?? "Custom Snippet",
+            Description = Description ?? string.Empty,
+            ExposeVariableIdentifiers = _exposeVariableIdentifiers,
+            TemplateRoot = ToNodeDto(_templateRoot)
+        };
+    }
+
+    public static CustomSnippetCode? FromDto(
+        SavedCustomSnippetDto? dto,
+        IReadOnlyCollection<AMFormsCST.Core.Interfaces.CodeBlocks.ICodeBase>? knownBlocks = null)
+    {
+        if (dto?.TemplateRoot == null) return null;
+        var root = FromNodeDto(dto.TemplateRoot, knownBlocks ?? []);
+        return new CustomSnippetCode(dto.Name, dto.Description, root, dto.ExposeVariableIdentifiers);
+    }
+
+    private static SavedCodeBlockNodeDto ToNodeDto(CodeBase node)
+    {
+        var nodeDto = new SavedCodeBlockNodeDto
+        {
+            TypeName = node.GetType().Name,
+            Name = node.Name,
+            Description = node.Description,
+            Prefix = node.Prefix,
+            Operator = (node as Functions.OperatorCode)?.Operator
+        };
+
+        foreach (var input in node.Inputs)
+        {
+            var inputDto = new SavedCodeInputDto
+            {
+                Index = input.Index,
+                Description = input.Description,
+                IsExposedInput = input.IsExposedInput,
+                ExposedGroupKey = input.ExposedGroupKey
+            };
+
+            if (input.Value is CodeBase childCb)
+            {
+                inputDto.ChildBlock = ToNodeDto(childCb);
+            }
+            else
+            {
+                inputDto.StringValue = input.Value?.ToString() ?? string.Empty;
+            }
+
+            nodeDto.Inputs.Add(inputDto);
+        }
+
+        return nodeDto;
+    }
+
+    private static CodeBase FromNodeDto(
+        SavedCodeBlockNodeDto dto,
+        IReadOnlyCollection<AMFormsCST.Core.Interfaces.CodeBlocks.ICodeBase> prototypes)
+    {
+        CodeBase instance;
+
+        if (dto.TypeName == nameof(Functions.OperatorCode) || !string.IsNullOrWhiteSpace(dto.Operator))
+        {
+            instance = new Functions.OperatorCode(string.IsNullOrWhiteSpace(dto.Operator) ? (dto.Prefix ?? "+") : dto.Operator!);
+        }
+        else
+        {
+            var match = prototypes.FirstOrDefault(p =>
+                            string.Equals(p.GetType().Name, dto.TypeName, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(p.Prefix, dto.Prefix, StringComparison.OrdinalIgnoreCase))
+                        ?? prototypes.FirstOrDefault(p =>
+                            !string.IsNullOrWhiteSpace(dto.Prefix) &&
+                            string.Equals(p.Prefix, dto.Prefix, StringComparison.OrdinalIgnoreCase))
+                        ?? prototypes.FirstOrDefault(p =>
+                            !string.IsNullOrWhiteSpace(dto.Name) &&
+                            string.Equals(p.Name, dto.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (match is CodeBase matchedCb)
+            {
+                instance = matchedCb.Clone();
+            }
+            else
+            {
+                instance = new Functions.FormgenFunctionCode(
+                    dto.Prefix ?? "BLOCK",
+                    dto.Name ?? "Block",
+                    dto.Inputs.Select(i => i.Description).ToArray());
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.Name)) instance.Name = dto.Name;
+        if (!string.IsNullOrWhiteSpace(dto.Description)) instance.Description = dto.Description;
+        if (!string.IsNullOrWhiteSpace(dto.Prefix) && instance is not Functions.OperatorCode) instance.Prefix = dto.Prefix;
+
+        instance.Inputs.Clear();
+        int idx = 0;
+        foreach (var inpDto in dto.Inputs.OrderBy(i => i.Index))
+        {
+            CodeInput rebuiltInput;
+            if (inpDto.ChildBlock != null)
+            {
+                var childNode = FromNodeDto(inpDto.ChildBlock, prototypes);
+                rebuiltInput = new CodeInput(childNode, inpDto.Description, idx);
+            }
+            else
+            {
+                rebuiltInput = new CodeInput(inpDto.StringValue ?? string.Empty, inpDto.Description, idx);
+            }
+
+            rebuiltInput.IsExposedInput = inpDto.IsExposedInput;
+            rebuiltInput.ExposedGroupKey = inpDto.ExposedGroupKey;
+            instance.Inputs.Add(rebuiltInput);
+            idx++;
+        }
+
+        return instance;
+    }
 }
+
+public sealed class SavedCustomSnippetDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public bool ExposeVariableIdentifiers { get; set; }
+    public SavedCodeBlockNodeDto? TemplateRoot { get; set; }
+}
+
+public sealed class SavedCodeBlockNodeDto
+{
+    public string? TypeName { get; set; }
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public string? Prefix { get; set; }
+    public string? Operator { get; set; }
+    public List<SavedCodeInputDto> Inputs { get; set; } = [];
+}
+
+public sealed class SavedCodeInputDto
+{
+    public int Index { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public bool IsExposedInput { get; set; }
+    public string? ExposedGroupKey { get; set; }
+    public string? StringValue { get; set; }
+    public SavedCodeBlockNodeDto? ChildBlock { get; set; }
+}
+
 

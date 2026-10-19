@@ -16,6 +16,7 @@ public partial class CodeSnippetItemViewModel : ObservableObject, ISelectable
     private string _output = string.Empty;
     public string? Name => CodeBase.Name;
     public string? Description => CodeBase.Description;
+    public string DetailedExplanation => CodeBase.DetailedExplanation;
 
     [ObservableProperty]
     private bool _isSelected;

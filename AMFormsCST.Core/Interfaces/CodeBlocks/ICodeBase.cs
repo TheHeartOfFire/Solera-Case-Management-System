@@ -27,6 +27,8 @@ public interface ICodeBase
     CodeBase SetInputValue(int index, string value);
     CodeBase? GetStructure() => null;
     bool HasStructure => GetStructure() is not null;
+    string DetailedExplanation => Description ?? Name ?? string.Empty;
+    string GetPseudoCode(int indentLevel = 0) => DetailedExplanation;
     CodeBase Clone();
     IReadOnlyList<CodeDiagnostic> Validate() => [];
     IReadOnlyList<string> GetVariables() => [];

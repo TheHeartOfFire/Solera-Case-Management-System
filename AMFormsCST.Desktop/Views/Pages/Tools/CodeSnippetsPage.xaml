@@ -15,6 +15,8 @@
                                      IsDesignTimeCreatable=True}"
       d:DesignHeight="800"
       d:DesignWidth="1200"
+      ScrollViewer.VerticalScrollBarVisibility="Disabled"
+      ScrollViewer.CanContentScroll="False"
       mc:Ignorable="d">
 
     <Page.Resources>
@@ -57,7 +59,7 @@
                     BorderThickness="1.5"
                     Background="#26000000"
                     BorderBrush="#44FFFFFF"
-                    ToolTip="{Binding Description}">
+                    ToolTip="{Binding SocketTooltip}">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Style.Triggers>
@@ -81,6 +83,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <!-- Female Puzzle Socket Notch Indicator -->
@@ -95,7 +98,7 @@
                                Text="{Binding Title}"
                                FontWeight="SemiBold"
                                FontSize="11"
-                               Foreground="#E0FFFFFF"
+                               Foreground="White"
                                VerticalAlignment="Center"
                                Margin="0,0,6,0" />
 
@@ -109,12 +112,39 @@
                                 VerticalAlignment="Center"
                                 PlaceholderText="Value / Field..." />
 
-                    <!-- Teaching Warning Indicator on Slot -->
+                    <!-- Live F-Field Metadata & VM-Safe Badge (from fields.json + Vehicle Merchandising Fields.xlsx) -->
                     <Border Grid.Column="3"
+                            Visibility="{Binding HasFieldInfo, Converter={StaticResource BoolToVis}}"
+                            ToolTip="{Binding SocketTooltip}"
+                            CornerRadius="4"
+                            Padding="5,1"
+                            Margin="4,0,0,0"
+                            VerticalAlignment="Center"
+                            BorderThickness="1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#FF0284C7" />
+                                <Setter Property="BorderBrush" Value="#FF38BDF8" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsFieldVmSafe}" Value="True">
+                                        <Setter Property="Background" Value="#FF16A34A" />
+                                        <Setter Property="BorderBrush" Value="#FF4ADE80" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding FieldBadgeText}"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="White" />
+                    </Border>
+
+                    <!-- Teaching Warning Indicator on Slot -->
+                    <Border Grid.Column="4"
                             Visibility="{Binding HasWarning, Converter={StaticResource BoolToVis}}"
                             ToolTip="{Binding WarningMessage}"
-                            Background="#44F59E0B"
-                            BorderBrush="#FFF59E0B"
+                            Background="#FFD97706"
+                            BorderBrush="#FFFBBF24"
                             BorderThickness="1"
                             CornerRadius="4"
                             Padding="5,1"
@@ -124,11 +154,11 @@
                         <TextBlock Text="⚠ Why?"
                                    FontSize="10"
                                    FontWeight="Bold"
-                                   Foreground="#FFFDE68A" />
+                                   Foreground="White" />
                     </Border>
 
                     <!-- Quick '+' Button to snap a block into this socket via menu -->
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="5"
                             Content="+"
                             Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVis}}"
                             Click="SlotInsertButton_Click"
@@ -141,7 +171,7 @@
 
                     <!-- Nested Child Puzzle Block when ConnectedNode is present -->
                     <ContentControl Grid.Column="2"
-                                    Grid.ColumnSpan="3"
+                                    Grid.ColumnSpan="4"
                                     Content="{Binding ConnectedNode}"
                                     Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}"
                                     VerticalAlignment="Center"
@@ -236,7 +266,7 @@
 
         <!-- Recursive Scratch-Style Function / Snippet / Operator Puzzle Block Template (CodeSnippetViewModel) -->
         <DataTemplate DataType="{x:Type snippets:CodeSnippetViewModel}">
-            <Grid Margin="0,2" VerticalAlignment="Center" ToolTip="{Binding Description}">
+            <Grid Margin="0,2" VerticalAlignment="Center" ToolTip="{Binding BlockDiagnosticSummary}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="10" />
                     <ColumnDefinition Width="Auto" />
@@ -378,7 +408,7 @@
                         <TextBlock Text="{Binding Description}"
                                    Visibility="{Binding IsDocked, Converter={StaticResource InverseBoolToVis}}"
                                    FontSize="11"
-                                   Foreground="#B0FFFFFF"
+                                   Foreground="#F2FFFFFF"
                                    TextWrapping="Wrap"
                                    MaxWidth="650"
                                    HorizontalAlignment="Left"
@@ -443,189 +473,283 @@
         </DataTemplate>
     </Page.Resources>
 
-    <Grid>
+    <Grid x:Name="RootLayoutGrid" Margin="0,0,0,56">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="280" />
+            <ColumnDefinition Width="255" />
             <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition x:Name="ExplainerColumn" Width="300" MinWidth="210" MaxWidth="520" />
         </Grid.ColumnDefinitions>
 
-        <!-- Left Sidebar: Categorized Puzzle Block Toolbox -->
+        <!-- Left Sidebar: Condensed & Categorized Puzzle Block Toolbox -->
         <Border Grid.Column="0"
                 BorderThickness="0,0,1,0"
                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                Padding="8">
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                Padding="6,5">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="Puzzle Toolbox"
-                               Margin="4,4,4,2"
-                               FontWeight="Bold"
-                               FontSize="16" />
-                    <TextBlock Text="Click or drag blocks onto the workspace or into any slot."
-                               Margin="4,0,4,10"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <Grid Margin="2,2,2,6"
+                          ToolTip="Click a snippet to load it, or drag/+ any block onto the canvas or into a socket.">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="Puzzle Toolbox"
+                                   FontWeight="Bold"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="Drag or +"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </Grid>
 
                     <!-- 1. Snippets (Formulae) -->
-                    <Expander Header="Snippets (Formulae)" IsExpanded="True" Margin="0,0,0,8">
-                        <StackPanel>
-                            <TextBlock Text="Click a snippet to load it as the preset, or drag/+ to add it:"
-                                       FontSize="11"
-                                       TextWrapping="Wrap"
-                                       Margin="4,4,4,6"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                            <ListBox ItemsSource="{Binding CodeSnippets}"
-                                     SelectedItem="{Binding SelectedCodeSnippet, Mode=TwoWay}"
-                                     BorderThickness="0"
-                                     Background="Transparent">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type snippets:CodeSnippetItemViewModel}">
-                                        <Border Background="#336D28D9"
-                                                BorderBrush="#FF8B5CF6"
-                                                BorderThickness="1"
-                                                CornerRadius="6"
-                                                Padding="8,5"
-                                                Margin="0,2"
-                                                Cursor="Hand"
-                                                ToolTip="{Binding Description}"
-                                                PreviewMouseLeftButtonDown="ToolboxItem_PreviewMouseLeftButtonDown"
-                                                PreviewMouseMove="ToolboxItem_PreviewMouseMove">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding Name}"
-                                                           FontWeight="SemiBold"
-                                                           VerticalAlignment="Center" />
-                                                <Button Grid.Column="1"
-                                                        Content="+"
-                                                        Padding="6,1"
-                                                        Margin="6,0,0,0"
-                                                        FontSize="11"
-                                                        ToolTip="Add a copy of this snippet to the canvas"
-                                                        Command="{Binding DataContext.AddNodeCommand, RelativeSource={RelativeSource AncestorType=Page}}"
-                                                        CommandParameter="{Binding CodeBase}" />
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </StackPanel>
-                    </Expander>
-
-                    <!-- 2. Functions -->
-                    <Expander Header="Functions" IsExpanded="True" Margin="0,0,0,8">
-                        <ItemsControl ItemsSource="{Binding AvailableBlocks}" Margin="0,4,0,0">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="#220D9488"
-                                            BorderBrush="#FF14B8A6"
+                    <Expander Header="Snippets (Formulae)" IsExpanded="True" Margin="0,0,0,4" Padding="4,2">
+                        <ListBox ItemsSource="{Binding CodeSnippets}"
+                                 SelectedItem="{Binding SelectedCodeSnippet, Mode=TwoWay}"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 Margin="0,2,0,0">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type snippets:CodeSnippetItemViewModel}">
+                                    <Border Background="#266D28D9"
+                                            BorderBrush="#FF8B5CF6"
                                             BorderThickness="1"
-                                            CornerRadius="6"
-                                            Padding="8,5"
-                                            Margin="0,2"
+                                            CornerRadius="4"
+                                            Padding="6,2"
+                                            Margin="0,1"
                                             Cursor="Hand"
-                                            ToolTip="{Binding Description}"
+                                            ToolTip="{Binding DetailedExplanation}"
                                             PreviewMouseLeftButtonDown="ToolboxItem_PreviewMouseLeftButtonDown"
                                             PreviewMouseMove="ToolboxItem_PreviewMouseMove">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0"
-                                                    Background="#44000000"
-                                                    CornerRadius="4"
-                                                    Padding="5,1"
-                                                    Margin="0,0,6,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Prefix}"
-                                                           FontSize="10"
-                                                           FontWeight="Bold" />
-                                            </Border>
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock Grid.Column="0"
                                                        Text="{Binding Name}"
+                                                       FontSize="11"
                                                        FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center" />
-                                            <Button Grid.Column="2"
+                                            <Button Grid.Column="1"
                                                     Content="+"
-                                                    Padding="6,1"
-                                                    Margin="6,0,0,0"
-                                                    FontSize="11"
-                                                    ToolTip="Add Function block to canvas"
-                                                    Command="{Binding DataContext.AddBlockCommand, RelativeSource={RelativeSource AncestorType=Page}}"
-                                                    CommandParameter="{Binding}" />
+                                                    Padding="5,0"
+                                                    Margin="4,0,0,0"
+                                                    FontSize="10"
+                                                    MinHeight="18"
+                                                    ToolTip="Add a copy of this snippet to the canvas"
+                                                    Command="{Binding DataContext.AddNodeCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding CodeBase}" />
                                         </Grid>
                                     </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Expander>
+
+                    <!-- 2. Functions (Grouped into Collapsible Categories) -->
+                    <Expander Header="Functions" IsExpanded="True" Margin="0,0,0,4" Padding="4,2">
+                        <ItemsControl ItemsSource="{Binding FunctionCategories}" Margin="0,2,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type snippets:FunctionCategoryViewModel}">
+                                    <Expander Header="{Binding Header}"
+                                              IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                              Margin="0,1"
+                                              Padding="4,1"
+                                              FontSize="11">
+                                        <ItemsControl ItemsSource="{Binding Functions}" Margin="0,2,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="{Binding DataContext.ItemBackgroundBrush, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                            BorderBrush="{Binding DataContext.ItemBorderBrush, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="4"
+                                                            Padding="5,2"
+                                                            Margin="0,1"
+                                                            Cursor="Hand"
+                                                            ToolTip="{Binding DetailedExplanation}"
+                                                            PreviewMouseLeftButtonDown="ToolboxItem_PreviewMouseLeftButtonDown"
+                                                            PreviewMouseMove="ToolboxItem_PreviewMouseMove">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Grid.Column="0"
+                                                                    Background="{Binding DataContext.BadgeBackgroundBrush, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                                    CornerRadius="3"
+                                                                    Padding="4,1"
+                                                                    Margin="0,0,5,0"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Prefix}"
+                                                                           FontSize="9.5"
+                                                                           FontWeight="Bold"
+                                                                           Foreground="White" />
+                                                            </Border>
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{Binding Name}"
+                                                                       FontSize="11"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       VerticalAlignment="Center" />
+                                                            <Button Grid.Column="2"
+                                                                    Content="+"
+                                                                    Padding="5,0"
+                                                                    Margin="4,0,0,0"
+                                                                    FontSize="10"
+                                                                    MinHeight="18"
+                                                                    ToolTip="Add Function block to canvas"
+                                                                    Command="{Binding DataContext.AddBlockCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                                    CommandParameter="{Binding}" />
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Expander>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </Expander>
 
-                    <!-- 3. Values & Operators -->
-                    <Expander Header="Values &amp; Operators" IsExpanded="True" Margin="0,0,0,8">
-                        <StackPanel Margin="0,4,0,0">
-                            <Button Content="+ Add Value / Field Block"
+                    <!-- 3. Values & Operators (Condensed) -->
+                    <Expander Header="Values &amp; Operators" IsExpanded="True" Margin="0,0,0,4" Padding="4,2">
+                        <StackPanel Margin="0,2,0,0">
+                            <Button Content="+ Value / Field Block"
                                     Command="{Binding AddUserInputCommand}"
                                     HorizontalAlignment="Stretch"
-                                    Margin="0,0,0,6"
+                                    Padding="6,3"
+                                    FontSize="11"
+                                    Margin="0,0,0,4"
+                                    ToolTip="Add a typed Value or Field block (Field / Raw, Single-Quoted String, Number, or Boolean)"
                                     PreviewMouseLeftButtonDown="ToolboxValueButton_PreviewMouseLeftButtonDown"
                                     PreviewMouseMove="ToolboxValueButton_PreviewMouseMove" />
 
-                            <TextBlock Text="Quick Operators:"
-                                       FontSize="11"
-                                       Margin="2,2,2,4"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             <WrapPanel>
-                                <Button Content="+" Command="{Binding AddOperatorCommand}" CommandParameter="+" Margin="2" Padding="8,3" />
-                                <Button Content="-" Command="{Binding AddOperatorCommand}" CommandParameter="-" Margin="2" Padding="8,3" />
-                                <Button Content="*" Command="{Binding AddOperatorCommand}" CommandParameter="*" Margin="2" Padding="8,3" />
-                                <Button Content="/" Command="{Binding AddOperatorCommand}" CommandParameter="/" Margin="2" Padding="8,3" />
-                                <Button Content="%" Command="{Binding AddOperatorCommand}" CommandParameter="%" Margin="2" Padding="8,3" />
-                                <Button Content="=" Command="{Binding AddOperatorCommand}" CommandParameter="=" Margin="2" Padding="8,3" />
-                                <Button Content="!=" Command="{Binding AddOperatorCommand}" CommandParameter="!=" Margin="2" Padding="8,3" />
-                                <Button Content="&lt;" Command="{Binding AddOperatorCommand}" CommandParameter="&lt;" Margin="2" Padding="8,3" />
-                                <Button Content="&gt;" Command="{Binding AddOperatorCommand}" CommandParameter="&gt;" Margin="2" Padding="8,3" />
-                                <Button Content="AND" Command="{Binding AddOperatorCommand}" CommandParameter="AND" Margin="2" Padding="8,3" />
-                                <Button Content="OR" Command="{Binding AddOperatorCommand}" CommandParameter="OR" Margin="2" Padding="8,3" />
+                                <Button Content="+" Command="{Binding AddOperatorCommand}" CommandParameter="+" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Plus (+): Numeric addition (1 + 1 = 2) or text concatenation (TEXT(ROUND(F47, 0)) + 'th')" />
+                                <Button Content="-" Command="{Binding AddOperatorCommand}" CommandParameter="-" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Minus (-): Numeric subtraction (42 - 1 = 41)" />
+                                <Button Content="*" Command="{Binding AddOperatorCommand}" CommandParameter="*" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Times (*): Numeric multiplication (3 * 14 = 42)" />
+                                <Button Content="/" Command="{Binding AddOperatorCommand}" CommandParameter="/" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Divide (/): Numeric division (42 / 3 = 14)" />
+                                <Button Content="%" Command="{Binding AddOperatorCommand}" CommandParameter="%" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Modulus (%): Division remainder (43 % 5 = 3; YEAR(Date) % 100 = 2-digit year)" />
+                                <Button Content="e" Command="{Binding AddOperatorCommand}" CommandParameter="e" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Scientific Notation (e): Multiply Left by 10^Right (1e-2 = 0.01, 1e6 = 1,000,000)" />
+                                <Button Content="=" Command="{Binding AddOperatorCommand}" CommandParameter="=" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Equals (=): Equality comparison in conditions (F72 = 'N') or variable assignment on Init lines (FUELTYPE = ...)" />
+                                <Button Content="!=" Command="{Binding AddOperatorCommand}" CommandParameter="!=" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Not Equal (!=): Returns TRUE when Left and Right differ (F123 != 0)" />
+                                <Button Content="&lt;" Command="{Binding AddOperatorCommand}" CommandParameter="&lt;" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Less Than (&lt;): Returns TRUE when Left &lt; Right" />
+                                <Button Content="&gt;" Command="{Binding AddOperatorCommand}" CommandParameter="&gt;" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Greater Than (&gt;): Returns TRUE when Left &gt; Right" />
+                                <Button Content="&lt;=" Command="{Binding AddOperatorCommand}" CommandParameter="&lt;=" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Less Than or Equal (&lt;=): Returns TRUE when Left &lt;= Right" />
+                                <Button Content="&gt;=" Command="{Binding AddOperatorCommand}" CommandParameter="&gt;=" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Greater Than or Equal (&gt;=): Returns TRUE when Left &gt;= Right" />
+                                <Button Content="AND" Command="{Binding AddOperatorCommand}" CommandParameter="AND" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Logical AND: Returns TRUE only if both Left and Right conditions are TRUE" />
+                                <Button Content="OR" Command="{Binding AddOperatorCommand}" CommandParameter="OR" Margin="1.5" Padding="6,2" FontSize="11" FontWeight="SemiBold" ToolTip="Logical OR: Returns TRUE if either Left or Right condition is TRUE" />
                             </WrapPanel>
                         </StackPanel>
                     </Expander>
 
-                    <!-- 4. Custom Snippets (Session) -->
-                    <Expander Header="Custom Snippets (Session)" IsExpanded="True" Margin="0,0,0,8">
-                        <StackPanel Margin="0,4,0,0">
+                    <!-- 4. Custom Snippets (Persisted) with Fillable Snippet Card -->
+                    <Expander Header="Custom Snippets" IsExpanded="True" Margin="0,0,0,4" Padding="4,2">
+                        <StackPanel Margin="0,2,0,0">
+                            <!-- Fillable Snippet Card to Save Active Canvas Formula -->
+                            <Border Background="#266D28D9"
+                                    BorderBrush="#FF8B5CF6"
+                                    BorderThickness="1"
+                                    CornerRadius="5"
+                                    Padding="5,4"
+                                    Margin="0,1,0,3"
+                                    ToolTip="Type a name and description here to save whatever is on the canvas as a persistent reusable snippet (empty slots become snippet inputs).">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <ui:TextBox Text="{Binding NewCustomSnippetName, UpdateSourceTrigger=PropertyChanged}"
+                                                    PlaceholderText="Snippet name..."
+                                                    FontSize="11"
+                                                    Padding="5,2"
+                                                    Margin="0,0,0,3" />
+                                        <ui:TextBox Text="{Binding NewCustomSnippetDescription, UpdateSourceTrigger=PropertyChanged}"
+                                                    PlaceholderText="Description..."
+                                                    FontSize="10.5"
+                                                    Padding="5,2" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1"
+                                            Command="{Binding SaveCustomSnippetCommand}"
+                                            Content="Save"
+                                            Padding="7,4"
+                                            Margin="4,0,0,0"
+                                            FontSize="11"
+                                            FontWeight="SemiBold"
+                                            VerticalAlignment="Stretch"
+                                            ToolTip="Save active canvas formula as a custom snippet" />
+                                </Grid>
+                            </Border>
+
+                            <!-- Saved Custom Snippets List -->
                             <ItemsControl ItemsSource="{Binding CustomSnippets}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="#336D28D9"
+                                        <Border Background="#266D28D9"
                                                 BorderBrush="#FF8B5CF6"
                                                 BorderThickness="1"
-                                                CornerRadius="6"
-                                                Padding="8,5"
-                                                Margin="0,2"
+                                                CornerRadius="4"
+                                                Padding="6,2"
+                                                Margin="0,1"
                                                 Cursor="Hand"
-                                                ToolTip="{Binding Description}"
+                                                ToolTip="{Binding DetailedExplanation}"
                                                 PreviewMouseLeftButtonDown="ToolboxItem_PreviewMouseLeftButtonDown"
                                                 PreviewMouseMove="ToolboxItem_PreviewMouseMove">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding Name}"
-                                                           FontWeight="SemiBold"
-                                                           VerticalAlignment="Center" />
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Description}"
+                                                               FontSize="9.5"
+                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
                                                 <Button Grid.Column="1"
                                                         Content="+"
-                                                        Padding="6,1"
-                                                        Margin="6,0,0,0"
-                                                        FontSize="11"
+                                                        Padding="5,0"
+                                                        Margin="4,0,0,0"
+                                                        FontSize="10"
+                                                        MinHeight="18"
+                                                        VerticalAlignment="Center"
+                                                        ToolTip="Add this custom snippet to the canvas"
                                                         Command="{Binding DataContext.AddNodeCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Grid.Column="2"
+                                                        Content="✕"
+                                                        Padding="5,0"
+                                                        Margin="2,0,0,0"
+                                                        FontSize="10"
+                                                        MinHeight="18"
+                                                        VerticalAlignment="Center"
+                                                        ToolTip="Delete this saved custom snippet"
+                                                        Command="{Binding DataContext.DeleteCustomSnippetCommand, RelativeSource={RelativeSource AncestorType=Page}}"
                                                         CommandParameter="{Binding}" />
                                             </Grid>
                                         </Border>
@@ -638,7 +762,7 @@
             </ScrollViewer>
         </Border>
 
-        <!-- Right Column: Workspace Canvas + Docked Live Code Preview Bar -->
+        <!-- Center Column: Workspace Canvas + Docked Formula Tester & Generated Code Bar -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
@@ -648,7 +772,10 @@
             <!-- Nodify Infinite Pan/Zoom Workspace Canvas for Root Puzzle Blocks -->
             <nodify:NodifyEditor x:Name="NodifyEditorControl"
                                  Grid.Row="0"
+                                 ClipToBounds="True"
                                  ItemsSource="{Binding Nodes}"
+                                 ViewportLocation="{Binding ViewportLocation, Mode=TwoWay}"
+                                 ViewportZoom="{Binding ViewportZoom, Mode=TwoWay}"
                                  Background="{StaticResource GridBackground}"
                                  AllowDrop="True"
                                  DragOver="NodifyEditorControl_DragOver"
@@ -692,6 +819,9 @@
                         </MenuItem>
                         <MenuItem Header="Add Value / Field Block" Command="{Binding AddUserInputCommand}" />
                         <Separator />
+                        <MenuItem Header="Paste FormGen Code (Ctrl+V)" Command="{Binding PasteFromClipboardCommand}" />
+                        <Separator />
+                        <MenuItem Header="Recenter Canvas" Command="{Binding RecenterCanvasCommand}" />
                         <MenuItem Header="Clear Canvas" Command="{Binding ClearCanvasCommand}" />
                     </ContextMenu>
                 </ContextMenuService.ContextMenu>
@@ -702,71 +832,273 @@
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
-                        Margin="12">
+                        Margin="10">
+                <Button Command="{Binding PasteFromClipboardCommand}"
+                        Content="📋 Paste Code"
+                        Padding="10,4"
+                        FontSize="11.5"
+                        Margin="0,0,6,0"
+                        ToolTip="Paste FormGen code from clipboard and parse into a condensed block (Ctrl+V)" />
+                <Button Command="{Binding RecenterCanvasCommand}"
+                        Content="⌖ Recenter"
+                        Padding="10,4"
+                        FontSize="11.5"
+                        Margin="0,0,6,0"
+                        ToolTip="Recenter the canvas on the active puzzle blocks and reset zoom" />
                 <Button Command="{Binding ClearCanvasCommand}"
                         Content="Clear Canvas"
-                        Margin="0,0,6,0" />
+                        Padding="10,4"
+                        FontSize="11.5"
+                        Margin="0,0,6,0"
+                        ToolTip="Clear all blocks from the canvas and recenter" />
+                <Button Click="ToggleExplainerButton_Click"
+                        Padding="10,4"
+                        FontSize="11.5"
+                        ToolTip="Show or hide the right-side Block &amp; Formula Guide panel">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📖 Guide" VerticalAlignment="Center" />
+                        <Border Visibility="{Binding HasActiveDiagnostics, Converter={StaticResource BoolToVis}}"
+                                Background="#FFD97706"
+                                BorderBrush="#FFF59E0B"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="5,0"
+                                Margin="6,0,0,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ActiveDiagnostics.Count}"
+                                       FontSize="10"
+                                       FontWeight="Bold"
+                                       Foreground="White" />
+                        </Border>
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
-            <!-- Docked Live FormGen Code Output, Formula Tester (Test Bench), & Coach Bar -->
+            <!-- Paste & Syntax Assistant Interactive Overlay Panel -->
+            <Border Grid.Row="0"
+                    Visibility="{Binding IsPasteAssistantVisible, Converter={StaticResource BoolToVis}}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Margin="20,48,20,10"
+                    MaxWidth="640"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    CornerRadius="8"
+                    Padding="14,12"
+                    BorderThickness="1.5">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="BorderBrush" Value="#668B5CF6" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPasteRecognizedAlert}" Value="True">
+                                <Setter Property="BorderBrush" Value="#FF16A34A" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsPasteStatusUnrecognized}" Value="True">
+                                <Setter Property="BorderBrush" Value="#FFE11D48" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsPasteStatusMalformed}" Value="True">
+                                <Setter Property="BorderBrush" Value="#FFD97706" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+
+                <StackPanel>
+                    <!-- Header with Status Badge, Title, and Close Button -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Status Badge -->
+                        <Border Grid.Column="0"
+                                CornerRadius="4"
+                                Padding="6,2"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="#FF6366F1" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPasteRecognizedAlert}" Value="True">
+                                            <Setter Property="Background" Value="#FF16A34A" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsPasteStatusUnrecognized}" Value="True">
+                                            <Setter Property="Background" Value="#FFE11D48" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsPasteStatusMalformed}" Value="True">
+                                            <Setter Property="Background" Value="#FFD97706" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Foreground="White"
+                                       FontSize="10"
+                                       FontWeight="Bold">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="FORMGEN PARSER" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsPasteRecognizedAlert}" Value="True">
+                                                <Setter Property="Text" Value="✓ RECOGNIZED" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsPasteStatusUnrecognized}" Value="True">
+                                                <Setter Property="Text" Value="✕ NOT RECOGNIZED" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsPasteStatusMalformed}" Value="True">
+                                                <Setter Property="Text" Value="⚠ MALFORMED SYNTAX" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Border>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding PasteStatusTitle}"
+                                   FontWeight="Bold"
+                                   FontSize="12.5"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <Button Grid.Column="2"
+                                Content="✕"
+                                Command="{Binding DismissPasteAssistantCommand}"
+                                Padding="6,1"
+                                FontSize="11"
+                                MinHeight="20"
+                                ToolTip="Close paste assistant" />
+                    </Grid>
+
+                    <!-- Diagnostic / Informational Message -->
+                    <Border Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="5"
+                            Padding="8,6"
+                            Margin="0,0,0,8">
+                        <TextBlock Text="{Binding PasteDiagnosticMessage}"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   LineHeight="16" />
+                    </Border>
+
+                    <!-- Suggested Correction Card (When Available) -->
+                    <Border Visibility="{Binding HasPasteSuggestedFix, Converter={StaticResource BoolToVis}}"
+                            Background="#180D9488"
+                            BorderBrush="#660D9488"
+                            BorderThickness="1"
+                            CornerRadius="5"
+                            Padding="8,6"
+                            Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="SUGGESTED CORRECTION:"
+                                           FontSize="9.5"
+                                           FontWeight="Bold"
+                                           Foreground="#FF0D9488"
+                                           Margin="0,0,0,2" />
+                                <TextBlock Text="{Binding PasteSuggestedFix}"
+                                           FontFamily="Consolas"
+                                           FontSize="11.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Command="{Binding ApplyPasteSuggestionCommand}"
+                                    Content="Apply Fix"
+                                    Padding="10,4"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    VerticalAlignment="Center"
+                                    Margin="8,0,0,0"
+                                    ToolTip="Replace editor text with this suggested correction" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Live Monitoring Editable TextBox -->
+                    <TextBlock Text="Edit or type FormGen expression (monitors changes live):"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Margin="0,0,0,3" />
+
+                    <ui:TextBox Text="{Binding PasteEditorText, UpdateSourceTrigger=PropertyChanged}"
+                                FontFamily="Consolas"
+                                FontSize="12"
+                                MinHeight="65"
+                                MaxHeight="140"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                VerticalScrollBarVisibility="Auto"
+                                PlaceholderText="e.g. IF(F72 = 'N', 'NEW', 'USED') or SEPLIST(', ', F93, F94)"
+                                Margin="0,0,0,10" />
+
+                    <!-- Action Bar -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Load Condensed Block"
+                                Command="{Binding CommitParsedPasteCommand}"
+                                IsEnabled="{Binding IsPasteStatusValid}"
+                                Padding="12,5"
+                                FontSize="11.5"
+                                FontWeight="Bold"
+                                Margin="0,0,8,0"
+                                ToolTip="Load this recognized function onto the canvas as a condensed block ready for expansion and examination" />
+
+                        <Button Content="Apply Correction"
+                                Command="{Binding ApplyPasteSuggestionCommand}"
+                                Visibility="{Binding HasPasteSuggestedFix, Converter={StaticResource BoolToVis}}"
+                                Padding="10,5"
+                                FontSize="11.5"
+                                Margin="0,0,8,0" />
+
+                        <Button Content="Close"
+                                Command="{Binding DismissPasteAssistantCommand}"
+                                Padding="10,5"
+                                FontSize="11.5" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Docked Bottom Bar: Color-Coordinated Formula Tester & Live Generated FormGen Code -->
             <Border Grid.Row="1"
                     BorderThickness="0,1,0,0"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                     Background="{DynamicResource ControlFillColorDefaultBrush}"
-                    Padding="12,10">
+                    Padding="10,8">
                 <StackPanel>
-                    <!-- 1. Formula Coach & Step-by-Step Explanation Banner -->
-                    <Border Background="#1A38BDF8"
-                            BorderBrush="#5538BDF8"
-                            BorderThickness="1"
-                            CornerRadius="6"
-                            Padding="10,6"
-                            Margin="0,0,0,8">
-                        <StackPanel>
-                            <TextBlock Text="{Binding CoachMessage}"
-                                       FontWeight="SemiBold"
-                                       FontSize="12"
-                                       TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding TestEvaluationExplanation}"
-                                       FontSize="11"
-                                       Margin="0,2,0,0"
-                                       TextWrapping="Wrap"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                            <ItemsControl ItemsSource="{Binding ActiveDiagnostics}" Margin="0,4,0,0">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding Message, StringFormat='⚠ {0}'}"
-                                                   FontSize="11"
-                                                   Foreground="#FFF59E0B"
-                                                   TextWrapping="Wrap"
-                                                   Margin="0,1" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 2. Interactive Formula Tester: Variable & F-Field Substitution -->
-                    <Border Background="#14000000"
+                    <!-- 1. Interactive Formula Tester: Color-Coordinated Variable & F-Field Substitution -->
+                    <Border Background="{DynamicResource ControlFillColorSecondaryBrush}"
                             BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="6"
-                            Padding="10,6"
-                            Margin="0,0,0,8">
+                            Padding="8,5"
+                            Margin="0,0,0,6">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="210" />
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                 <TextBlock Text="Formula Tester"
                                            FontWeight="Bold"
-                                           FontSize="12" />
-                                <TextBlock Text="Substitute F-fields &amp; inputs:"
-                                           FontSize="10"
+                                           FontSize="11.5"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="Color-matched inputs:"
+                                           FontSize="9.5"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
 
@@ -780,26 +1112,40 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type snippets:TestVariableViewModel}">
-                                        <Border Background="#22FFFFFF"
+                                        <Border Background="{Binding BackgroundBrush}"
+                                                BorderBrush="{Binding BorderBrush}"
+                                                BorderThickness="1.5"
                                                 CornerRadius="5"
-                                                Padding="6,3"
-                                                Margin="0,2,8,2"
-                                                ToolTip="{Binding Hint}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding Name}"
-                                                           FontWeight="Bold"
-                                                           FontSize="11"
-                                                           VerticalAlignment="Center"
-                                                           Margin="0,0,6,0" />
+                                                Padding="6,2"
+                                                Margin="0,2,6,2"
+                                                ToolTip="{Binding Tooltip}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <StackPanel Margin="0,0,5,0" VerticalAlignment="Center">
+                                                    <Border Background="{Binding AccentBrush}"
+                                                            CornerRadius="4"
+                                                            Padding="5,1"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding Name}"
+                                                                   Foreground="White"
+                                                                   FontWeight="Bold"
+                                                                   FontSize="10.5" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding Hint}"
+                                                               FontSize="9"
+                                                               Margin="1,1,0,0"
+                                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                                </StackPanel>
                                                 <TextBlock Text="="
                                                            FontSize="11"
+                                                           FontWeight="SemiBold"
                                                            VerticalAlignment="Center"
-                                                           Margin="0,0,6,0"
-                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                           Margin="0,0,5,0"
+                                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                                                 <ui:TextBox Text="{Binding SampleValue, UpdateSourceTrigger=PropertyChanged}"
-                                                            MinWidth="85"
+                                                            MinWidth="75"
                                                             FontSize="11"
-                                                            Padding="5,2" />
+                                                            Padding="5,1"
+                                                            VerticalAlignment="Center" />
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
@@ -809,23 +1155,25 @@
                             <TextBlock Grid.Column="2"
                                        Text="Test Result:"
                                        FontWeight="SemiBold"
-                                       FontSize="12"
+                                       FontSize="11.5"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                        VerticalAlignment="Center"
-                                       Margin="10,0,8,0" />
+                                       Margin="8,0,6,0" />
 
                             <ui:TextBox Grid.Column="3"
                                         Text="{Binding TestEvaluatedResult, Mode=OneWay}"
                                         IsReadOnly="True"
                                         FontFamily="Consolas"
                                         FontWeight="Bold"
-                                        FontSize="13"
+                                        FontSize="12.5"
+                                        Padding="6,3"
                                         VerticalAlignment="Center"
                                         ToolTip="{Binding TestEvaluationExplanation}" />
                         </Grid>
                     </Border>
 
-                    <!-- 3. Live Generated FormGen Code & Copy Button -->
-                    <Grid Margin="0,0,0,8">
+                    <!-- 2. Color-Coordinated Generated FormGen Code & Copy Button -->
+                    <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -835,62 +1183,415 @@
                         <TextBlock Grid.Column="0"
                                    Text="Generated Code:"
                                    FontWeight="SemiBold"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,10,0" />
+                                   FontSize="11.5"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                   VerticalAlignment="Top"
+                                   Margin="0,9,8,0" />
 
-                        <ui:TextBox Grid.Column="1"
-                                    Text="{Binding ActiveOutputCode, Mode=OneWay}"
-                                    IsReadOnly="True"
-                                    FontFamily="Consolas"
-                                    FontSize="13"
-                                    Margin="0,0,10,0"
-                                    PlaceholderText="Snap blocks together to generate FormGen code..." />
+                        <ScrollViewer Grid.Column="1"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      Margin="0,0,8,0"
+                                      ToolTip="{Binding ActiveOutputCode}">
+                            <ScrollViewer.Template>
+                                <ControlTemplate TargetType="ScrollViewer">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <!-- Snippet Box Row -->
+                                            <RowDefinition Height="Auto" />
+                                            <!-- Dedicated Row Below Snippet Box for Horizontal ScrollBar -->
+                                            <RowDefinition Height="Auto" MinHeight="18" />
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Row="0"
+                                                Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="5"
+                                                Padding="8,6"
+                                                MinHeight="34">
+                                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                                    CanContentScroll="{TemplateBinding CanContentScroll}"
+                                                                    Content="{TemplateBinding Content}"
+                                                                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                    VerticalAlignment="Center" />
+                                        </Border>
+
+                                        <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                                   Grid.Row="1"
+                                                   Orientation="Horizontal"
+                                                   Minimum="0"
+                                                   Maximum="{TemplateBinding ScrollableWidth}"
+                                                   ViewportSize="{TemplateBinding ViewportWidth}"
+                                                   Value="{Binding HorizontalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                   Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"
+                                                   Height="14"
+                                                   Margin="0,4,0,0"
+                                                   Cursor="Arrow">
+                                            <ScrollBar.Template>
+                                                <ControlTemplate TargetType="ScrollBar">
+                                                    <Border Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="6"
+                                                            Height="14"
+                                                            Padding="2,1">
+                                                        <Track x:Name="PART_Track"
+                                                               IsDirectionReversed="False"
+                                                               Focusable="False">
+                                                            <Track.DecreaseRepeatButton>
+                                                                <RepeatButton Command="ScrollBar.PageLeftCommand"
+                                                                              Opacity="0"
+                                                                              Focusable="False" />
+                                                            </Track.DecreaseRepeatButton>
+                                                            <Track.Thumb>
+                                                                <Thumb Focusable="False">
+                                                                    <Thumb.Template>
+                                                                        <ControlTemplate TargetType="Thumb">
+                                                                            <Border x:Name="ThumbBorder"
+                                                                                    Background="{DynamicResource ControlStrongFillColorDefaultBrush}"
+                                                                                    CornerRadius="4"
+                                                                                    Height="8"
+                                                                                    VerticalAlignment="Center" />
+                                                                            <ControlTemplate.Triggers>
+                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                    <Setter TargetName="ThumbBorder"
+                                                                                            Property="Background"
+                                                                                            Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                                                </Trigger>
+                                                                                <Trigger Property="IsDragging" Value="True">
+                                                                                    <Setter TargetName="ThumbBorder"
+                                                                                            Property="Background"
+                                                                                            Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                                                                                </Trigger>
+                                                                            </ControlTemplate.Triggers>
+                                                                        </ControlTemplate>
+                                                                    </Thumb.Template>
+                                                                </Thumb>
+                                                            </Track.Thumb>
+                                                            <Track.IncreaseRepeatButton>
+                                                                <RepeatButton Command="ScrollBar.PageRightCommand"
+                                                                              Opacity="0"
+                                                                              Focusable="False" />
+                                                            </Track.IncreaseRepeatButton>
+                                                        </Track>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </ScrollBar.Template>
+                                        </ScrollBar>
+                                    </Grid>
+                                </ControlTemplate>
+                            </ScrollViewer.Template>
+
+                            <Grid VerticalAlignment="Center">
+                                <TextBlock Text="Snap blocks together to generate FormGen code..."
+                                           Visibility="{Binding HasGeneratedCode, Converter={StaticResource InverseBoolToVis}}"
+                                           FontFamily="Consolas"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                           VerticalAlignment="Center" />
+
+                                <ItemsControl ItemsSource="{Binding GeneratedCodeSegments}"
+                                              Visibility="{Binding HasGeneratedCode, Converter={StaticResource BoolToVis}}"
+                                              VerticalAlignment="Center">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type snippets:CodeTokenSegmentViewModel}">
+                                            <Grid VerticalAlignment="Center">
+                                                <!-- Plain Code Token -->
+                                                <TextBlock Text="{Binding Text}"
+                                                           Visibility="{Binding IsVariable, Converter={StaticResource InverseBoolToVis}}"
+                                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="13"
+                                                           VerticalAlignment="Center" />
+
+                                                <!-- Highlighted Variable Token Matching Formula Tester Box Color -->
+                                                <Border Visibility="{Binding IsVariable, Converter={StaticResource BoolToVis}}"
+                                                        Background="{Binding AccentBrush}"
+                                                        BorderBrush="{Binding BorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Padding="5,1"
+                                                        Margin="1,0"
+                                                        VerticalAlignment="Center"
+                                                        ToolTip="{Binding Tooltip}">
+                                                    <TextBlock Text="{Binding Text}"
+                                                               Foreground="White"
+                                                               FontFamily="Consolas"
+                                                               FontWeight="Bold"
+                                                               FontSize="12.5"
+                                                               VerticalAlignment="Center" />
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </ScrollViewer>
 
                         <Button Grid.Column="2"
                                 Command="{Binding CopyOutputCommand}"
                                 Content="Copy"
-                                Padding="14,6"
+                                Padding="14,5"
+                                VerticalAlignment="Top"
+                                Margin="0,1,0,0"
                                 FontWeight="SemiBold"
                                 ToolTip="Copy generated FormGen code to clipboard" />
-                    </Grid>
-
-                    <!-- 4. Save Active Puzzle Tree as Session Custom Snippet -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="200" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
-                                   Text="Save as Custom Snippet:"
-                                   FontSize="12"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,8,0"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-
-                        <ui:TextBox Grid.Column="1"
-                                    Text="{Binding NewCustomSnippetName, UpdateSourceTrigger=PropertyChanged}"
-                                    PlaceholderText="Snippet Name..."
-                                    FontSize="12"
-                                    Margin="0,0,8,0" />
-
-                        <ui:TextBox Grid.Column="2"
-                                    Text="{Binding NewCustomSnippetDescription, UpdateSourceTrigger=PropertyChanged}"
-                                    PlaceholderText="Optional description (empty slots become snippet inputs)..."
-                                    FontSize="12"
-                                    Margin="0,0,8,0" />
-
-                        <Button Grid.Column="3"
-                                Command="{Binding SaveCustomSnippetCommand}"
-                                Content="Save Snippet"
-                                Padding="12,5"
-                                ToolTip="Save the active puzzle tree into Custom Snippets for this session" />
                     </Grid>
                 </StackPanel>
             </Border>
         </Grid>
+
+        <!-- Resizable Splitter for Right Explainer Panel -->
+        <GridSplitter x:Name="ExplainerSplitter"
+                      Grid.Column="2"
+                      Width="5"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      ResizeDirection="Columns"
+                      ResizeBehavior="PreviousAndNext"
+                      Background="Transparent"
+                      Cursor="SizeWE"
+                      Visibility="{Binding IsExplainerExpanded, Converter={StaticResource BoolToVis}}" />
+
+        <!-- Right Sidebar: Collapsible & Resizable Structured Explainer Panel -->
+        <Border x:Name="ExplainerPanel"
+                Grid.Column="3"
+                Visibility="{Binding IsExplainerExpanded, Converter={StaticResource BoolToVis}}"
+                BorderThickness="1,0,0,0"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                Padding="10,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Explainer Header with Collapse Button -->
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="Block &amp; Formula Guide"
+                               FontWeight="Bold"
+                               FontSize="13"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1"
+                            Content="»"
+                            Click="ToggleExplainerButton_Click"
+                            Padding="6,1"
+                            FontSize="12"
+                            FontWeight="Bold"
+                            ToolTip="Collapse guide panel" />
+                </Grid>
+
+                <!-- Structured, Easy-to-Decipher Cards -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <!-- Card 1: Active Block / Formula Overview -->
+                        <Border Background="#1838BDF8"
+                                BorderBrush="#660284C7"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="9,8"
+                                Margin="0,0,0,8">
+                            <StackPanel>
+                                <!-- Badge + Block Title -->
+                                <WrapPanel VerticalAlignment="Center" Margin="0,0,0,6">
+                                    <Border Background="#FF0284C7"
+                                            CornerRadius="4"
+                                            Padding="5,1"
+                                            Margin="0,0,6,2"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding ExplainerCategoryBadge}"
+                                                   FontSize="9.5"
+                                                   FontWeight="Bold"
+                                                   Foreground="White" />
+                                    </Border>
+                                    <TextBlock Text="{Binding ExplainerTitle}"
+                                               FontWeight="Bold"
+                                               FontSize="12.5"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center" />
+                                </WrapPanel>
+
+                                <!-- How It Works Summary -->
+                                <TextBlock Text="{Binding ExplainerSummary}"
+                                           FontSize="11.5"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                           TextWrapping="Wrap"
+                                           LineHeight="16" />
+
+                                <!-- Syntax / Underlying Structure Box -->
+                                <StackPanel Visibility="{Binding HasExplainerSyntax, Converter={StaticResource BoolToVis}}"
+                                            Margin="0,8,0,0">
+                                    <TextBlock Text="SYNTAX / STRUCTURE"
+                                               FontSize="9.5"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Margin="0,0,0,3" />
+                                    <Border Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,4">
+                                        <TextBlock Text="{Binding ExplainerSyntax}"
+                                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                   FontFamily="Consolas"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap" />
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Example / Inputs Box -->
+                                <StackPanel Visibility="{Binding HasExplainerExample, Converter={StaticResource BoolToVis}}"
+                                            Margin="0,6,0,0">
+                                    <TextBlock Text="EXAMPLE / INPUTS"
+                                               FontSize="9.5"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Margin="0,0,0,3" />
+                                    <Border Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,4">
+                                        <TextBlock Text="{Binding ExplainerExample}"
+                                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                   FontFamily="Consolas"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap" />
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- FormGen Quirks & Notes -->
+                                <Border Visibility="{Binding HasExplainerNotes, Converter={StaticResource BoolToVis}}"
+                                        Background="#220D9488"
+                                        BorderBrush="#660D9488"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="6,4"
+                                        Margin="0,6,0,0">
+                                    <TextBlock Text="{Binding ExplainerNotes}"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                               FontSize="10.5"
+                                               TextWrapping="Wrap" />
+                                 </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 1b: How It Functions (Pseudo-Code & Branch Walkthrough) -->
+                        <Border Visibility="{Binding HasExplainerPseudoCode, Converter={StaticResource BoolToVis}}"
+                                Background="#166366F1"
+                                BorderBrush="#666366F1"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="9,7"
+                                Margin="0,0,0,8">
+                            <StackPanel>
+                                <Border Background="#FF6366F1"
+                                        CornerRadius="4"
+                                        Padding="5,1"
+                                        Margin="0,0,0,5"
+                                        HorizontalAlignment="Left">
+                                    <TextBlock Text="HOW IT FUNCTIONS (BRANCH WALKTHROUGH)"
+                                               FontSize="9.5"
+                                               FontWeight="Bold"
+                                               Foreground="White" />
+                                </Border>
+                                <Border Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="7,5">
+                                    <TextBlock Text="{Binding ExplainerPseudoCode}"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                               FontFamily="Consolas"
+                                               FontSize="11"
+                                               LineHeight="16"
+                                               TextWrapping="Wrap" />
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 2: Step-by-Step Evaluation Trace -->
+                        <Border Visibility="{Binding HasTestEvaluationExplanation, Converter={StaticResource BoolToVis}}"
+                                Background="#1422C55E"
+                                BorderBrush="#6616A34A"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="9,7"
+                                Margin="0,0,0,8">
+                            <StackPanel>
+                                <Border Background="#FF16A34A"
+                                        CornerRadius="4"
+                                        Padding="5,1"
+                                        Margin="0,0,0,5"
+                                        HorizontalAlignment="Left">
+                                    <TextBlock Text="LIVE EVALUATION TRACE"
+                                               FontSize="9.5"
+                                               FontWeight="Bold"
+                                               Foreground="White" />
+                                </Border>
+                                <TextBlock Text="{Binding TestEvaluationExplanation}"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 3: Warnings & FormGen Tips -->
+                        <Border Visibility="{Binding HasActiveDiagnostics, Converter={StaticResource BoolToVis}}"
+                                Background="#18F59E0B"
+                                BorderBrush="#66D97706"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="9,7">
+                            <StackPanel>
+                                <Border Background="#FFD97706"
+                                        CornerRadius="4"
+                                        Padding="5,1"
+                                        Margin="0,0,0,5"
+                                        HorizontalAlignment="Left">
+                                    <TextBlock Text="WARNINGS &amp; TIPS"
+                                               FontSize="9.5"
+                                               FontWeight="Bold"
+                                               Foreground="White" />
+                                </Border>
+                                <ItemsControl ItemsSource="{Binding ActiveDiagnostics}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                                    BorderBrush="#66D97706"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="6,4"
+                                                    Margin="0,2">
+                                                <TextBlock Text="{Binding Message, StringFormat='⚠ {0}'}"
+                                                           FontSize="10.5"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                           TextWrapping="Wrap" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
     </Grid>
 </Page>
 

@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Converters;
+using AMFormsCST.Core.Converters;
 using AMFormsCST.Core.Helpers;
 using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Notebook;
@@ -269,4 +269,52 @@ public static class IO
             return null;
         }
     }
+
+    public static string CustomSnippetsPath => Path.Combine(_rootPath, "CustomSnippets.json");
+
+    public static List<AMFormsCST.Core.Types.CodeBlocks.Formulae.SavedCustomSnippetDto> LoadCustomSnippets(string? customFilePath = null)
+    {
+        var path = string.IsNullOrWhiteSpace(customFilePath) ? CustomSnippetsPath : customFilePath;
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var list = JsonSerializer.Deserialize<List<AMFormsCST.Core.Types.CodeBlocks.Formulae.SavedCustomSnippetDto>>(json, _jsonOptions);
+            Logger?.LogInfo($"Custom snippets loaded: {list?.Count ?? 0}");
+            return list ?? [];
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError("Error loading custom snippets.", ex);
+            return [];
+        }
+    }
+
+    public static void SaveCustomSnippets(
+        IEnumerable<AMFormsCST.Core.Types.CodeBlocks.Formulae.SavedCustomSnippetDto> snippets,
+        string? customFilePath = null)
+    {
+        var path = string.IsNullOrWhiteSpace(customFilePath) ? CustomSnippetsPath : customFilePath;
+        try
+        {
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            var json = JsonSerializer.Serialize(snippets.ToList(), _jsonOptions);
+            File.WriteAllText(path, json);
+            Logger?.LogInfo("Custom snippets saved.");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError("Error saving custom snippets.", ex);
+        }
+    }
 }
+

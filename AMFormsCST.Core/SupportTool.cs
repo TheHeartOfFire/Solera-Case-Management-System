@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.BestPractices;
 using AMFormsCST.Core.Interfaces.UserSettings;
 using AMFormsCST.Core.Interfaces.Utils;
@@ -30,7 +30,7 @@ public class SupportTool : ISupportTool
 
         _properties = IO.LoadConfig() ?? new Properties(logger);
 
-        CodeBlocks = new CodeBlocks(logger);
+        CodeBlocks = new CodeBlocks(logger, enablePersistence: true);
         Notebook = notebook ?? new Notebook(logger);
         FormgenUtils = new FormgenUtils(fileSystem, _properties.FormgenUtils, logger);
         Enforcer = new BestPracticeEnforcer(formNameBestPractice, templateRepository, logger);
@@ -46,6 +46,7 @@ public class SupportTool : ISupportTool
         Logger?.LogInfo("Saving all settings.");
         IO.SaveSettings(Settings);
         IO.SaveConfig(_properties);
+        CodeBlocks.SaveCustomBlocks();
         Logger?.LogInfo("Settings saved.");
     }
 }

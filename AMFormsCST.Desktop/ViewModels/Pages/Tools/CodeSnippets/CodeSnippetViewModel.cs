@@ -32,6 +32,7 @@ public partial class CodeSnippetViewModel : ObservableObject, INodeViewModel
     public CodeSnippetsViewModel? Workspace { get; set; }
 
     public string Description => CodeBase.Description ?? Title ?? string.Empty;
+    public string DetailedExplanation => CodeBase.DetailedExplanation;
     public int Index => 0;
 
     public ICodeBase CodeBase { get; }
@@ -48,9 +49,9 @@ public partial class CodeSnippetViewModel : ObservableObject, INodeViewModel
             if (CodeBase.GetType().Namespace?.Contains("Formulae") == true) return "Snippet";
             return CodeBase.Prefix switch
             {
-                "IF" or "CASE" or "CONTAINS" => "Logic",
-                "MONTH" or "DAY" or "YEAR" => "Date",
-                "ROUND" => "Math",
+                "IF" or "XIF" or "XXIF" or "CASE" or "CASELTE" or "MATCHRANGE" or "CONTAINS" or "NOT" or "AND" or "OR" or "BLANK" or "NOTBLANK" => "Logic",
+                "MONTH" or "DAY" or "YEAR" or "DATE" or "TODAY" or "ADDDAYS" or "ADDWEEKS" or "ADDMONTHS" or "ADDYEARS" => "Date",
+                "ROUND" or "NUM" or "FLOOR" or "CEILING" or "ABS" or "MAX" or "MIN" or "SQRT" or "LOG" or "LOG10" or "RANDOM" or "PI" or "SIN" or "COS" or "TAN" or "ASIN" or "ACOS" or "ATAN" or "SINH" or "COSH" or "TANH" or "RAD" or "DEG" => "Math",
                 _ => "Text"
             };
         }
@@ -77,9 +78,16 @@ public partial class CodeSnippetViewModel : ObservableObject, INodeViewModel
             if (CodeBase is OperatorCode op && op.Operator != value)
             {
                 op.Operator = value;
+                Title = op.Name;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(PrefixBadge));
+                OnPropertyChanged(nameof(Description));
+                OnPropertyChanged(nameof(DetailedExplanation));
                 InputChanged();
+                if (Workspace != null)
+                {
+                    Workspace.CoachMessage = DetailedExplanation;
+                }
             }
         }
     }
@@ -244,9 +252,10 @@ public partial class CodeSnippetViewModel : ObservableObject, INodeViewModel
         }
 
         HasDiagnostics = diags.Count > 0;
+        var baseExplanation = DetailedExplanation;
         BlockDiagnosticSummary = diags.Count > 0
-            ? string.Join("\n", diags.Select(d => $"• {d.Message}"))
-            : (CodeBase.Description ?? "All inputs look valid.");
+            ? $"{baseExplanation}\n\n⚠ Warnings & Tips:\n" + string.Join("\n", diags.Select(d => $"• {d.Message}"))
+            : baseExplanation;
     }
 }
 

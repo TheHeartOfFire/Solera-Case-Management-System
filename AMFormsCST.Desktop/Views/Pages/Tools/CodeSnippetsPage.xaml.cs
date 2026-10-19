@@ -29,6 +29,13 @@ public partial class CodeSnippetsPage : Page
     private bool _isDraggingPossible;
     private INodeViewModel? _draggingCanvasRootNode;
     private CodeInputViewModel? _highlightedSocket;
+    private readonly List<ScrollViewer> _constrainedScrollViewers = [];
+    private readonly List<Frame> _constrainedFrames = [];
+
+    private NavigationView? _hostNavigationView;
+    private Thickness _savedNavPadding;
+    private Thickness _savedHeaderMargin;
+    private FrameworkElement? _savedHeaderElement;
 
     public CodeSnippetsPage(CodeSnippetsViewModel viewModel, ILogService? logger = null)
     {
@@ -37,7 +44,117 @@ public partial class CodeSnippetsPage : Page
         DataContext = ViewModel;
 
         InitializeComponent();
+        ViewModel.RecenterRequested += OnRecenterRequested;
+        Loaded += OnPageLoaded;
+        Unloaded += OnPageUnloaded;
+
+        // Bind Ctrl+V to paste and parse FormGen code when focus is not inside an editable TextBox
+        CommandBindings.Add(new CommandBinding(ApplicationCommands.Paste, (s, e) =>
+        {
+            if (Keyboard.FocusedElement is not System.Windows.Controls.TextBox tb || tb.IsReadOnly)
+            {
+                ViewModel.PasteFromClipboard();
+                e.Handled = true;
+            }
+        }));
+
         _logger?.LogInfo("CodeSnippetsPage initialized.");
+    }
+
+    private void OnRecenterRequested()
+    {
+        NodifyEditorControl.ViewportZoom = ViewModel.ViewportZoom;
+        NodifyEditorControl.ViewportLocation = ViewModel.ViewportLocation;
+    }
+
+    private void OnPageLoaded(object sender, RoutedEventArgs e)
+    {
+        ApplyHostLayoutConstraints();
+        Application.Current?.Dispatcher?.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Loaded,
+            new Action(ApplyHostLayoutConstraints));
+    }
+
+    private void ApplyHostLayoutConstraints()
+    {
+        // Constrain page height when hosted inside MainWindow's NavigationView ScrollViewer
+        // so the canvas does not stretch vertically and push the Formula Tester / Generated Code off-screen.
+        _constrainedScrollViewers.Clear();
+        _constrainedFrames.Clear();
+
+        DependencyObject? current = VisualTreeHelper.GetParent(this);
+        while (current != null)
+        {
+            if (current is ScrollViewer sv)
+            {
+                sv.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                sv.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                _constrainedScrollViewers.Add(sv);
+            }
+            else if (current is Frame frame)
+            {
+                ScrollViewer.SetVerticalScrollBarVisibility(frame, ScrollBarVisibility.Disabled);
+                ScrollViewer.SetHorizontalScrollBarVisibility(frame, ScrollBarVisibility.Disabled);
+                _constrainedFrames.Add(frame);
+            }
+            else if (current is NavigationView navigationView)
+            {
+                if (_hostNavigationView == null)
+                {
+                    _hostNavigationView = navigationView;
+                    _savedNavPadding = navigationView.Padding;
+                    navigationView.Padding = new Thickness(0);
+
+                    if (navigationView.Header is FrameworkElement headerElement)
+                    {
+                        _savedHeaderElement = headerElement;
+                        _savedHeaderMargin = headerElement.Margin;
+                        // Keep header margin tastefully small and aligned with the page edge
+                        headerElement.Margin = new Thickness(12, 10, 12, 2);
+                    }
+                }
+                navigationView.IsBackButtonVisible = NavigationViewBackButtonVisible.Visible;
+            }
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        // In PageHostDialog (popup from Dashboard), leave a 56px bottom margin under the Generated Code bar
+        // so the dialog 'X' close button in the bottom-right corner displays cleanly without overlapping.
+        // In MainWindow (from Tools page), use consistent, tastefully small margins (10px all around).
+        var hostWindow = Window.GetWindow(this);
+        if (hostWindow is Views.Dialogs.PageHostDialog)
+        {
+            RootLayoutGrid.Margin = new Thickness(6, 4, 6, 56);
+        }
+        else if (hostWindow != null)
+        {
+            RootLayoutGrid.Margin = new Thickness(10, 4, 10, 10);
+        }
+    }
+
+    private void OnPageUnloaded(object sender, RoutedEventArgs e)
+    {
+        foreach (var sv in _constrainedScrollViewers)
+        {
+            sv.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        }
+        foreach (var frame in _constrainedFrames)
+        {
+            ScrollViewer.SetVerticalScrollBarVisibility(frame, ScrollBarVisibility.Auto);
+        }
+        _constrainedScrollViewers.Clear();
+        _constrainedFrames.Clear();
+
+        if (_hostNavigationView != null)
+        {
+            _hostNavigationView.Padding = _savedNavPadding;
+            if (_savedHeaderElement != null)
+            {
+                _savedHeaderElement.Margin = _savedHeaderMargin;
+                _savedHeaderElement = null;
+            }
+            _hostNavigationView = null;
+        }
     }
 
     #region Toolbox Drag Initiation
@@ -343,6 +460,33 @@ public partial class CodeSnippetsPage : Page
 
     #endregion
 
+    #region Collapsible & Resizable Right Explainer Panel
+
+    private GridLength _savedExplainerWidth = new(300);
+
+    private void ToggleExplainerButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.IsExplainerExpanded)
+        {
+            if (ExplainerColumn.ActualWidth >= 180)
+            {
+                _savedExplainerWidth = new GridLength(ExplainerColumn.ActualWidth);
+            }
+            ViewModel.IsExplainerExpanded = false;
+            ExplainerColumn.MinWidth = 0;
+            ExplainerColumn.Width = new GridLength(0);
+        }
+        else
+        {
+            ViewModel.IsExplainerExpanded = true;
+            ExplainerColumn.MinWidth = 210;
+            ExplainerColumn.Width = _savedExplainerWidth.Value >= 210 ? _savedExplainerWidth : new GridLength(300);
+        }
+        e.Handled = true;
+    }
+
+    #endregion
+
     #region Quick '+' Slot Insert Context Menu
 
     private void SlotInsertButton_Click(object sender, RoutedEventArgs e)
@@ -372,20 +516,44 @@ public partial class CodeSnippetsPage : Page
 
         menu.Items.Add(new Separator());
 
-        // 3. Functions Submenu
+        // 3. Functions Submenu (Categorized)
         var functionsMenu = new System.Windows.Controls.MenuItem
         {
             Header = "Insert Function Block"
         };
-        foreach (var func in ViewModel.AvailableBlocks)
+        if (ViewModel.FunctionCategories.Count > 0)
         {
-            var item = new System.Windows.Controls.MenuItem
+            foreach (var category in ViewModel.FunctionCategories)
             {
-                Header = string.IsNullOrWhiteSpace(func.Prefix) ? func.Name : $"{func.Name} ({func.Prefix})"
-            };
-            var capturedFunc = func;
-            item.Click += (_, _) => ViewModel.InsertBlockTemplateIntoSlot(capturedFunc, targetSlot);
-            functionsMenu.Items.Add(item);
+                var catMenu = new System.Windows.Controls.MenuItem
+                {
+                    Header = category.Header
+                };
+                foreach (var func in category.Functions)
+                {
+                    var item = new System.Windows.Controls.MenuItem
+                    {
+                        Header = string.IsNullOrWhiteSpace(func.Prefix) ? func.Name : $"{func.Name} ({func.Prefix})"
+                    };
+                    var capturedFunc = func;
+                    item.Click += (_, _) => ViewModel.InsertBlockTemplateIntoSlot(capturedFunc, targetSlot);
+                    catMenu.Items.Add(item);
+                }
+                functionsMenu.Items.Add(catMenu);
+            }
+        }
+        else
+        {
+            foreach (var func in ViewModel.AvailableBlocks)
+            {
+                var item = new System.Windows.Controls.MenuItem
+                {
+                    Header = string.IsNullOrWhiteSpace(func.Prefix) ? func.Name : $"{func.Name} ({func.Prefix})"
+                };
+                var capturedFunc = func;
+                item.Click += (_, _) => ViewModel.InsertBlockTemplateIntoSlot(capturedFunc, targetSlot);
+                functionsMenu.Items.Add(item);
+            }
         }
         menu.Items.Add(functionsMenu);
 
@@ -423,4 +591,5 @@ public partial class CodeSnippetsPage : Page
         return null;
     }
 }
+
 

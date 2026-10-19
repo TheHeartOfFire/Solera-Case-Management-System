@@ -445,4 +445,388 @@ public class CodeSnippetsViewModelTests
         Assert.Equal("F500", singleBlock.Inputs[0].BindableValue);
         Assert.Equal("TEXT( ROUND( F500, 2 ))", singleBlock.GetCode());
     }
+
+    [Fact]
+    public void FormgenReferenceCatalog_LoadsMasterFieldsAndVehicleMerchandisingStatus()
+    {
+        // F776 (VH-FUEL-TYPE) is in both fields.json and Vehicle Merchandising Fields.xlsx (Vehicle Only = Y)
+        var f776 = AMFormsCST.Core.Utils.FormgenReferenceCatalog.TryGetField("F776");
+        Assert.NotNull(f776);
+        Assert.Equal("VH-FUEL-TYPE", f776!.VariableName);
+        Assert.True(f776.IsVehicleMerchandisingSafe);
+        Assert.Contains("VM Safe", f776.VmStatusBadge);
+        Assert.Contains("Available in Vehicle Merchandising", f776.VerboseTooltip);
+
+        // F3 (DL-FINAL-PRICE) is in fields.json (Numeric 7.2) but not in the VM-safe subset
+        var f3 = AMFormsCST.Core.Utils.FormgenReferenceCatalog.TryGetField("F3");
+        Assert.NotNull(f3);
+        Assert.True(f3!.IsNumeric);
+        Assert.False(f3.IsVehicleMerchandisingSafe);
+        Assert.Contains("Deal Only", f3.VmStatusBadge);
+
+        // F202 (DL-MSRP-AMT) is explicitly marked Vehicle Only = N in Vehicle Merchandising Fields.xlsx
+        var f202 = AMFormsCST.Core.Utils.FormgenReferenceCatalog.TryGetField("F202");
+        Assert.NotNull(f202);
+        Assert.True(f202!.IsExplicitlyExcludedFromVm);
+        Assert.Contains("Vehicle Only = N", f202.VmStatusBadge);
+    }
+
+    [Fact]
+    public void ExpandedWarnings_DetectsUnknownFieldsNumericInSeplistAndMonthFieldQuirk()
+    {
+        // 1. Numeric F-field (F3) directly inside SEPLIST warns to use Seplist Number / TEXT(ROUND())
+        var seplist = new AMFormsCST.Core.Types.CodeBlocks.Functions.SeplistCode();
+        seplist.SetInputValue(0, "' '");
+        seplist.SetInputValue(1, "F3");
+        seplist.SetInputValue(2, "F99999"); // Unknown F-field
+
+        var seplistDiagnostics = seplist.Validate();
+        Assert.Contains(seplistDiagnostics, d => d.InputIndex == 1 && d.Message.Contains("numeric") && d.Message.Contains("Seplist Number"));
+        Assert.Contains(seplistDiagnostics, d => d.InputIndex == 2 && d.Message.Contains("master FormGen field list"));
+
+        // 2. MONTH(F44) warns about FormGen date quirk from Formgen Formulas.xlsm
+        var month = new AMFormsCST.Core.Types.CodeBlocks.Functions.MonthCode();
+        month.SetInputValue(0, "F44");
+        var monthDiagnostics = month.Validate();
+        Assert.Contains(monthDiagnostics, d => d.InputIndex == 0 && d.Message.Contains("TODAY()") && d.Message.Contains("DATE(F44)"));
+
+        // 3. F202 warns about explicit exclusion from Vehicle Merchandising
+        var text = new AMFormsCST.Core.Types.CodeBlocks.Functions.TextCode();
+        text.SetInputValue(0, "F202");
+        var textDiagnostics = text.Validate();
+        Assert.Contains(textDiagnostics, d => d.InputIndex == 0 && d.Message.Contains("Vehicle Only = N"));
+    }
+
+    [Fact]
+    public void VerboseExplanationsAndSocketBadges_PopulateForFunctionsOperatorsAndFFields()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(new AMFormsCST.Core.Utils.CodeBlocks());
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.ClearCanvas();
+
+        // Act: Add Operator and Seplist blocks
+        var opNode = vm.AddBlockToCanvas(
+            new AMFormsCST.Core.Types.CodeBlocks.Functions.OperatorCode("%"),
+            new System.Windows.Point(0, 0));
+        var seplistNode = vm.AddBlockToCanvas(new AMFormsCST.Core.Types.CodeBlocks.Functions.SeplistCode(), new System.Windows.Point(100, 0));
+        seplistNode.Inputs[1].BindableValue = "F776";
+
+        // Assert verbose explanations and F-field badge
+        Assert.Contains("Modulus Operator", opNode.DetailedExplanation);
+        Assert.Contains("Separated List", seplistNode.DetailedExplanation);
+        Assert.True(seplistNode.Inputs[1].HasFieldInfo);
+        Assert.True(seplistNode.Inputs[1].FieldInfo!.IsVehicleMerchandisingSafe);
+        Assert.Contains("Fuel Type [VM Safe", seplistNode.Inputs[1].FieldBadgeText);
+        Assert.Contains("VH-FUEL-TYPE", seplistNode.Inputs[1].SocketTooltip);
+    }
+
+    [Fact]
+    public void CondensedFunctions_DoNotProduceDuplicateWarningsInActiveDiagnostics()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(new AMFormsCST.Core.Utils.CodeBlocks());
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.ClearCanvas();
+
+        // Act: Add condensed City, State ZIP snippet with all 3 slots empty
+        var cityStateZipNode = vm.AddBlockToCanvas(new AMFormsCST.Core.Types.CodeBlocks.Formulae.CityStateZIPCode(), new System.Windows.Point(0, 0));
+
+        // Assert: Exactly 3 warnings (1 for City, 1 for State, 1 for ZIP) and no duplicate "on Seplist" warnings
+        Assert.Equal(3, vm.ActiveDiagnostics.Count);
+        Assert.DoesNotContain(vm.ActiveDiagnostics, d => d.Message.Contains("on Seplist"));
+    }
+
+    [Fact]
+    public void ClearCanvas_ClearsWarningsAndFormulaTesterState()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(new AMFormsCST.Core.Utils.CodeBlocks());
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.AddBlockToCanvas(new AMFormsCST.Core.Types.CodeBlocks.Formulae.CityStateZIPCode(), new System.Windows.Point(0, 0));
+        Assert.NotEmpty(vm.ActiveDiagnostics);
+        Assert.NotEmpty(vm.TestVariables);
+        Assert.False(string.IsNullOrEmpty(vm.TestEvaluatedResult));
+
+        // Act
+        vm.ClearCanvas();
+
+        // Assert
+        Assert.Empty(vm.Nodes);
+        Assert.Empty(vm.ActiveDiagnostics);
+        Assert.Empty(vm.TestVariables);
+        Assert.Empty(vm.GeneratedCodeSegments);
+        Assert.Equal(string.Empty, vm.TestEvaluatedResult);
+        Assert.Equal(string.Empty, vm.TestEvaluationExplanation);
+        Assert.Equal(string.Empty, vm.ActiveOutputCode);
+    }
+
+    [Fact]
+    public void FunctionCategories_OrganizesAvailableFunctionsIntoCollapsibleCategories()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(new AMFormsCST.Core.Utils.CodeBlocks());
+
+        // Act
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+
+        // Assert
+        Assert.Equal(5, vm.FunctionCategories.Count);
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Logic & Conditionals");
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Text & Formatting");
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Date & Time");
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Math & Numbers");
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Trigonometry");
+        Assert.Equal(vm.AvailableBlocks.Count, vm.FunctionCategories.Sum(c => c.Functions.Count));
+    }
+
+    [Fact]
+    public void GeneratedCodeSegments_ColorCoordinatesTestVariablesAndIgnoresQuotedLiteralsAndFunctionNames()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(new AMFormsCST.Core.Utils.CodeBlocks());
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.ClearCanvas();
+
+        var cityStateZipNode = vm.AddBlockToCanvas(new AMFormsCST.Core.Types.CodeBlocks.Formulae.CityStateZIPCode(), new System.Windows.Point(0, 0));
+        cityStateZipNode.Inputs[0].BindableValue = "F100";
+        cityStateZipNode.Inputs[1].BindableValue = "F101";
+        cityStateZipNode.Inputs[2].BindableValue = "F102";
+
+        // Assert: 3 test variables with distinct colors, and 3 matching variable segments in GeneratedCodeSegments
+        Assert.Equal(3, vm.TestVariables.Count);
+        Assert.NotEqual(vm.TestVariables[0].AccentColorHex, vm.TestVariables[1].AccentColorHex);
+        Assert.NotEqual(vm.TestVariables[1].AccentColorHex, vm.TestVariables[2].AccentColorHex);
+
+        var varSegments = vm.GeneratedCodeSegments.Where(s => s.IsVariable).ToList();
+        Assert.Equal(3, varSegments.Count);
+        Assert.Same(vm.TestVariables[0], varSegments[0].Variable);
+        Assert.Same(vm.TestVariables[1], varSegments[1].Variable);
+        Assert.Same(vm.TestVariables[2], varSegments[2].Variable);
+
+        // Full concatenated text of segments equals ActiveOutputCode
+        Assert.Equal(vm.ActiveOutputCode, string.Concat(vm.GeneratedCodeSegments.Select(s => s.Text)));
+    }
+
+    [Fact]
+    public void StructuredExplainerAndToggle_UpdatesCleanlyOnSelectionAndToggle()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(new AMFormsCST.Core.Utils.CodeBlocks());
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        Assert.True(vm.IsExplainerExpanded);
+
+        // Act 1: Toggle explainer collapsed & expanded
+        vm.ToggleExplainerCommand.Execute(null);
+        Assert.False(vm.IsExplainerExpanded);
+        vm.ToggleExplainerCommand.Execute(null);
+        Assert.True(vm.IsExplainerExpanded);
+
+        // Act 2: Select a function block and verify structured explainer fields
+        var seplistNode = vm.AddBlockToCanvas(new AMFormsCST.Core.Types.CodeBlocks.Functions.SeplistCode(), new System.Windows.Point(0, 0));
+        vm.OnNodeSelected(seplistNode);
+
+        // Assert
+        Assert.Equal("SEPLIST", vm.ExplainerCategoryBadge);
+        Assert.Contains("Separated List", vm.ExplainerTitle);
+        Assert.True(vm.HasExplainerSyntax);
+        Assert.True(vm.HasExplainerExample);
+    }
+
+    [Fact]
+    public void RecenterCanvasAndAutoRecenter_ResetsViewportOnManualRecenterClearAndAddingToEmptyCanvas()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(new AMFormsCST.Core.Utils.CodeBlocks());
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+
+        int recenterCount = 0;
+        vm.RecenterRequested += () => recenterCount++;
+
+        // Simulate getting lost on the canvas (panning far away and zooming)
+        vm.ViewportLocation = new System.Windows.Point(5000, -3200);
+        vm.ViewportZoom = 2.5;
+
+        // Act 1: Manual Recenter command
+        vm.RecenterCanvasCommand.Execute(null);
+        Assert.Equal(1, recenterCount);
+        Assert.Equal(1.0, vm.ViewportZoom);
+        Assert.NotEqual(new System.Windows.Point(5000, -3200), vm.ViewportLocation);
+
+        // Act 2: Pan away again, then ClearCanvas -> should auto-recenter to (0, 0)
+        vm.ViewportLocation = new System.Windows.Point(-4000, 2800);
+        vm.ViewportZoom = 0.5;
+        vm.ClearCanvas();
+        Assert.Equal(2, recenterCount);
+        Assert.Equal(new System.Windows.Point(0, 0), vm.ViewportLocation);
+        Assert.Equal(1.0, vm.ViewportZoom);
+
+        // Act 3: Pan away on empty canvas, then add a block -> should auto-recenter around the new block
+        vm.ViewportLocation = new System.Windows.Point(8000, 8000);
+        vm.ViewportZoom = 1.8;
+        vm.AddBlockToCanvas(new AMFormsCST.Core.Types.CodeBlocks.Functions.TextCode(), new System.Windows.Point(300, 200));
+        Assert.Equal(3, recenterCount);
+        Assert.Equal(1.0, vm.ViewportZoom);
+        Assert.Equal(new System.Windows.Point(300 - 80, 200 - 60), vm.ViewportLocation);
+
+        // Act 4: Adding a second block when canvas is NOT empty does not unexpectedly jump viewport
+        vm.ViewportLocation = new System.Windows.Point(100, 100);
+        vm.AddBlockToCanvas(new AMFormsCST.Core.Types.CodeBlocks.Functions.RoundCode(), new System.Windows.Point(500, 500));
+        Assert.Equal(3, recenterCount);
+        Assert.Equal(new System.Windows.Point(100, 100), vm.ViewportLocation);
+    }
+
+    [Fact]
+    public void CustomSnippets_PersistAcrossApplicationResetAndSupportDeletion()
+    {
+        var tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"CustomSnippetsTest_{System.Guid.NewGuid():N}.json");
+        try
+        {
+            // Arrange Session 1: Create a composite formula on the canvas and save it as a custom snippet
+            var codeBlocksSession1 = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: true, persistenceFilePath: tempFile);
+            var supportToolSession1 = new Mock<ISupportTool>();
+            supportToolSession1.SetupGet(st => st.CodeBlocks).Returns(codeBlocksSession1);
+            var vmSession1 = new CodeSnippetsViewModel(supportToolSession1.Object);
+            vmSession1.ClearCanvas();
+
+            var opNode = vmSession1.AddBlockToCanvas(
+                new AMFormsCST.Core.Types.CodeBlocks.Functions.OperatorCode("+"),
+                new System.Windows.Point(0, 0));
+            vmSession1.InsertBlockTemplateIntoSlot(
+                new AMFormsCST.Core.Types.CodeBlocks.Functions.TextCode(),
+                opNode.Inputs[0]);
+            // Leave textNode.Inputs[0] empty so it becomes an exposed slot, and fill opNode.Inputs[1] with "' USD'"
+            opNode.Inputs[1].BindableValue = "' USD'";
+
+            vmSession1.NewCustomSnippetName = "Format USD";
+            vmSession1.NewCustomSnippetDescription = "Formats a numeric field with USD suffix";
+            vmSession1.SaveCustomSnippetCommand.Execute(null);
+
+            Assert.Single(vmSession1.CustomSnippets);
+            Assert.True(System.IO.File.Exists(tempFile));
+
+            // Act Session 2: Simulate application restart by creating a brand new CodeBlocks and CodeSnippetsViewModel reading from the same file
+            var codeBlocksSession2 = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: true, persistenceFilePath: tempFile);
+            var supportToolSession2 = new Mock<ISupportTool>();
+            supportToolSession2.SetupGet(st => st.CodeBlocks).Returns(codeBlocksSession2);
+            var vmSession2 = new CodeSnippetsViewModel(supportToolSession2.Object);
+
+            // Assert Session 2: Custom snippet persisted across reset, can be added to canvas, filled, and deconstructed!
+            Assert.Single(vmSession2.CustomSnippets);
+            var loadedSnippet = vmSession2.CustomSnippets[0];
+            Assert.Equal("Format USD", loadedSnippet.Name);
+            Assert.Equal("Formats a numeric field with USD suffix", loadedSnippet.Description);
+
+            vmSession2.ClearCanvas();
+            var snippetInstance = vmSession2.AddBlockToCanvas(loadedSnippet, new System.Windows.Point(0, 0));
+            Assert.Single(snippetInstance.Inputs);
+            snippetInstance.Inputs[0].BindableValue = "F200";
+            Assert.Equal("TEXT( F200 ) + ' USD'", vmSession2.ActiveOutputCode);
+
+            // Verify deconstruct works on the reloaded persisted snippet
+            Assert.True(snippetInstance.CanDeconstruct);
+            snippetInstance.DeconstructCommand.Execute(null);
+            Assert.Equal("TEXT( F200 ) + ' USD'", vmSession2.ActiveOutputCode);
+
+            // Act Session 2 Delete: Delete the custom snippet and verify persistence after another reset
+            vmSession2.DeleteCustomSnippetCommand.Execute(loadedSnippet);
+            Assert.Empty(vmSession2.CustomSnippets);
+
+            AMFormsCST.Core.Interfaces.Utils.ICodeBlocks codeBlocksSession3 = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: true, persistenceFilePath: tempFile);
+            Assert.Empty(codeBlocksSession3.CustomBlocks);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempFile))
+            {
+                System.IO.File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Fact]
+    public void PasteFormulaText_ValidExpression_SucceedsQuietlyAndCreatesSnippet()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        var codeBlocks = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: false);
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(codeBlocks);
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.ClearCanvas();
+
+        // Act
+        vm.PasteFormulaText("IF(F72 = 'N', 'NEW', 'USED')");
+
+        // Assert
+        Assert.False(vm.IsPasteAssistantVisible);
+        Assert.Single(vm.Nodes);
+        Assert.Contains("IS TRUE THEN:", vm.ExplainerPseudoCode);
+        Assert.Contains("OTHERWISE", vm.ExplainerPseudoCode);
+    }
+
+    [Fact]
+    public void PasteFormulaText_MalformedExpression_OpensAssistantWithDiagnosticAndFix()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        var codeBlocks = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: false);
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(codeBlocks);
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.ClearCanvas();
+
+        // Act
+        vm.PasteFormulaText("IF(F72 = \"N\", \"NEW\", \"USED\")");
+
+        // Assert
+        Assert.True(vm.IsPasteAssistantVisible);
+        Assert.Equal(AMFormsCST.Core.Utils.FormgenParseStatus.MalformedSimilar, vm.PasteParseStatus);
+        Assert.Contains("double quotes", vm.PasteDiagnosticMessage.ToLowerInvariant());
+        Assert.Equal("IF( F72 = 'N', 'NEW', 'USED' )", vm.PasteSuggestedFix);
+
+        // Apply fix and commit
+        vm.ApplyPasteSuggestionCommand.Execute(null);
+        Assert.Equal(AMFormsCST.Core.Utils.FormgenParseStatus.Valid, vm.PasteParseStatus);
+        Assert.True(vm.CommitParsedPasteCommand.CanExecute(null));
+
+        vm.CommitParsedPasteCommand.Execute(null);
+        Assert.False(vm.IsPasteAssistantVisible);
+        Assert.Single(vm.Nodes);
+        Assert.Equal("IF( F72 = 'N', 'NEW', 'USED' )", vm.ActiveOutputCode);
+    }
+
+    [Fact]
+    public void PasteFormulaText_UnrecognizedExpression_FailsLoudlyAndAlertsWhenEdited()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        var codeBlocks = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: false);
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(codeBlocks);
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.ClearCanvas();
+
+        // Act
+        vm.PasteFormulaText("Arbitrary text that is definitely not a function");
+
+        // Assert
+        Assert.True(vm.IsPasteAssistantVisible);
+        Assert.Equal(AMFormsCST.Core.Utils.FormgenParseStatus.Unrecognized, vm.PasteParseStatus);
+        Assert.False(vm.IsPasteRecognizedAlert);
+
+        // User edits text in the assistant
+        vm.PasteEditorText = "SEPLIST(', ', F1, F2)";
+        Assert.Equal(AMFormsCST.Core.Utils.FormgenParseStatus.Valid, vm.PasteParseStatus);
+        Assert.True(vm.IsPasteRecognizedAlert);
+
+        vm.CommitParsedPasteCommand.Execute(null);
+        Assert.False(vm.IsPasteAssistantVisible);
+        Assert.Single(vm.Nodes);
+        Assert.Equal("SEPLIST( ', ', F1, F2 )", vm.ActiveOutputCode);
+    }
 }
