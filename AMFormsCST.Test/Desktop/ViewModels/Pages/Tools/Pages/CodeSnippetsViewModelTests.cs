@@ -829,4 +829,93 @@ public class CodeSnippetsViewModelTests
         Assert.Single(vm.Nodes);
         Assert.Equal("SEPLIST( ', ', F1, F2 )", vm.ActiveOutputCode);
     }
+
+    [Fact]
+    public void CodePathTree_WhenIfFormulaPlaced_GeneratesTreeOutcomesAndActivePath()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        var codeBlocks = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: false);
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(codeBlocks);
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.ClearCanvas();
+
+        // Act - Paste IF formula
+        vm.PasteFormulaText("IF(F72 = 'N', 'NEW', 'USED')");
+
+        // Assert
+        Assert.True(vm.HasCodePathTree);
+        Assert.True(vm.HasCodePathForks);
+        Assert.Equal(2, vm.CodePathOutcomeCount);
+        Assert.Equal(1, vm.CodePathForkCount);
+        Assert.Single(vm.CodePathTreeNodes);
+        Assert.Equal(2, vm.CodePathOutcomes.Count);
+
+        // Path 1 (True: NEW) & Path 2 (False: USED)
+        Assert.Equal("'NEW'", vm.CodePathOutcomes[0].OutcomeCode);
+        Assert.Equal("'USED'", vm.CodePathOutcomes[1].OutcomeCode);
+
+        // Check active path with initial test variables
+        var f72Var = vm.TestVariables.FirstOrDefault(v => v.Name == "F72");
+        Assert.NotNull(f72Var);
+        f72Var.SampleValue = "N"; // Triggers True branch
+        Assert.True(vm.CodePathOutcomes[0].IsActive);
+        Assert.False(vm.CodePathOutcomes[1].IsActive);
+
+        f72Var.SampleValue = "U"; // Triggers False branch
+        Assert.False(vm.CodePathOutcomes[0].IsActive);
+        Assert.True(vm.CodePathOutcomes[1].IsActive);
+    }
+
+    [Fact]
+    public void CodePathTree_ApplyPathToTesterCommand_PopulatesVariablesAndReEvaluates()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        var codeBlocks = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: false);
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(codeBlocks);
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.ClearCanvas();
+        vm.PasteFormulaText("IF(F72 = 'N', 'NEW', 'USED')");
+
+        var f72Var = vm.TestVariables.FirstOrDefault(v => v.Name == "F72");
+        Assert.NotNull(f72Var);
+        f72Var.SampleValue = "UNKNOWN";
+        Assert.Equal("USED", vm.TestEvaluatedResult);
+
+        // Act - Apply Path 1 ('NEW') to tester
+        var path1 = vm.CodePathOutcomes[0];
+        vm.ApplyPathToTesterCommand.Execute(path1);
+
+        // Assert
+        Assert.Equal("N", f72Var.SampleValue);
+        Assert.Equal("NEW", vm.TestEvaluatedResult);
+        Assert.True(vm.CodePathOutcomes[0].IsActive);
+        Assert.False(vm.CodePathOutcomes[1].IsActive);
+    }
+
+    [Fact]
+    public void CodePathTree_TabSwitching_TogglesTabSelectionAndExpandsPanel()
+    {
+        // Arrange
+        var supportToolMock = new Mock<ISupportTool>();
+        var codeBlocks = new AMFormsCST.Core.Utils.CodeBlocks(enablePersistence: false);
+        supportToolMock.SetupGet(st => st.CodeBlocks).Returns(codeBlocks);
+        var vm = new CodeSnippetsViewModel(supportToolMock.Object);
+        vm.IsExplainerExpanded = false;
+
+        // Act
+        vm.SwitchToCodePathTabCommand.Execute(null);
+
+        // Assert
+        Assert.True(vm.IsExplainerExpanded);
+        Assert.Equal(1, vm.SelectedExplainerTabIndex);
+        Assert.True(vm.IsCodePathTabSelected);
+        Assert.False(vm.IsGuideTabSelected);
+
+        vm.SwitchToGuideTabCommand.Execute(null);
+        Assert.Equal(0, vm.SelectedExplainerTabIndex);
+        Assert.True(vm.IsGuideTabSelected);
+        Assert.False(vm.IsCodePathTabSelected);
+    }
 }

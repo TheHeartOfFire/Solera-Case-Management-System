@@ -2,6 +2,7 @@ using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.CodeBlocks;
 using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Types.CodeBlocks;
+using AMFormsCST.Core.Types.CodeBlocks.Analysis;
 using AMFormsCST.Core.Types.CodeBlocks.Formulae;
 using AMFormsCST.Core.Types.CodeBlocks.Functions;
 using AMFormsCST.Core.Utils;
@@ -142,6 +143,72 @@ public partial class CodeSnippetsViewModel : ViewModel
     public bool IsPasteStatusUnrecognized => PasteParseStatus == FormgenParseStatus.Unrecognized;
     public bool IsPasteStatusMalformed => PasteParseStatus == FormgenParseStatus.MalformedSimilar;
     public bool IsPasteStatusValid => PasteParseStatus == FormgenParseStatus.Valid;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCodePathTree))]
+    [NotifyPropertyChangedFor(nameof(HasCodePathForks))]
+    private CodePathAnalysisResult? _codePathResult;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCodePathTree))]
+    private ObservableCollection<CodePathTreeNode> _codePathTreeNodes = [];
+
+    [ObservableProperty]
+    private ObservableCollection<CodePathOutcomeSummary> _codePathOutcomes = [];
+
+    [ObservableProperty]
+    private int _codePathOutcomeCount;
+
+    [ObservableProperty]
+    private int _codePathForkCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGuideTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsCodePathTabSelected))]
+    private int _selectedExplainerTabIndex;
+
+    public bool HasCodePathTree => CodePathTreeNodes.Count > 0;
+    public bool HasCodePathForks => CodePathForkCount > 0;
+    public bool IsGuideTabSelected => SelectedExplainerTabIndex == 0;
+    public bool IsCodePathTabSelected => SelectedExplainerTabIndex == 1;
+
+    [RelayCommand]
+    public void SwitchToGuideTab()
+    {
+        SelectedExplainerTabIndex = 0;
+        if (!IsExplainerExpanded)
+        {
+            IsExplainerExpanded = true;
+        }
+    }
+
+    [RelayCommand]
+    public void SwitchToCodePathTab()
+    {
+        SelectedExplainerTabIndex = 1;
+        if (!IsExplainerExpanded)
+        {
+            IsExplainerExpanded = true;
+        }
+    }
+
+    [RelayCommand]
+    public void ApplyPathToTester(CodePathOutcomeSummary? outcome)
+    {
+        if (outcome == null) return;
+
+        foreach (var (varName, val) in outcome.SuggestedVariableValues)
+        {
+            var existing = TestVariables.FirstOrDefault(tv => string.Equals(tv.Name, varName, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                existing.SampleValue = val;
+            }
+        }
+
+        EvaluateActiveFormulaOnly();
+        CoachMessage = $"Applied sample values for Path #{outcome.PathNumber} to Formula Tester ({outcome.PathSummaryText}).";
+    }
 
     [ObservableProperty]
     private Point _viewportLocation = new(0, 0);
@@ -961,6 +1028,7 @@ public partial class CodeSnippetsViewModel : ViewModel
             TestEvaluatedResult = userRoot.GetCode();
             TestEvaluationExplanation = $"Value Block ({userRoot.SelectedType}): outputs {TestEvaluatedResult}";
             TestEvaluationHasError = false;
+            ClearCodePathAnalysis();
             RebuildGeneratedCodeSegments();
         }
         else
@@ -971,6 +1039,7 @@ public partial class CodeSnippetsViewModel : ViewModel
             TestEvaluationExplanation = string.Empty;
             TestEvaluationHasError = false;
             CoachMessage = "Select or snap blocks together to build a FormGen expression.";
+            ClearCodePathAnalysis();
             RebuildGeneratedCodeSegments();
         }
     }
@@ -992,7 +1061,30 @@ public partial class CodeSnippetsViewModel : ViewModel
             TestEvaluationHasError = !evalResult.IsSuccess || evalResult.Diagnostics.Any(d => d.Severity == CodeDiagnosticSeverity.Error);
             ActiveDiagnostics = new ObservableCollection<CodeDiagnostic>(evalResult.Diagnostics);
             RebuildGeneratedCodeSegments();
+
+            UpdateCodePathAnalysis(cb, dict);
         }
+    }
+
+    private void UpdateCodePathAnalysis(CodeBase cb, IReadOnlyDictionary<string, string> dict)
+    {
+        var analysis = CodePathAnalyzer.Analyze(cb, dict);
+        CodePathResult = analysis;
+        CodePathTreeNodes = analysis.RootNode != null
+            ? [analysis.RootNode]
+            : [];
+        CodePathOutcomes = new ObservableCollection<CodePathOutcomeSummary>(analysis.Outcomes);
+        CodePathOutcomeCount = analysis.TotalOutcomesCount;
+        CodePathForkCount = analysis.TotalForksCount;
+    }
+
+    private void ClearCodePathAnalysis()
+    {
+        CodePathResult = null;
+        CodePathTreeNodes = [];
+        CodePathOutcomes = [];
+        CodePathOutcomeCount = 0;
+        CodePathForkCount = 0;
     }
 
     public void RebuildGeneratedCodeSegments()
