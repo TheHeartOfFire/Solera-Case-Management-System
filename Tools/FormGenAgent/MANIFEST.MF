@@ -1,0 +1,7 @@
+Manifest-Version: 1.0
+Premain-Class: com.solera.formgen.FormGenAgent
+Agent-Class: com.solera.formgen.FormGenAgent
+Can-Redefine-Classes: true
+Can-Retransform-Classes: true
+
+

@@ -53,6 +53,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\Tools\FormGenAgent\FormGenAgent.jar" Link="Resources\FormGenAgent.jar" />
     <EmbeddedResource Include="SampleData\Formgen Sample Data\Pdf Sample\Sample Pdf.formgen">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>

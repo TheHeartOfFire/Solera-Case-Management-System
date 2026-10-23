@@ -248,6 +248,65 @@ public partial class App : Application
             return;
         }
 
+        // 1. Explicit --open-formgen: Direct to SCMT Formgen Utilities (bypasses FormGen)
+        string? directScmtFile = null;
+        for (int i = 0; i < e.Args.Length; i++)
+        {
+            if (string.Equals(e.Args[i], "--open-formgen", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+            {
+                directScmtFile = e.Args[i + 1];
+                break;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(directScmtFile))
+        {
+            var filePath = CleanFilePath(directScmtFile);
+            if (TrySendToRunningInstance(IpcActions.OpenFormgen, "filePath", filePath))
+            {
+                Environment.Exit(0);
+                return;
+            }
+            // If no running instance answered, continue normal startup to open in Formgen Utilities
+        }
+
+        // 2. Default Open or --open-in-formgen: Always open in FormGen if possible, fall back on SCMT
+        string? formgenTargetFile = null;
+        for (int i = 0; i < e.Args.Length; i++)
+        {
+            if (string.Equals(e.Args[i], "--open-in-formgen", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+            {
+                formgenTargetFile = e.Args[i + 1];
+                break;
+            }
+            if (e.Args[i].EndsWith(".formgen", StringComparison.OrdinalIgnoreCase) ||
+                e.Args[i].EndsWith(".fga", StringComparison.OrdinalIgnoreCase))
+            {
+                formgenTargetFile = e.Args[i];
+                break;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(formgenTargetFile))
+        {
+            var filePath = CleanFilePath(formgenTargetFile);
+
+            // Try opening in FormGen first (via running instance IPC or launching NewFormGen.bat)
+            if (FormGenLauncherHelper.OpenInFormGen(filePath))
+            {
+                Environment.Exit(0);
+                return;
+            }
+
+            // Fall back on SCMT: try sending to running debug/live instance
+            if (TrySendToRunningInstance(IpcActions.OpenFormgen, "filePath", filePath))
+            {
+                Environment.Exit(0);
+                return;
+            }
+
+            // If no running instance answered, continue normal startup to open in Formgen Utilities
+        }
         _instanceMutex = new Mutex(true, AppMutexName, out bool isNewInstance);
         if (!isNewInstance)
         {
@@ -397,6 +456,35 @@ public partial class App : Application
         }
 
         parseItem.IsEnabled = !string.IsNullOrWhiteSpace(currentText);
+    }
+
+    private static string CleanFilePath(string path)
+    {
+        var clean = path.Trim('"', ' ');
+        if (clean.EndsWith('\\') && !System.IO.Directory.Exists(clean))
+        {
+            clean = clean.TrimEnd('\\');
+        }
+        return clean;
+    }
+
+    private static bool TrySendToRunningInstance(string action, string key, string value)
+    {
+        try
+        {
+            var msg = new IpcMessage
+            {
+                Target = "SoleraCMS",
+                Action = action,
+                Payload = { [key] = value }
+            };
+            var response = Task.Run(() => NamedPipeIpcClient.SendMessageAsync(msg, timeoutMs: 1500)).GetAwaiter().GetResult();
+            return response != null && response.Success;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void HandleSecondInstanceLaunch(string[]? args)

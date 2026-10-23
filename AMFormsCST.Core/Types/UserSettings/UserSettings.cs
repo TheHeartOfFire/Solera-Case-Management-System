@@ -12,7 +12,7 @@ public class UserSettings : IUserSettings
     private string _name = string.Empty;
     private string _applicationFilesPath = string.Empty;
     private string _extSeparator = "x";
-    private bool _enableExplorerContextMenu;
+    private bool _enableExplorerContextMenu = true;
     private string _formGenExecutablePath = string.Empty;
 
     public bool EnableExplorerContextMenu

@@ -90,12 +90,21 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
                 RegisterVerb($@"{progId}\shell\OpenInSoleraUtils", "Open in Solera Formgen Utilities", $"\"{appExePath}\" --open-formgen \"%1\"", $"{appExePath},0", appliesTo);
             }
 
+            // Ensure primary 'open' verb routes through SCMT launcher (tries FormGen first, falls back to SCMT)
+            RegisterVerb(@"formgenfile\shell\open", "Open", $"\"{appExePath}\" --open-in-formgen \"%1\"", $"{appExePath},0");
+            RegisterVerb(@"fgafile\shell\open", "Open", $"\"{appExePath}\" --open-in-formgen \"%1\"", $"{appExePath},0");
+
             // 3. Register Open in FormGen if path is valid
-            var resolvedPath = !string.IsNullOrWhiteSpace(formgenExePath) ? ResolveShortcutTarget(formgenExePath) : null;
+            var resolvedPath = !string.IsNullOrWhiteSpace(formgenExePath)
+                ? ResolveShortcutTarget(formgenExePath)
+                : FormGenLauncherHelper.ResolveFormGenBatchPath();
             bool hasFormGen = !string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath);
             if (hasFormGen)
             {
-                string formGenCommand = FormatLaunchCommand(resolvedPath!);
+                FormGenLauncherHelper.EnsureAgentDeployedAndPatched(resolvedPath!, _logger);
+                string formGenCommand = !string.IsNullOrWhiteSpace(appExePath)
+                    ? $"\"{appExePath}\" --open-in-formgen \"%1\""
+                    : FormatLaunchCommand(resolvedPath!);
                 RegisterVerb(FormGenVerbKey, "Open in FormGen", formGenCommand, $"{resolvedPath},0");
                 RegisterVerb(LegacyFormGenVerbKey, "Open in FormGen", formGenCommand, $"{resolvedPath},0");
                 RegisterVerb(FgaFormGenVerbKey, "Open in FormGen", formGenCommand, $"{resolvedPath},0");
@@ -121,6 +130,7 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
                 {
                     UnregisterVerb($@"{progId}\shell\OpenInFormGen");
                 }
+
             }
 
             RefreshShell();
@@ -151,6 +161,21 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
             {
                 UnregisterVerb($@"{progId}\shell\OpenInSoleraUtils");
                 UnregisterVerb($@"{progId}\shell\OpenInFormGen");
+            }
+
+            // Restore vanilla FormGen open command if FormGen exists, or remove our wrapper
+            var formgenBat = FormGenLauncherHelper.ResolveFormGenBatchPath();
+            if (!string.IsNullOrWhiteSpace(formgenBat) && File.Exists(formgenBat))
+            {
+                FormGenLauncherHelper.RestoreVanillaBatch(formgenBat, _logger);
+                string vanillaCommand = FormatLaunchCommand(formgenBat);
+                RegisterVerb(@"formgenfile\shell\open", "Open", vanillaCommand, $"{formgenBat},0");
+                RegisterVerb(@"fgafile\shell\open", "Open", vanillaCommand, $"{formgenBat},0");
+            }
+            else
+            {
+                UnregisterVerb(@"formgenfile\shell\open");
+                UnregisterVerb(@"fgafile\shell\open");
             }
 
             RefreshShell();
@@ -309,7 +334,18 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
                 return false;
             }
 
-            string launchCommand = FormatLaunchCommand(targetPath);
+            var appExePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(appExePath))
+            {
+                appExePath = Process.GetCurrentProcess().MainModule?.FileName;
+            }
+
+            FormGenLauncherHelper.EnsureAgentDeployedAndPatched(targetPath, _logger);
+            string launchCommand = !string.IsNullOrWhiteSpace(appExePath)
+                ? $"\"{appExePath}\" --open-in-formgen \"%1\""
+                : FormatLaunchCommand(targetPath);
+
+
 
             // 1. Clear stubborn UserChoice overrides for .formgen and .fga
             DeleteUserChoice(".formgen");
@@ -416,7 +452,8 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
 
         if (ext.Equals(".bat", StringComparison.OrdinalIgnoreCase) || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
         {
-            return $"\"cmd.exe\" /c \"\"{path}\" \"%1\"\"";
+            var dir = Path.GetDirectoryName(path);
+            return $"\"cmd.exe\" /c \"cd /d \"{dir}\" && \"{path}\" \"%1\"\"";
         }
 
         return $"\"{path}\" \"%1\"";
