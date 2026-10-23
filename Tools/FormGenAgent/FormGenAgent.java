@@ -1454,13 +1454,17 @@ public class FormGenAgent {
                 @Override
                 public void run() {
                     try {
-                        refreshLiveVariablesAsync();
+                        refreshLiveVariablesSync();
                         synchronized (liveVariables) {
                             String serverId = liveVariables.get("ServerId");
                             String caseNumber = liveVariables.get("CaseNumber");
                             String primaryCo = liveVariables.get("PrimaryCompanyNumber");
                             String contactName = liveVariables.get("ContactName");
                             String notes = liveVariables.get("Notes");
+                            String tmplText = liveVariables.get("ActiveTemplateText");
+
+                            log("Publish auto-fill: ActiveTemplateText len=" + (tmplText != null ? tmplText.length() : -1)
+                                + ", CaseNumber=" + caseNumber + ", Contact=" + contactName);
 
                             if (publishDlg != null) {
                                 if (contactName != null && !contactName.trim().isEmpty()) {
@@ -1473,7 +1477,6 @@ public class FormGenAgent {
                                     setWidgetText(publishDlg, "txtPublishSingleCompanies", primaryCo);
                                 }
 
-                                String tmplText = liveVariables.get("ActiveTemplateText");
                                 String comments = "";
                                 if (tmplText != null && !tmplText.trim().isEmpty()) {
                                     comments = tmplText.trim();
@@ -1994,30 +1997,35 @@ public class FormGenAgent {
         return null;
     }
 
+    public static void refreshLiveVariablesSync() {
+        RandomAccessFile pipe = null;
+        try {
+            pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
+            pipe.write("{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n".getBytes("UTF-8"));
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            int b;
+            while ((b = pipe.read()) != -1) {
+                if (b == '\n') break;
+                if (b != '\r') bos.write(b);
+            }
+            String line = new String(bos.toByteArray(), "UTF-8");
+            if (!line.trim().isEmpty()) {
+                updateLiveVariablesFromJson(line);
+            }
+        } catch (Throwable t) {
+            log("Error during synchronous variable refresh: " + t.getMessage());
+        } finally {
+            if (pipe != null) {
+                try { pipe.close(); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
     public static void refreshLiveVariablesAsync() {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                RandomAccessFile pipe = null;
-                try {
-                    pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
-                    pipe.write("{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n".getBytes("UTF-8"));
-                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                    int b;
-                    while ((b = pipe.read()) != -1) {
-                        if (b == '\n') break;
-                        if (b != '\r') bos.write(b);
-                    }
-                    String line = new String(bos.toByteArray(), "UTF-8");
-                    if (!line.trim().isEmpty()) {
-                        updateLiveVariablesFromJson(line);
-                    }
-                } catch (Throwable ignored) {
-                } finally {
-                    if (pipe != null) {
-                        try { pipe.close(); } catch (Throwable ignored) {}
-                    }
-                }
+                refreshLiveVariablesSync();
             }
         }, "FormGenAgent-VarSync").start();
     }

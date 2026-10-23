@@ -138,6 +138,11 @@ public class IpcService : IHostedService, IAsyncDisposable
 
     public IpcLiveVariables GetLiveVariables()
     {
+        if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.CheckAccess())
+        {
+            return Application.Current.Dispatcher.Invoke(() => GetLiveVariables());
+        }
+
         var note = _dashboardViewModel.SelectedNote;
         var selectedDealer = note?.Dealers.SelectedItem;
         var selectedCompany = selectedDealer?.Companies.SelectedItem;
@@ -165,6 +170,11 @@ public class IpcService : IHostedService, IAsyncDisposable
             catch { }
         }
 
+        var activeTemplatesVm = _dashboardViewModel.ActiveTemplatesViewModel ?? _templatesViewModel;
+        var selectedTemplate = activeTemplatesVm?.SelectedTemplate ?? _templatesViewModel.SelectedTemplate;
+        string activeTemplateName = selectedTemplate?.Template.Name ?? string.Empty;
+        string activeTemplateText = GetFlowDocumentText(selectedTemplate?.Output);
+
         return new IpcLiveVariables
         {
             ServerId = selectedDealer?.ServerCode ?? string.Empty,
@@ -180,8 +190,8 @@ public class IpcService : IHostedService, IAsyncDisposable
             FormName = selectedForm?.Name ?? string.Empty,
             DealNumber = selectedTestDeal?.DealNumber ?? string.Empty,
             Notes = notesText,
-            ActiveTemplateName = _templatesViewModel.SelectedTemplate?.Template.Name ?? string.Empty,
-            ActiveTemplateText = GetFlowDocumentText(_templatesViewModel.SelectedTemplate?.Output)
+            ActiveTemplateName = activeTemplateName,
+            ActiveTemplateText = activeTemplateText
         };
     }
 
