@@ -91,13 +91,15 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
             }
 
             // 3. Register Open in FormGen if path is valid
-            bool hasFormGen = !string.IsNullOrWhiteSpace(formgenExePath) && File.Exists(formgenExePath);
+            var resolvedPath = !string.IsNullOrWhiteSpace(formgenExePath) ? ResolveShortcutTarget(formgenExePath) : null;
+            bool hasFormGen = !string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath);
             if (hasFormGen)
             {
-                RegisterVerb(FormGenVerbKey, "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0");
-                RegisterVerb(LegacyFormGenVerbKey, "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0");
-                RegisterVerb(FgaFormGenVerbKey, "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0");
-                RegisterVerb(LegacyFgaFormGenVerbKey, "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0");
+                string formGenCommand = FormatLaunchCommand(resolvedPath!);
+                RegisterVerb(FormGenVerbKey, "Open in FormGen", formGenCommand, $"{resolvedPath},0");
+                RegisterVerb(LegacyFormGenVerbKey, "Open in FormGen", formGenCommand, $"{resolvedPath},0");
+                RegisterVerb(FgaFormGenVerbKey, "Open in FormGen", formGenCommand, $"{resolvedPath},0");
+                RegisterVerb(LegacyFgaFormGenVerbKey, "Open in FormGen", formGenCommand, $"{resolvedPath},0");
 
                 foreach (var progId in progIds)
                 {
@@ -105,7 +107,7 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
                         ? "System.FileExtension:=.formgen OR System.FileExtension:=.fga"
                         : null;
 
-                    RegisterVerb($@"{progId}\shell\OpenInFormGen", "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0", appliesTo);
+                    RegisterVerb($@"{progId}\shell\OpenInFormGen", "Open in FormGen", formGenCommand, $"{resolvedPath},0", appliesTo);
                 }
             }
             else
@@ -251,6 +253,200 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
         {
             // Ignore missing keys during removal
         }
+    }
+
+    /// <inheritdoc/>
+    public bool IsFormgenAssociated()
+    {
+        try
+        {
+            // Check if UserChoice is overriding with another app (e.g. notepad)
+            using var userChoiceKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.formgen\UserChoice");
+            if (userChoiceKey != null)
+            {
+                var progId = userChoiceKey.GetValue("ProgId") as string;
+                if (!string.Equals(progId, "formgenfile", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            // Check if .formgen is pointing to formgenfile
+            using var extKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\.formgen");
+            var defaultProgId = extKey?.GetValue("") as string;
+            if (!string.Equals(defaultProgId, "formgenfile", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            // Check if formgenfile\shell\open\command is configured
+            using var cmdKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\formgenfile\shell\open\command");
+            var cmd = cmdKey?.GetValue("") as string;
+            return !string.IsNullOrWhiteSpace(cmd);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error checking if .formgen is associated with FormGen.", ex);
+            return false;
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool AssociateFormgen(string formgenPath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(formgenPath))
+            {
+                _logger?.LogError("Cannot associate .formgen: Path is empty.");
+                return false;
+            }
+
+            var targetPath = ResolveShortcutTarget(formgenPath);
+            if (!File.Exists(targetPath))
+            {
+                _logger?.LogError($"Cannot associate .formgen: File '{targetPath}' does not exist.");
+                return false;
+            }
+
+            string launchCommand = FormatLaunchCommand(targetPath);
+
+            // 1. Clear stubborn UserChoice overrides for .formgen and .fga
+            DeleteUserChoice(".formgen");
+            DeleteUserChoice(".fga");
+
+            // 2. Set file associations under HKCU\Software\Classes
+            using var classesKey = Registry.CurrentUser.CreateSubKey(@"Software\Classes");
+            if (classesKey != null)
+            {
+                // .formgen
+                using (var extKey = classesKey.CreateSubKey(".formgen"))
+                {
+                    extKey?.SetValue("", "formgenfile");
+                }
+
+                using (var progKey = classesKey.CreateSubKey("formgenfile"))
+                {
+                    progKey?.SetValue("", "FormGen File");
+                    using var iconKey = progKey?.CreateSubKey("DefaultIcon");
+                    iconKey?.SetValue("", $"{targetPath},0");
+
+                    using var cmdKey = progKey?.CreateSubKey(@"shell\open\command");
+                    cmdKey?.SetValue("", launchCommand);
+                }
+
+                // .fga
+                using (var extKey = classesKey.CreateSubKey(".fga"))
+                {
+                    extKey?.SetValue("", "fgafile");
+                }
+
+                using (var progKey = classesKey.CreateSubKey("fgafile"))
+                {
+                    progKey?.SetValue("", "FormGen Archive File");
+                    using var iconKey = progKey?.CreateSubKey("DefaultIcon");
+                    iconKey?.SetValue("", $"{targetPath},0");
+
+                    using var cmdKey = progKey?.CreateSubKey(@"shell\open\command");
+                    cmdKey?.SetValue("", launchCommand);
+                }
+            }
+
+            // 3. Register under Explorer FileExts OpenWithProgids
+            try
+            {
+                using var owpFormgen = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.formgen\OpenWithProgids");
+                owpFormgen?.SetValue("formgenfile", Array.Empty<byte>(), RegistryValueKind.None);
+
+                using var owpFga = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.fga\OpenWithProgids");
+                owpFga?.SetValue("fgafile", Array.Empty<byte>(), RegistryValueKind.None);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning($"Non-fatal error updating OpenWithProgids: {ex.Message}");
+            }
+
+            // 4. Ensure context menu entries are also updated/registered
+            RegisterContextMenu(targetPath);
+
+            // 5. Notify Explorer to flush its association cache
+            RefreshShell();
+
+            _logger?.LogInfo($"Successfully associated .formgen and .fga files with '{targetPath}'.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError($"Failed to associate .formgen files with FormGen: {ex.Message}", ex);
+            return false;
+        }
+    }
+
+    private static void DeleteUserChoice(string extension)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "reg.exe",
+                Arguments = $@"delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\{extension}\UserChoice"" /f",
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            process?.WaitForExit(3000);
+        }
+        catch { }
+
+        try
+        {
+            using var parent = Registry.CurrentUser.OpenSubKey($@"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\{extension}", writable: true);
+            parent?.DeleteSubKeyTree("UserChoice", throwOnMissingSubKey: false);
+        }
+        catch { }
+    }
+
+    private static string FormatLaunchCommand(string path)
+    {
+        var ext = Path.GetExtension(path);
+        if (ext.Equals(".jar", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"javaw.exe -jar \"{path}\" \"%1\"";
+        }
+
+        if (ext.Equals(".bat", StringComparison.OrdinalIgnoreCase) || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"\"cmd.exe\" /c \"\"{path}\" \"%1\"\"";
+        }
+
+        return $"\"{path}\" \"%1\"";
+    }
+
+    private static string ResolveShortcutTarget(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return path;
+
+        if (Path.GetExtension(path).Equals(".lnk", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType != null)
+                {
+                    dynamic? shell = Activator.CreateInstance(shellType);
+                    dynamic? shortcut = shell?.CreateShortcut(path);
+                    string? target = shortcut?.TargetPath;
+                    if (!string.IsNullOrWhiteSpace(target) && File.Exists(target))
+                    {
+                        return target;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return path;
     }
 }
 

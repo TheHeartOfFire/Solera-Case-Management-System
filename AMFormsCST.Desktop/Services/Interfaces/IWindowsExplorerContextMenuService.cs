@@ -25,5 +25,17 @@ public interface IWindowsExplorerContextMenuService
     /// Synchronizes context menu registration with the user's settings.
     /// </summary>
     void SyncWithSettings(bool isEnabled, string? formgenExePath = null);
+
+    /// <summary>
+    /// Checks whether .formgen files are currently associated with FormGen in HKCU.
+    /// </summary>
+    bool IsFormgenAssociated();
+
+    /// <summary>
+    /// Associates .formgen and .fga files with the specified FormGen executable, batch file, or jar as the default open handler.
+    /// </summary>
+    /// <param name="formgenPath">Path to formgen executable, batch file, or jar.</param>
+    /// <returns>True if association succeeded; false otherwise.</returns>
+    bool AssociateFormgen(string formgenPath);
 }
 

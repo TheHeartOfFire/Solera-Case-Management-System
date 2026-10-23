@@ -97,6 +97,27 @@
                             Content="Browse..."
                             Command="{Binding BrowseFormGenExecutableCommand}" />
                     </Grid>
+
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock FontWeight="Medium" Text="Default File Association (.formgen / .fga)" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="{Binding FormgenAssociationStatus}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ui:Button
+                            Grid.Column="1"
+                            Content="Associate with FormGen"
+                            Appearance="Primary"
+                            Icon="{ui:SymbolIcon CheckmarkCircle24}"
+                            Command="{Binding AssociateFormGenCommand}" />
+                    </Grid>
                 </StackPanel>
             </ui:CardControl>
 
