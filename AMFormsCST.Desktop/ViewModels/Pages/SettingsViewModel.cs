@@ -15,6 +15,7 @@ public partial class SettingsViewModel : ViewModel
     private readonly IUpdateManagerService _updateManagerService;
     private readonly ISupportTool _supportTool;
     private readonly IBugReportService _bugReportService;
+    private readonly Services.Interfaces.IWindowsExplorerContextMenuService? _explorerContextMenuService;
     private readonly ILogService? _logger;
     private bool _isInitialized = false;
 
@@ -36,11 +37,23 @@ public partial class SettingsViewModel : ViewModel
     [ObservableProperty]
     private string _extSeparator = string.Empty;
 
-    public SettingsViewModel(IUpdateManagerService updateManagerService, ISupportTool supportTool, IBugReportService bugReportService, ILogService? logger = null)
+    [ObservableProperty]
+    private bool _enableExplorerContextMenu;
+
+    [ObservableProperty]
+    private string _formGenExecutablePath = string.Empty;
+
+    public SettingsViewModel(
+        IUpdateManagerService updateManagerService,
+        ISupportTool supportTool,
+        IBugReportService bugReportService,
+        Services.Interfaces.IWindowsExplorerContextMenuService? explorerContextMenuService = null,
+        ILogService? logger = null)
     {
         _updateManagerService = updateManagerService;
         _supportTool = supportTool;
         _bugReportService = bugReportService;
+        _explorerContextMenuService = explorerContextMenuService;
         _logger = logger;
         _logger?.LogInfo("SettingsViewModel initialized.");
 
@@ -73,6 +86,8 @@ public partial class SettingsViewModel : ViewModel
 
         var userSettings = _supportTool.Settings.UserSettings;
         ExtSeparator = userSettings.ExtSeparator;
+        EnableExplorerContextMenu = userSettings.EnableExplorerContextMenu;
+        FormGenExecutablePath = userSettings.FormGenExecutablePath;
 
         _isInitialized = true;
         _logger?.LogInfo("SettingsViewModel initialized and settings loaded.");
@@ -125,6 +140,14 @@ public partial class SettingsViewModel : ViewModel
                     _supportTool.Settings.UserSettings.ExtSeparator = ExtSeparator;
                     _logger?.LogInfo($"ExtSeparator changed: {ExtSeparator}");
                     break;
+
+                case nameof(EnableExplorerContextMenu):
+                case nameof(FormGenExecutablePath):
+                    _supportTool.Settings.UserSettings.EnableExplorerContextMenu = EnableExplorerContextMenu;
+                    _supportTool.Settings.UserSettings.FormGenExecutablePath = FormGenExecutablePath;
+                    _explorerContextMenuService?.SyncWithSettings(EnableExplorerContextMenu, FormGenExecutablePath);
+                    _logger?.LogInfo($"Explorer context menu settings updated: Enabled={EnableExplorerContextMenu}, Path={FormGenExecutablePath}");
+                    break;
             }
 
             if (_isInitialized)
@@ -136,6 +159,29 @@ public partial class SettingsViewModel : ViewModel
         catch (Exception ex)
         {
             _logger?.LogError("Error in OnSettingsViewModelPropertyChanged.", ex);
+        }
+    }
+
+    [RelayCommand]
+    private void BrowseFormGenExecutable()
+    {
+        try
+        {
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Select FormGen Executable",
+                Filter = "Executables (*.exe;javaw.exe)|*.exe;*.cmd;*.bat;javaw.exe|All files (*.*)|*.*",
+                CheckFileExists = true
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                FormGenExecutablePath = openFileDialog.FileName;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error browsing for FormGen executable.", ex);
         }
     }
 

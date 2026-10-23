@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core;
+using AMFormsCST.Core;
 using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.BestPractices;
 using AMFormsCST.Core.Interfaces.UserSettings;
@@ -14,6 +14,7 @@ using AMFormsCST.Desktop.Interfaces;
 using AMFormsCST.Desktop.Models.UserSettings;
 using AMFormsCST.Desktop.Resources;
 using AMFormsCST.Desktop.Services;
+using AMFormsCST.Desktop.Services.Interfaces;
 using AMFormsCST.Desktop.ViewModels;
 using AMFormsCST.Desktop.ViewModels.Dialogs;
 using AMFormsCST.Desktop.ViewModels.Pages;
@@ -37,6 +38,9 @@ using System.Windows.Threading;
 using Velopack;
 using Wpf.Ui;
 using Wpf.Ui.DependencyInjection;
+using System.Threading;
+using AMFormsCST.Core.Services.IPC;
+using AMFormsCST.Core.Types.IPC;
 
 namespace AMFormsCST.Desktop;
 /// <summary>
@@ -86,6 +90,8 @@ public partial class App : Application
                 _ = services.AddTransient<IDebounceService, DebounceService>();
 
                 _ = services.AddHostedService<ApplicationHostService>();
+                _ = services.AddHostedService<IpcService>();
+                _ = services.AddHostedService<FormGenHookService>();
 
                 _ = services.AddSingleton<IWindow, MainWindow>();
                 _ = services.AddSingleton<MainWindowViewModel>();
@@ -94,11 +100,16 @@ public partial class App : Application
                 _ = services.AddSingleton<IContentDialogService, ContentDialogService>();
                 _ = services.AddSingleton<WindowsProviderService>();
                 _ = services.AddSingleton<IBugReportService, BugReportService>();
+                _ = services.AddSingleton<IWindowsExplorerContextMenuService, WindowsExplorerContextMenuService>();
 
                 _ = services.AddSingleton<DashboardPage>();
                 _ = services.AddSingleton<DashboardViewModel>();
                 _ = services.AddSingleton<ToolsPage>();
                 _ = services.AddSingleton<ToolsViewModel>();
+                _ = services.AddSingleton<TemplatesPage>();
+                _ = services.AddSingleton<TemplatesViewModel>();
+                _ = services.AddSingleton<FormgenUtilitiesPage>();
+                _ = services.AddSingleton<FormgenUtilitiesViewModel>();
                 _ = services.AddSingleton<SettingsPage>();
                 _ = services.AddSingleton<SettingsViewModel>();
                 _ = services.AddSingleton<LinksPage>();
@@ -210,15 +221,82 @@ public partial class App : Application
         return _host.Services.GetRequiredService<T>();
     }
 
+    private const string AppMutexName = @"Local\SoleraCMS_SingleInstance_Mutex";
+    private static Mutex? _instanceMutex;
+
     /// <summary>
     /// Occurs when the application is loading.
     /// </summary>
     private void OnStartup(object sender, StartupEventArgs e)
     {
+        if (e.Args.Any(a => a.Contains("--native-messaging", StringComparison.OrdinalIgnoreCase) || a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase)))
+        {
+            NativeMessagingBridge.RunAsync().GetAwaiter().GetResult();
+            Shutdown();
+            return;
+        }
+
+        _instanceMutex = new Mutex(true, AppMutexName, out bool isNewInstance);
+        if (!isNewInstance)
+        {
+            HandleSecondInstanceLaunch(e.Args);
+            Shutdown();
+            return;
+        }
+
         var velopackLogger = new VelopackSerilogLogger(GetRequiredService<ILogService>());
         VelopackApp.Build().SetLogger(velopackLogger).Run();
         _host.Start();
 
+        try
+        {
+            var supportTool = GetRequiredService<ISupportTool>();
+            var contextMenuService = GetRequiredService<IWindowsExplorerContextMenuService>();
+            if (supportTool.Settings.UserSettings.EnableExplorerContextMenu)
+            {
+                contextMenuService.RegisterContextMenu(supportTool.Settings.UserSettings.FormGenExecutablePath);
+            }
+        }
+        catch { }
+    }
+
+    private static void HandleSecondInstanceLaunch(string[]? args)
+    {
+        try
+        {
+            if (args != null && args.Length > 0)
+            {
+                if (args.Any(a => a.Contains("--native-messaging", StringComparison.OrdinalIgnoreCase) || a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase)))
+                {
+                    NativeMessagingBridge.RunAsync().GetAwaiter().GetResult();
+                    return;
+                }
+
+                for (int i = 0; i < args.Length; i++)
+                {
+                    if (string.Equals(args[i], "--open-formgen", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                    {
+                        var filePath = args[i + 1];
+                        var msg = new IpcMessage
+                        {
+                            Target = "SoleraCMS",
+                            Action = IpcActions.OpenFormgen,
+                            Payload = { ["filePath"] = filePath }
+                        };
+                        NamedPipeIpcClient.SendMessageAsync(msg, timeoutMs: 3000).GetAwaiter().GetResult();
+                        return;
+                    }
+                }
+            }
+
+            var bringFrontMsg = new IpcMessage
+            {
+                Target = "SoleraCMS",
+                Action = IpcActions.BringToFront
+            };
+            NamedPipeIpcClient.SendMessageAsync(bringFrontMsg, timeoutMs: 3000).GetAwaiter().GetResult();
+        }
+        catch { }
     }
 
     /// <summary>
@@ -226,6 +304,17 @@ public partial class App : Application
     /// </summary>
     private void OnExit(object sender, ExitEventArgs e)
     {
+        try
+        {
+            if (_instanceMutex != null)
+            {
+                _instanceMutex.ReleaseMutex();
+                _instanceMutex.Dispose();
+                _instanceMutex = null;
+            }
+        }
+        catch { }
+
         var supportTool = GetRequiredService<ISupportTool>();
         supportTool.SaveAllSettings();
 

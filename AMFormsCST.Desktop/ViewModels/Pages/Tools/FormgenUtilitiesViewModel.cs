@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure;
 using AMFormsCST.Desktop.Interfaces;
@@ -249,6 +249,18 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         if (!IsFileLoaded) return;
         Uuid = Guid.NewGuid().ToString();
         _logger?.LogInfo($"UUID regenerated: {Uuid}");
+    }
+
+    /// <summary>
+    /// Loads a .formgen file directly from an external file path (e.g. from Windows Explorer or IPC).
+    /// </summary>
+    public void LoadFormgenFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !_fileSystem.FileExists(path)) return;
+        FilePath = path;
+        _backupLoaded = false;
+        _logger?.LogInfo($"Formgen file loaded from external path: {path}");
+        LoadFileContent();
     }
 
     private void LoadFileContent(string? filePath = null)

@@ -68,6 +68,38 @@
                 </StackPanel>
             </ui:CardControl>
 
+            <!--  Windows Integration Section  -->
+            <ui:CardControl Margin="0,0,0,10" Header="Windows Integration">
+                <StackPanel>
+                    <ui:ToggleSwitch
+                        Content="Enable Windows Explorer context menu for .formgen files"
+                        IsChecked="{Binding EnableExplorerContextMenu, Mode=TwoWay}"
+                        Margin="0,0,0,12" />
+
+                    <TextBlock
+                        Margin="0,0,0,4"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Adds 'Open in Solera Formgen Utilities' to the right-click menu of .formgen files." />
+
+                    <TextBlock Text="FormGen Executable Path (Optional)" Margin="0,8,0,0" />
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox
+                            Grid.Column="0"
+                            PlaceholderText="C:\path\to\formgen.exe"
+                            Text="{Binding FormGenExecutablePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <ui:Button
+                            Grid.Column="1"
+                            Margin="8,0,0,0"
+                            Content="Browse..."
+                            Command="{Binding BrowseFormGenExecutableCommand}" />
+                    </Grid>
+                </StackPanel>
+            </ui:CardControl>
+
             <!--  About Section  -->
             <ui:CardControl Header="About">
                 <StackPanel>

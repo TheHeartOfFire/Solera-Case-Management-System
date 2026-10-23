@@ -1,4 +1,4 @@
-﻿namespace AMFormsCST.Core.Interfaces.UserSettings;
+namespace AMFormsCST.Core.Interfaces.UserSettings;
 
 public interface IUserSettings : ISetting
 {
@@ -6,4 +6,6 @@ public interface IUserSettings : ISetting
     string Name { get; set; }
     string ApplicationFilesPath { get; set; }
     string ExtSeparator { get; set; }
+    bool EnableExplorerContextMenu { get; set; }
+    string FormGenExecutablePath { get; set; }
 }
