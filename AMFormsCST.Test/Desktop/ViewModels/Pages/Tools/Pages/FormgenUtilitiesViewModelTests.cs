@@ -108,4 +108,45 @@ public class FormgenUtilitiesViewModelTests
         Assert.Empty(viewModel.TreeViewNodes);
         Assert.Null(viewModel.SelectedNode);
     }
+
+    [Fact]
+    public void PushToFormGenCommand_WhenNoFileLoaded_DoesNotThrow()
+    {
+        var viewModel = new FormgenUtilitiesViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object);
+        Assert.False(viewModel.IsFileLoaded);
+
+        // Act & Assert
+        viewModel.PushToFormGenCommand.Execute(null);
+        Assert.False(viewModel.IsBusy);
+    }
+
+    [Fact]
+    public void PushToFormGenCommand_WhenFileLoadedAndChanged_SavesFileBeforePush()
+    {
+        var viewModel = new FormgenUtilitiesViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object);
+        var fakeFilePath = "C:\\temp\\test.formgen";
+        var fakeFormgenFile = new DotFormgen
+        {
+            Title = "Test Form Title",
+            Settings = { UUID = "1234-uuid" }
+        };
+
+        _mockDialogService.Setup(ds => ds.ShowOpenFileDialog(It.IsAny<string>())).Returns(fakeFilePath);
+        _mockFormgenUtils.Setup(fu => fu.OpenFile(fakeFilePath));
+        _mockFormgenUtils.Setup(fu => fu.ParsedFormgenFile).Returns(fakeFormgenFile);
+        _mockFormgenUtils.Setup(fu => fu.HasChanged).Returns(true);
+        _mockFileSystem.Setup(fs => fs.FileExists(It.IsAny<string>())).Returns(true);
+        _mockFileSystem.Setup(fs => fs.GetDirectoryName(It.IsAny<string>())).Returns("C:\\temp");
+        _mockFileSystem.Setup(fs => fs.GetFileNameWithoutExtension(It.IsAny<string>())).Returns("test");
+        _mockFileSystem.Setup(fs => fs.CombinePath(It.IsAny<string>(), It.IsAny<string>())).Returns((string p1, string p2) => p1 + "\\" + p2);
+
+        viewModel.OpenFormgenFileCommand.Execute(null);
+        Assert.True(viewModel.IsFileLoaded);
+
+        // Act
+        viewModel.PushToFormGenCommand.Execute(null);
+
+        // Assert that SaveFile was called because HasChanged was true
+        _mockFormgenUtils.Verify(fu => fu.SaveFile(It.IsAny<string>(), It.IsAny<DotFormgen?>()), Times.Once);
+    }
 }

@@ -211,6 +211,57 @@ public partial class FormgenUtilitiesViewModel : ViewModel
     }
 
     [RelayCommand]
+    private void PushToFormGen()
+    {
+        if (!IsFileLoaded || string.IsNullOrWhiteSpace(FilePath)) return;
+
+        IsBusy = true;
+        try
+        {
+            if (HasChanged && _supportTool?.FormgenUtils.ParsedFormgenFile is not null)
+            {
+                var originalTitle = _supportTool.FormgenUtils.ParsedFormgenFile.Title ?? _fileSystem.GetFileNameWithoutExtension(FilePath);
+                bool titleHasChanged = !string.Equals(originalTitle, FormTitle, StringComparison.Ordinal);
+
+                _supportTool.FormgenUtils.ParsedFormgenFile.Title = FormTitle;
+                _supportTool.FormgenUtils.ParsedFormgenFile.Settings.UUID = Uuid;
+
+                _supportTool.FormgenUtils.SaveFile(FilePath);
+
+                if (titleHasChanged)
+                {
+                    _supportTool.FormgenUtils.RenameFile(FormTitle, ShouldRenameImage);
+                    var directory = _fileSystem.GetDirectoryName(FilePath);
+                    FilePath = _fileSystem.CombinePath(directory!, FormTitle + ".formgen");
+                }
+
+                _backupLoaded = false;
+                _logger?.LogInfo($"Auto-saved Formgen file before pushing to FormGen: {FilePath}");
+            }
+
+            var formgenBatPath = _supportTool?.Settings?.UserSettings?.FormGenExecutablePath;
+            bool success = FormGenLauncherHelper.PushFormToFormGen(FilePath, Uuid, formgenBatPath, _logger);
+            if (success)
+            {
+                _logger?.LogInfo($"Form successfully pushed to FormGen: {FilePath}");
+            }
+            else
+            {
+                _dialogService.ShowMessageBox("Failed to push form to FormGen. Could not communicate with FormGen or find NewFormGen.bat.", "Push Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowMessageBox($"Error pushing form to FormGen: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            _logger?.LogError("Error pushing form to FormGen.", ex);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
     private void LoadBackup()
     {
         if (!IsFileLoaded || _supportTool?.FormgenUtils.ParsedFormgenFile?.Settings.UUID is null) return;

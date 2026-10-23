@@ -65,6 +65,78 @@ public static class FormGenLauncherHelper
     }
 
     /// <summary>
+    /// Pushes the form back to FormGen via IPC socket, checking if its UUID matches an open tab.
+    /// If FormGen is running, focuses the matching tab and reloads, or opens in a new tab if no match.
+    /// If FormGen is not running, launches FormGen with the file.
+    /// </summary>
+    public static bool PushFormToFormGen(string filePath, string? uuid = null, string? formgenBatPath = null, ILogService? logger = null)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return false;
+
+        var cleanPath = filePath.Trim().Trim('"');
+        if (!File.Exists(cleanPath))
+        {
+            logger?.LogWarning($"FormGen push: Target file does not exist: {cleanPath}");
+            return false;
+        }
+
+        // Try pushing via IPC to running FormGen
+        if (TryPushViaIpc(cleanPath, uuid, logger))
+        {
+            logger?.LogInfo($"Successfully pushed '{cleanPath}' (UUID: {uuid}) to running FormGen via IPC.");
+            return true;
+        }
+
+        // If FormGen is not running, launch it
+        logger?.LogInfo($"FormGen not running via IPC. Launching FormGen with '{cleanPath}'.");
+        return OpenInFormGen(cleanPath, formgenBatPath, logger);
+    }
+
+    /// <summary>
+    /// Sends a PUSH_FORM command to FormGenAgent via localhost TCP.
+    /// </summary>
+    public static bool TryPushViaIpc(string filePath, string? uuid = null, ILogService? logger = null)
+    {
+        try
+        {
+            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            if (!File.Exists(portFilePath))
+                return false;
+
+            var portText = File.ReadAllText(portFilePath).Trim();
+            if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
+                return false;
+
+            using var client = new TcpClient();
+            var connectTask = client.ConnectAsync("127.0.0.1", port);
+            if (!connectTask.Wait(1000))
+            {
+                client.Close();
+                try { File.Delete(portFilePath); } catch {}
+                return false;
+            }
+
+            using var stream = client.GetStream();
+            using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+            using var reader = new StreamReader(stream, new UTF8Encoding(false));
+
+            var payload = string.IsNullOrWhiteSpace(uuid)
+                ? $"PUSH_FORM:{filePath}"
+                : $"PUSH_FORM:{uuid.Trim()}|{filePath}";
+
+            writer.WriteLine(payload);
+            var response = reader.ReadLine();
+            return string.Equals(response, "OK", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning($"IPC push to FormGen agent failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Attempts to send the file path to the FormGen agent via localhost TCP.
     /// </summary>
     public static bool TrySendViaIpc(string filePath, ILogService? logger = null)

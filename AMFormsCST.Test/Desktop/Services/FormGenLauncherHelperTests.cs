@@ -166,6 +166,65 @@ public class FormGenLauncherHelperTests
             listener.Stop();
         }
     }
+
+    [Fact]
+    public void PushFormToFormGen_WhenFileDoesNotExist_ReturnsFalse()
+    {
+        bool result = FormGenLauncherHelper.PushFormToFormGen(@"C:\NonExistent_Form_98765.formgen", Guid.NewGuid().ToString());
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void PushFormToFormGen_WhenPathIsEmpty_ReturnsFalse()
+    {
+        bool result = FormGenLauncherHelper.PushFormToFormGen(string.Empty);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void TryPushViaIpc_WhenAgentReceivesPushCommand_ReturnsTrue()
+    {
+        var tempPortFile = Path.Combine(Path.GetTempPath(), "formgen_agent.port");
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        File.WriteAllText(tempPortFile, port.ToString());
+
+        string? receivedLine = null;
+
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            using var client = listener.AcceptTcpClient();
+            using var stream = client.GetStream();
+            using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+            using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8) { AutoFlush = true };
+
+            receivedLine = reader.ReadLine();
+            writer.WriteLine("OK");
+        });
+
+        try
+        {
+            var fakeFile = Path.GetTempFileName();
+            try
+            {
+                var testUuid = "11112222-3333-4444-5555-666677778888";
+                bool ok = FormGenLauncherHelper.TryPushViaIpc(fakeFile, testUuid);
+                Assert.True(ok);
+                Assert.NotNull(receivedLine);
+                Assert.Equal($"PUSH_FORM:{testUuid}|{fakeFile}", receivedLine);
+            }
+            finally
+            {
+                if (File.Exists(fakeFile)) File.Delete(fakeFile);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempPortFile)) File.Delete(tempPortFile);
+            listener.Stop();
+        }
+    }
 }
 
 

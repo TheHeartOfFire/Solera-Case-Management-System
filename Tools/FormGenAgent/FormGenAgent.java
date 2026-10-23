@@ -489,6 +489,244 @@ public class FormGenAgent {
         });
     }
 
+    public static void pushForm(final String targetUuid, final String rawPath) {
+        Object display = getDisplay();
+        if (display == null || isDisposed(display)) {
+            log("Display is null or disposed when pushing form: " + rawPath);
+            return;
+        }
+
+        runOnDisplay(display, new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (!discoverFormGen()) {
+                        log("Could not discover FormGen instance for pushForm: " + rawPath);
+                        openFile(rawPath);
+                        return;
+                    }
+
+                    String cleanPath = cleanFilePath(rawPath);
+                    File file = new File(cleanPath);
+                    if (!file.exists()) {
+                        log("File does not exist for pushForm: " + cleanPath);
+                        return;
+                    }
+
+                    String resolvedUuid = (targetUuid != null && !targetUuid.trim().isEmpty())
+                        ? targetUuid.trim()
+                        : readUuidFromFormgenFile(cleanPath);
+
+                    log("pushForm: Target UUID=" + resolvedUuid + ", File=" + cleanPath);
+
+                    Object mainTabFolder = null;
+                    try {
+                        Field f = formGenInstance.getClass().getDeclaredField("mainTabFolder");
+                        f.setAccessible(true);
+                        mainTabFolder = f.get(formGenInstance);
+                    } catch (Throwable t) {
+                        log("Could not get mainTabFolder: " + t.getMessage());
+                    }
+
+                    Object matchingTab = null;
+                    Object matchingViewer = null;
+
+                    if (mainTabFolder != null && !isDisposed(mainTabFolder) && resolvedUuid != null && !resolvedUuid.isEmpty()) {
+                        try {
+                            Method getItemsMethod = mainTabFolder.getClass().getMethod("getItems");
+                            Object[] tabItems = (Object[]) getItemsMethod.invoke(mainTabFolder);
+                            if (tabItems != null) {
+                                for (Object tabItem : tabItems) {
+                                    if (tabItem == null || isDisposed(tabItem)) continue;
+                                    try {
+                                        Method getControlMethod = tabItem.getClass().getMethod("getControl");
+                                        Object viewer = getControlMethod.invoke(tabItem);
+                                        if (viewer != null && !isDisposed(viewer)) {
+                                            String tabUuid = null;
+                                            try {
+                                                Method getFormDefMethod = viewer.getClass().getMethod("getFormDef");
+                                                Object formDef = getFormDefMethod.invoke(viewer);
+                                                tabUuid = getFormDefUuid(formDef);
+                                            } catch (Throwable ignored) {}
+
+                                            if (tabUuid == null) {
+                                                try {
+                                                    Method getFileMethod = viewer.getClass().getMethod("getCurrentFormgenFile");
+                                                    File tabFile = (File) getFileMethod.invoke(viewer);
+                                                    if (tabFile != null && tabFile.exists()) {
+                                                        tabUuid = readUuidFromFormgenFile(tabFile.getAbsolutePath());
+                                                    }
+                                                } catch (Throwable ignored) {}
+                                            }
+
+                                            if (tabUuid != null && tabUuid.trim().equalsIgnoreCase(resolvedUuid)) {
+                                                matchingTab = tabItem;
+                                                matchingViewer = viewer;
+                                                break;
+                                            }
+                                        }
+                                    } catch (Throwable tabErr) {
+                                        log("Error checking tab: " + tabErr.getMessage());
+                                    }
+                                }
+                            }
+                        } catch (Throwable t) {
+                            log("Error iterating tab items: " + t.getMessage());
+                        }
+                    }
+
+                    Class<?> formOpenModeClass = Class.forName("com.automate.formgen.FormOpenMode");
+                    Field normalField = formOpenModeClass.getField("Normal");
+                    Object normalMode = normalField.get(null);
+
+                    if (matchingTab != null && matchingViewer != null) {
+                        log("Found matching tab for UUID " + resolvedUuid + ". Focusing tab and reloading form...");
+
+                        // Focus tab
+                        try {
+                            Method setSelectionMethod = mainTabFolder.getClass().getMethod("setSelection", Class.forName("org.eclipse.swt.custom.CTabItem"));
+                            setSelectionMethod.invoke(mainTabFolder, matchingTab);
+                        } catch (Throwable t) {
+                            log("Error setting tab selection: " + t.getMessage());
+                        }
+
+                        try {
+                            Field fvField = formGenInstance.getClass().getDeclaredField("formViewer");
+                            fvField.setAccessible(true);
+                            fvField.set(formGenInstance, matchingViewer);
+                        } catch (Throwable ignored) {}
+
+                        try {
+                            Method onTabSel = formGenInstance.getClass().getDeclaredMethod("onTabSelected", Class.forName("org.eclipse.swt.custom.CTabItem"));
+                            onTabSel.setAccessible(true);
+                            onTabSel.invoke(formGenInstance, matchingTab);
+                        } catch (Throwable ignored) {}
+
+                        // Reload form in viewer
+                        try {
+                            Method openFormFileMethod = matchingViewer.getClass().getMethod("openFormFile", formOpenModeClass, File.class, Class.forName("com.automate.formgen.dialogs.checkinout.CheckoutInfo"));
+                            openFormFileMethod.setAccessible(true);
+                            Object res = openFormFileMethod.invoke(matchingViewer, normalMode, file, null);
+                            log("Form reloaded in existing tab: " + res);
+                        } catch (Throwable t) {
+                            log("Error reloading form in viewer: " + t.getMessage());
+                        }
+
+                        // Refresh titles and return focus
+                        try {
+                            Method m = formGenInstance.getClass().getMethod("setCurrentTabTitle");
+                            m.invoke(formGenInstance);
+                        } catch (Throwable ignored) {}
+                        try {
+                            Method m = formGenInstance.getClass().getDeclaredMethod("setCurrentFormgenFilenameTitle");
+                            m.setAccessible(true);
+                            m.invoke(formGenInstance);
+                        } catch (Throwable ignored) {}
+                        try {
+                            Method m = formGenInstance.getClass().getMethod("returnFocusToForm");
+                            m.invoke(formGenInstance);
+                        } catch (Throwable ignored) {}
+
+                        activateMainShell();
+                    } else {
+                        log("No matching tab for UUID " + resolvedUuid + ". Opening in new tab...");
+                        try {
+                            Method createNewViewerMethod = formGenInstance.getClass().getDeclaredMethod("createNewPdfViewer");
+                            createNewViewerMethod.setAccessible(true);
+                            Object newViewer = createNewViewerMethod.invoke(formGenInstance);
+
+                            Method openFormFileMethod = newViewer.getClass().getMethod("openFormFile", formOpenModeClass, File.class, Class.forName("com.automate.formgen.dialogs.checkinout.CheckoutInfo"));
+                            openFormFileMethod.setAccessible(true);
+                            Object res = openFormFileMethod.invoke(newViewer, normalMode, file, null);
+                            log("New form loaded in new viewer: " + res);
+
+                            Method createNewTabMethod = formGenInstance.getClass().getDeclaredMethod("createNewTab", Class.forName("com.automate.formgen.PdfViewer"));
+                            createNewTabMethod.setAccessible(true);
+                            createNewTabMethod.invoke(formGenInstance, newViewer);
+
+                            try {
+                                Method m = formGenInstance.getClass().getMethod("setCurrentTabTitle");
+                                m.invoke(formGenInstance);
+                            } catch (Throwable ignored) {}
+                            try {
+                                Method m = formGenInstance.getClass().getDeclaredMethod("setCurrentFormgenFilenameTitle");
+                                m.setAccessible(true);
+                                m.invoke(formGenInstance);
+                            } catch (Throwable ignored) {}
+                            try {
+                                Method m = formGenInstance.getClass().getMethod("returnFocusToForm");
+                                m.invoke(formGenInstance);
+                            } catch (Throwable ignored) {}
+                        } catch (Throwable t) {
+                            log("Direct createNewTab failed, falling back to openFormgenFile: " + t.getMessage());
+                            Method openMethod = formGenInstance.getClass().getDeclaredMethod("openFormgenFile", File.class, boolean.class);
+                            openMethod.setAccessible(true);
+                            openMethod.invoke(formGenInstance, file, false);
+                        }
+
+                        activateMainShell();
+                    }
+                } catch (Throwable t) {
+                    StringWriter sw = new StringWriter();
+                    t.printStackTrace(new PrintWriter(sw));
+                    log("Error in pushForm: " + sw.toString());
+                }
+            }
+        });
+    }
+
+    public static String getFormDefUuid(Object formDef) {
+        if (formDef == null) return null;
+        try {
+            Method m = formDef.getClass().getMethod("getPublishedUUID");
+            Object u = m.invoke(formDef);
+            if (u != null) return u.toString();
+        } catch (Throwable ignored) {}
+        try {
+            Method m = formDef.getClass().getMethod("getUUID");
+            Object u = m.invoke(formDef);
+            if (u != null) return u.toString();
+        } catch (Throwable ignored) {}
+        for (Method m : formDef.getClass().getMethods()) {
+            if (m.getName().toLowerCase().contains("uuid") && m.getParameterCount() == 0) {
+                try {
+                    Object u = m.invoke(formDef);
+                    if (u != null) return u.toString();
+                } catch (Throwable ignored) {}
+            }
+        }
+        for (Field f : formDef.getClass().getDeclaredFields()) {
+            if (f.getName().equalsIgnoreCase("publishedUUID") || f.getName().equalsIgnoreCase("uuid")) {
+                try {
+                    f.setAccessible(true);
+                    Object val = f.get(formDef);
+                    if (val != null) return val.toString();
+                } catch (Throwable ignored) {}
+            }
+        }
+        return null;
+    }
+
+    private static String readUuidFromFormgenFile(String path) {
+        if (path == null) return null;
+        try {
+            File f = new File(path);
+            if (!f.exists()) return null;
+            BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
+            String line;
+            Pattern p = Pattern.compile("publishedUUID\\s*=\\s*\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
+            while ((line = reader.readLine()) != null) {
+                Matcher m = p.matcher(line);
+                if (m.find()) {
+                    reader.close();
+                    return m.group(1);
+                }
+            }
+            reader.close();
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
     private static synchronized void startIpcServer() {
         if (serverStarted) return;
         serverStarted = true;
@@ -575,6 +813,19 @@ public class FormGenAgent {
                     String formPath = getActiveFormFilePath();
                     OutputStream out = socket.getOutputStream();
                     out.write(((formPath != null ? formPath : "") + "\n").getBytes("UTF-8"));
+                    out.flush();
+                } else if (line.startsWith("PUSH_FORM:")) {
+                    String payload = line.substring(10).trim();
+                    String uuid = null;
+                    String filePath = payload;
+                    int pipe = payload.indexOf('|');
+                    if (pipe != -1) {
+                        uuid = payload.substring(0, pipe).trim();
+                        filePath = payload.substring(pipe + 1).trim();
+                    }
+                    pushForm(uuid, filePath);
+                    OutputStream out = socket.getOutputStream();
+                    out.write("OK\n".getBytes("UTF-8"));
                     out.flush();
                 } else if (!line.isEmpty()) {
                     openFile(line);
