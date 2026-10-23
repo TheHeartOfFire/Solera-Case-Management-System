@@ -1463,7 +1463,7 @@ public class FormGenAgent {
                             String notes = liveVariables.get("Notes");
                             String tmplText = liveVariables.get("ActiveTemplateText");
 
-                            log("Publish auto-fill: ActiveTemplateText len=" + (tmplText != null ? tmplText.length() : -1)
+                            log("Publish auto-fill: ServerId=" + serverId + ", ActiveTemplateText len=" + (tmplText != null ? tmplText.length() : -1)
                                 + ", CaseNumber=" + caseNumber + ", Contact=" + contactName);
 
                             if (publishDlg != null) {
@@ -2054,7 +2054,14 @@ public class FormGenAgent {
                     }
                     if (valStart >= len) break;
 
-                    if (json.charAt(valStart) == '"') {
+                    char firstChar = json.charAt(valStart);
+                    if (firstChar == '{' || firstChar == '[') {
+                        // Enter nested object or array without consuming inner keys
+                        i = valStart + 1;
+                        continue;
+                    }
+
+                    if (firstChar == '"') {
                         // String value: scan until unescaped closing quote
                         StringBuilder valSb = new StringBuilder();
                         int idx = valStart + 1;
@@ -2076,12 +2083,14 @@ public class FormGenAgent {
                         liveVariables.put(key, val);
                         i = idx;
                     } else {
-                        // Non-string value (e.g. true, false, number, null)
+                        // Primitive value (true, false, number, null)
                         int nextComma = json.indexOf(',', valStart);
                         int nextBrace = json.indexOf('}', valStart);
+                        int nextBracket = json.indexOf(']', valStart);
                         int end = len;
                         if (nextComma != -1) end = Math.min(end, nextComma);
                         if (nextBrace != -1) end = Math.min(end, nextBrace);
+                        if (nextBracket != -1) end = Math.min(end, nextBracket);
                         String val = json.substring(valStart, end).trim();
                         liveVariables.put(key, val);
                         i = end;
