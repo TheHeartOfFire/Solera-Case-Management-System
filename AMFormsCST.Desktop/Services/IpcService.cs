@@ -374,6 +374,11 @@ public class IpcService : IHostedService, IAsyncDisposable
     {
         try
         {
+            if (!string.IsNullOrWhiteSpace(filePath))
+            {
+                filePath = filePath.Trim('\"', ' ');
+            }
+
             var supportTool = App.GetRequiredService<ISupportTool>();
             var dialogService = App.GetRequiredService<IDialogService>();
             var fileSystem = App.GetRequiredService<IFileSystem>();
@@ -385,13 +390,21 @@ public class IpcService : IHostedService, IAsyncDisposable
                 vm.LoadFormgenFile(filePath);
             }
 
+            BringWindowToFront();
+
             var page = new FormgenUtilitiesPage(vm, navigationService, _logger);
             var dialog = new PageHostDialog(page, "Formgen Utilities");
+
+            if (Application.Current?.MainWindow is Window mainWindow && mainWindow.IsVisible)
+            {
+                dialog.Owner = mainWindow;
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            }
+
             dialog.Show();
             dialog.Activate();
             dialog.Focus();
 
-            BringWindowToFront();
             _logger?.LogInfo($"Opened Formgen Utilities Dialog with file: '{filePath}'.");
         }
         catch (Exception ex)

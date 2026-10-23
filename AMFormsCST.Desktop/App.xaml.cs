@@ -74,11 +74,15 @@ public partial class App : Application
                 _ = services.AddNavigationViewPageProvider();
                 _ = services.AddSingleton<ILogService>(sp =>
                 {
+                    var logDir = System.IO.Path.Combine(AppContext.BaseDirectory, "logs");
+                    System.IO.Directory.CreateDirectory(logDir);
+                    var logPath = System.IO.Path.Combine(logDir, "app.log");
+
                     var logger = new LoggerConfiguration()
                         .MinimumLevel.Debug()
                         .WriteTo.Console()
                         .WriteTo.File(
-                        path: "logs\\app.log", 
+                        path: logPath, 
                         formatter: new CompactJsonFormatter(), 
                         rollingInterval: RollingInterval.Day,
                         shared: true)
@@ -265,18 +269,33 @@ public partial class App : Application
         }
         catch { }
 
-        // Check if --open-formgen was passed on cold startup
+        // Check if a formgen file was passed on cold startup
         if (e.Args != null && e.Args.Length > 0)
         {
+            string? coldFilePath = null;
             for (int i = 0; i < e.Args.Length; i++)
             {
                 if (string.Equals(e.Args[i], "--open-formgen", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
                 {
-                    var filePath = e.Args[i + 1];
-                    var ipcService = GetRequiredService<IpcService>();
-                    ipcService.OpenFormgenUtilsDialogWithFile(filePath);
+                    coldFilePath = e.Args[i + 1];
                     break;
                 }
+                if (e.Args[i].EndsWith(".formgen", StringComparison.OrdinalIgnoreCase) ||
+                    e.Args[i].EndsWith(".fga", StringComparison.OrdinalIgnoreCase))
+                {
+                    coldFilePath = e.Args[i];
+                    break;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(coldFilePath))
+            {
+                coldFilePath = coldFilePath.Trim('\"', ' ');
+                var ipcService = GetRequiredService<IpcService>();
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
+                {
+                    ipcService.OpenFormgenUtilsDialogWithFile(coldFilePath);
+                });
             }
         }
     }
@@ -293,18 +312,34 @@ public partial class App : Application
                     return;
                 }
 
+                string? targetFilePath = null;
                 for (int i = 0; i < args.Length; i++)
                 {
                     if (string.Equals(args[i], "--open-formgen", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
                     {
-                        var filePath = args[i + 1];
-                        var msg = new IpcMessage
-                        {
-                            Target = "SoleraCMS",
-                            Action = IpcActions.OpenFormgen,
-                            Payload = { ["filePath"] = filePath }
-                        };
-                        NamedPipeIpcClient.SendMessageAsync(msg, timeoutMs: 3000).GetAwaiter().GetResult();
+                        targetFilePath = args[i + 1];
+                        break;
+                    }
+                    if (args[i].EndsWith(".formgen", StringComparison.OrdinalIgnoreCase) ||
+                        args[i].EndsWith(".fga", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetFilePath = args[i];
+                        break;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(targetFilePath))
+                {
+                    targetFilePath = targetFilePath.Trim('\"', ' ');
+                    var msg = new IpcMessage
+                    {
+                        Target = "SoleraCMS",
+                        Action = IpcActions.OpenFormgen,
+                        Payload = { ["filePath"] = targetFilePath }
+                    };
+                    var response = NamedPipeIpcClient.SendMessageAsync(msg, timeoutMs: 3000).GetAwaiter().GetResult();
+                    if (response.Success)
+                    {
                         return;
                     }
                 }

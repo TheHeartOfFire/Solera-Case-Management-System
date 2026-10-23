@@ -17,6 +17,11 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
     private const string LegacySoleraUtilsVerbKey = @".formgen\shell\OpenInSoleraUtils";
     private const string LegacyFormGenVerbKey = @".formgen\shell\OpenInFormGen";
 
+    private const string FgaSoleraUtilsVerbKey = @"SystemFileAssociations\.fga\shell\OpenInSoleraUtils";
+    private const string FgaFormGenVerbKey = @"SystemFileAssociations\.fga\shell\OpenInFormGen";
+    private const string LegacyFgaSoleraUtilsVerbKey = @".fga\shell\OpenInSoleraUtils";
+    private const string LegacyFgaFormGenVerbKey = @".fga\shell\OpenInFormGen";
+
     private readonly ILogService? _logger;
 
     public WindowsExplorerContextMenuService(ILogService? logger = null)
@@ -56,23 +61,29 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
                 return;
             }
 
-            // Register Open in Solera Formgen Utilities under SystemFileAssociations\.formgen
+            // Register Open in Solera Formgen Utilities under SystemFileAssociations and extensions
             RegisterVerb(SoleraUtilsVerbKey, "Open in Solera Formgen Utilities", $"\"{appExePath}\" --open-formgen \"%1\"", $"{appExePath},0");
             RegisterVerb(LegacySoleraUtilsVerbKey, "Open in Solera Formgen Utilities", $"\"{appExePath}\" --open-formgen \"%1\"", $"{appExePath},0");
+            RegisterVerb(FgaSoleraUtilsVerbKey, "Open in Solera Formgen Utilities", $"\"{appExePath}\" --open-formgen \"%1\"", $"{appExePath},0");
+            RegisterVerb(LegacyFgaSoleraUtilsVerbKey, "Open in Solera Formgen Utilities", $"\"{appExePath}\" --open-formgen \"%1\"", $"{appExePath},0");
 
             // Register Open in FormGen if path is valid
             if (!string.IsNullOrWhiteSpace(formgenExePath) && File.Exists(formgenExePath))
             {
                 RegisterVerb(FormGenVerbKey, "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0");
                 RegisterVerb(LegacyFormGenVerbKey, "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0");
+                RegisterVerb(FgaFormGenVerbKey, "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0");
+                RegisterVerb(LegacyFgaFormGenVerbKey, "Open in FormGen", $"\"{formgenExePath}\" \"%1\"", $"{formgenExePath},0");
             }
             else
             {
                 UnregisterVerb(FormGenVerbKey);
                 UnregisterVerb(LegacyFormGenVerbKey);
+                UnregisterVerb(FgaFormGenVerbKey);
+                UnregisterVerb(LegacyFgaFormGenVerbKey);
             }
 
-            _logger?.LogInfo("Windows Explorer context menu for .formgen files registered successfully.");
+            _logger?.LogInfo("Windows Explorer context menu for .formgen/.fga files registered successfully.");
         }
         catch (Exception ex)
         {
@@ -89,7 +100,11 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
             UnregisterVerb(LegacySoleraUtilsVerbKey);
             UnregisterVerb(FormGenVerbKey);
             UnregisterVerb(LegacyFormGenVerbKey);
-            _logger?.LogInfo("Windows Explorer context menu for .formgen files unregistered.");
+            UnregisterVerb(FgaSoleraUtilsVerbKey);
+            UnregisterVerb(LegacyFgaSoleraUtilsVerbKey);
+            UnregisterVerb(FgaFormGenVerbKey);
+            UnregisterVerb(LegacyFgaFormGenVerbKey);
+            _logger?.LogInfo("Windows Explorer context menu for .formgen/.fga files unregistered.");
         }
         catch (Exception ex)
         {
