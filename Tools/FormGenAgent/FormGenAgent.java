@@ -25,6 +25,7 @@ public class FormGenAgent {
     private static final int SWT_SEPARATOR = 2;
     private static final int SWT_POP_UP = 8;
     private static final int SWT_Selection = 13;
+    private static final int SWT_Activate = 26;
     private static final int SWT_Show = 22;
     private static final int SWT_PUSH = 32;
     private static final int SWT_MenuDetect = 35;
@@ -53,7 +54,6 @@ public class FormGenAgent {
         String sysPropFile = System.getProperty("formgen.file");
         String fileToOpen = cleanFilePath(sysPropFile != null && !sysPropFile.trim().isEmpty() ? sysPropFile : agentArgs);
 
-        // If starting as a second process, forward to the running instance and exit
         if (!isDynamicAttach && tryForwardToExistingInstance(fileToOpen)) {
             log("Forwarded to existing instance. Exiting secondary JVM.");
             System.exit(0);
@@ -63,7 +63,6 @@ public class FormGenAgent {
         startIpcServer();
         setupContextMenuHook();
 
-        // Register shutdown hook to delete port file on exit
         try {
             Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
                 @Override
@@ -76,22 +75,16 @@ public class FormGenAgent {
         } catch (Throwable ignored) {}
 
         if (!fileToOpen.isEmpty()) {
-            openFileWithRetry(fileToOpen, 120); // retry up to 60s
+            openFileWithRetry(fileToOpen, 120);
         }
     }
 
     private static String cleanFilePath(String raw) {
         if (raw == null) return "";
         String s = raw.trim();
-        while (s.startsWith("\uFEFF")) {
-            s = s.substring(1).trim();
-        }
-        if (s.startsWith("\"") && s.endsWith("\"") && s.length() >= 2) {
-            s = s.substring(1, s.length() - 1).trim();
-        }
-        while (s.startsWith("\uFEFF")) {
-            s = s.substring(1).trim();
-        }
+        while (s.startsWith("\uFEFF")) s = s.substring(1).trim();
+        if (s.startsWith("\"") && s.endsWith("\"") && s.length() >= 2) s = s.substring(1, s.length() - 1).trim();
+        while (s.startsWith("\uFEFF")) s = s.substring(1).trim();
         return s;
     }
 
@@ -267,7 +260,7 @@ public class FormGenAgent {
                 if (listeners != null) {
                     for (Object l : listeners) {
                         if (l != null) {
-                            Object nfg = extractFromThis0(l);
+                            Object nfg = extractFromThis0(l, "com.automate.formgen.NewFormGen");
                             if (nfg != null) return nfg;
                         }
                     }
@@ -292,20 +285,64 @@ public class FormGenAgent {
         return null;
     }
 
-    private static Object extractFromThis0(Object obj) {
+    private static Object extractFromThis0(Object obj, String targetClassName) {
         if (obj == null) return null;
         Class<?> cls = obj.getClass();
         while (cls != null && cls != Object.class) {
             for (Field f : cls.getDeclaredFields()) {
-                if (f.getName().startsWith("this$") && f.getType().getName().equals("com.automate.formgen.NewFormGen")) {
+                if (f.getName().startsWith("this$")) {
                     try {
                         f.setAccessible(true);
-                        return f.get(obj);
+                        Object val = f.get(obj);
+                        if (val != null) {
+                            if (targetClassName == null || val.getClass().getName().equals(targetClassName)) {
+                                return val;
+                            }
+                        }
                     } catch (Throwable ignored) {}
                 }
             }
             cls = cls.getSuperclass();
         }
+        return null;
+    }
+
+    public static Object findEnclosingDialog(Object widget, String targetClassName) {
+        if (widget == null || isDisposed(widget)) return null;
+        try {
+            Class<?> widgetClass = Class.forName("org.eclipse.swt.widgets.Widget");
+            Field eventTableField = widgetClass.getDeclaredField("eventTable");
+            eventTableField.setAccessible(true);
+            Object eventTable = eventTableField.get(widget);
+            if (eventTable != null) {
+                Field listenersField = eventTable.getClass().getDeclaredField("listeners");
+                listenersField.setAccessible(true);
+                Object[] listeners = (Object[]) listenersField.get(eventTable);
+                if (listeners != null) {
+                    for (Object l : listeners) {
+                        if (l != null) {
+                            Object dlg = extractFromThis0(l, targetClassName);
+                            if (dlg != null) return dlg;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        try {
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            if (compositeClass.isInstance(widget)) {
+                Method getChildrenMethod = compositeClass.getMethod("getChildren");
+                Object[] children = (Object[]) getChildrenMethod.invoke(widget);
+                if (children != null) {
+                    for (Object c : children) {
+                        Object dlg = findEnclosingDialog(c, targetClassName);
+                        if (dlg != null) return dlg;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
         return null;
     }
 
@@ -483,7 +520,7 @@ public class FormGenAgent {
     }
 
     // ==========================================
-    // Context Menu Injection via Reflection
+    // Context Menu & UI Hooks via Reflection
     // ==========================================
 
     private static synchronized void setupContextMenuHook() {
@@ -541,9 +578,10 @@ public class FormGenAgent {
 
             Method addFilterMethod = display.getClass().getMethod("addFilter", int.class, listenerClass);
             addFilterMethod.invoke(display, SWT_Show, listenerProxy);        // SWT.Show = 22
+            addFilterMethod.invoke(display, SWT_Activate, listenerProxy);    // SWT.Activate = 26
             addFilterMethod.invoke(display, SWT_MenuDetect, listenerProxy);  // SWT.MenuDetect = 35
 
-            log("SWT context menu filters installed (Show=22, MenuDetect=35).");
+            log("SWT context menu & dialog filters installed (Show=22, Activate=26, MenuDetect=35).");
         } catch (Throwable t) {
             log("Error installing SWT menu filters: " + t.getMessage());
         }
@@ -559,23 +597,37 @@ public class FormGenAgent {
             Object widget = widgetField.get(eventObj);
             if (widget == null || isDisposed(widget)) return;
 
+            Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
+            Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
+            Class<?> shellClass = Class.forName("org.eclipse.swt.widgets.Shell");
+
             if (eventType == SWT_Show) {
-                // Fired before a Menu is displayed
-                if (widget.getClass().getName().equals("org.eclipse.swt.widgets.Menu")) {
+                if (menuClass.isInstance(widget)) {
                     Method getStyleMethod = widget.getClass().getMethod("getStyle");
                     int style = (Integer) getStyleMethod.invoke(widget);
                     if ((style & SWT_POP_UP) != 0) {
                         injectSoleraMenuItems(display, widget);
                     }
+                } else if (shellClass.isInstance(widget)) {
+                    enhanceDialogShell(display, widget);
+                }
+            } else if (eventType == SWT_Activate) {
+                if (shellClass.isInstance(widget)) {
+                    enhanceDialogShell(display, widget);
                 }
             } else if (eventType == SWT_MenuDetect) {
-                // Fired when user right clicks on a Control
-                Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
                 if (controlClass.isInstance(widget)) {
+                    String clsName = widget.getClass().getName();
+                    // Intercept black code window (RainbowParenText), StyledText, or text controls
+                    if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
+                        attachCodeEditorContextMenu(display, widget, eventObj);
+                        return;
+                    }
+
                     Method getMenuMethod = widget.getClass().getMethod("getMenu");
                     Object existingMenu = getMenuMethod.invoke(widget);
                     if (existingMenu == null) {
-                        attachMenuToControl(display, widget, eventObj);
+                        attachStandardTextContextMenu(display, widget, eventObj);
                     }
                 }
             }
@@ -584,16 +636,121 @@ public class FormGenAgent {
         }
     }
 
-    private static void attachMenuToControl(Object display, Object control, Object eventObj) {
+    // ==========================================
+    // Code Editor RMB Menu (Black Window / Prompts)
+    // ==========================================
+
+    private static void attachCodeEditorContextMenu(final Object display, final Object control, Object eventObj) {
+        try {
+            log("Attaching Code Editor Context Menu to: " + control.getClass().getName());
+            Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
+            Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
+            Class<?> menuItemClass = Class.forName("org.eclipse.swt.widgets.MenuItem");
+            Class<?> listenerClass = Class.forName("org.eclipse.swt.widgets.Listener");
+
+            Constructor<?> menuCons = menuClass.getConstructor(controlClass);
+            Object menu = menuCons.newInstance(control);
+
+            Constructor<?> itemCons = menuItemClass.getConstructor(menuClass, int.class);
+            Constructor<?> subMenuCons = menuClass.getConstructor(menuItemClass);
+            Method addListenerMethod = menuItemClass.getMethod("addListener", int.class, listenerClass);
+
+            // 1. Cut, Copy, Paste, Select All
+            addTextActionItem(display, menu, control, "Cut\tCtrl+X", "cut");
+            addTextActionItem(display, menu, control, "Copy\tCtrl+C", "copy");
+            addTextActionItem(display, menu, control, "Paste\tCtrl+V", "paste");
+            addTextActionItem(display, menu, control, "Select All\tCtrl+A", "selectAll");
+
+            // Separator
+            itemCons.newInstance(menu, SWT_SEPARATOR);
+
+            // 2. Parse in Code Snippets
+            Object itemParse = itemCons.newInstance(menu, SWT_PUSH);
+            itemParse.getClass().getMethod("setText", String.class).invoke(itemParse, "🔬 Parse in Code Snippets");
+            Object listenerParse = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    String selected = getSelectedTextFromFocusControl(display);
+                    if (selected.trim().isEmpty()) {
+                        try {
+                            Method m = control.getClass().getMethod("getText");
+                            selected = (String) m.invoke(control);
+                        } catch (Throwable ignored) {}
+                    }
+                    notifyScmtParseCode(selected);
+                }
+            });
+            addListenerMethod.invoke(itemParse, SWT_Selection, listenerParse);
+
+            // 3. Paste from Code Snippets / SCMT Active Formula
+            Object itemPasteFormula = itemCons.newInstance(menu, SWT_PUSH);
+            itemPasteFormula.getClass().getMethod("setText", String.class).invoke(itemPasteFormula, "📋 Paste from Code Snippets / Formula");
+            Object listenerPasteFormula = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    runOnDisplay(display, new Runnable() {
+                        @Override
+                        public void run() {
+                            String codeToPaste = liveVariables.get("ActiveTemplateText");
+                            if (codeToPaste == null || codeToPaste.trim().isEmpty()) {
+                                codeToPaste = getClipboardText();
+                            }
+                            insertTextIntoFocusControl(display, codeToPaste);
+                        }
+                    });
+                }
+            });
+            addListenerMethod.invoke(itemPasteFormula, SWT_Selection, listenerPasteFormula);
+
+            // Separator
+            itemCons.newInstance(menu, SWT_SEPARATOR);
+
+            // 4. Solera Tools Cascade
+            Object soleraCascade = itemCons.newInstance(menu, SWT_CASCADE);
+            soleraCascade.getClass().getMethod("setText", String.class).invoke(soleraCascade, "⚡ Solera Tools");
+            Object soleraSubMenu = subMenuCons.newInstance(soleraCascade);
+            soleraCascade.getClass().getMethod("setMenu", menuClass).invoke(soleraCascade, soleraSubMenu);
+
+            Object itemOpenUtils = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
+            itemOpenUtils.getClass().getMethod("setText", String.class).invoke(itemOpenUtils, "🛠 Open in FormGen Utilities");
+            Object listenerOpenUtils = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    notifyScmtOpenFormgenUtils(getActiveFormFilePath());
+                }
+            });
+            addListenerMethod.invoke(itemOpenUtils, SWT_Selection, listenerOpenUtils);
+
+            // Quick Paste Variables submenu
+            Object pasteCascade = itemCons.newInstance(soleraSubMenu, SWT_CASCADE);
+            pasteCascade.getClass().getMethod("setText", String.class).invoke(pasteCascade, "📋 Quick Paste Variable");
+            Object pasteSubMenu = subMenuCons.newInstance(pasteCascade);
+            pasteCascade.getClass().getMethod("setMenu", menuClass).invoke(pasteCascade, pasteSubMenu);
+            populateQuickPasteItems(display, pasteSubMenu, itemCons, addListenerMethod);
+
+            Method setMenuMethod = control.getClass().getMethod("setMenu", menuClass);
+            setMenuMethod.invoke(control, menu);
+
+            Method setVisibleMethod = menu.getClass().getMethod("setVisible", boolean.class);
+            setVisibleMethod.invoke(menu, true);
+
+            Field doitField = eventObj.getClass().getField("doit");
+            doitField.setBoolean(eventObj, false);
+            log("Successfully opened Code Editor Context Menu.");
+        } catch (Throwable t) {
+            log("Error in attachCodeEditorContextMenu: " + t.getMessage());
+        }
+    }
+
+    private static void attachStandardTextContextMenu(Object display, Object control, Object eventObj) {
         try {
             Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
             Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
             Constructor<?> menuCons = menuClass.getConstructor(controlClass);
             Object newMenu = menuCons.newInstance(control);
 
-            // If it's a Text or StyledText, add standard Cut / Copy / Paste / Select All
             String clsName = control.getClass().getName();
-            if (clsName.contains("Text") || clsName.contains("StyledText")) {
+            if (clsName.contains("Text")) {
                 addTextActionItem(display, newMenu, control, "Cut", "cut");
                 addTextActionItem(display, newMenu, control, "Copy", "copy");
                 addTextActionItem(display, newMenu, control, "Paste", "paste");
@@ -608,11 +765,10 @@ public class FormGenAgent {
             Method setVisibleMethod = newMenu.getClass().getMethod("setVisible", boolean.class);
             setVisibleMethod.invoke(newMenu, true);
 
-            // Suppress default OS menu
             Field doitField = eventObj.getClass().getField("doit");
             doitField.setBoolean(eventObj, false);
         } catch (Throwable t) {
-            log("Error in attachMenuToControl: " + t.getMessage());
+            log("Error in attachStandardTextContextMenu: " + t.getMessage());
         }
     }
 
@@ -641,7 +797,7 @@ public class FormGenAgent {
 
     private static void injectSoleraMenuItems(final Object display, Object menu) {
         try {
-            // 1. Remove previous Solera items so we have a clean refresh with latest variables
+            // Remove previous Solera items so we have a clean refresh
             Method getItemsMethod = menu.getClass().getMethod("getItems");
             Object[] items = (Object[]) getItemsMethod.invoke(menu);
             if (items != null) {
@@ -655,10 +811,9 @@ public class FormGenAgent {
                 }
             }
 
-            // 2. Refresh live variables from Named Pipe if SCMT is running
-            refreshLiveVariablesFromPipe();
+            // Trigger non-blocking async variable refresh
+            refreshLiveVariablesAsync();
 
-            // 3. Build Solera Tools hierarchy
             Class<?> menuItemClass = Class.forName("org.eclipse.swt.widgets.MenuItem");
             Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
             Class<?> listenerClass = Class.forName("org.eclipse.swt.widgets.Listener");
@@ -666,6 +821,22 @@ public class FormGenAgent {
             Constructor<?> subMenuCons = menuClass.getConstructor(menuItemClass);
             Method addListenerMethod = menuItemClass.getMethod("addListener", int.class, listenerClass);
             Method setDataMethod = menuItemClass.getMethod("setData", String.class, Object.class);
+
+            // Check if there is an active canvas field selected in PdfViewer
+            final String fieldFormula = getSelectedFieldFormula();
+            if (fieldFormula != null && !fieldFormula.trim().isEmpty()) {
+                Object itemFieldFormula = itemCons.newInstance(menu, SWT_PUSH);
+                itemFieldFormula.getClass().getMethod("setText", String.class).invoke(itemFieldFormula, "🔬 Parse Field Formula in Code Snippets");
+                setDataMethod.invoke(itemFieldFormula, "SoleraItem", Boolean.TRUE);
+
+                Object listenerField = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                    @Override
+                    public void run() {
+                        notifyScmtParseCode(fieldFormula);
+                    }
+                });
+                addListenerMethod.invoke(itemFieldFormula, SWT_Selection, listenerField);
+            }
 
             // Separator
             Object sep = itemCons.newInstance(menu, SWT_SEPARATOR);
@@ -685,8 +856,7 @@ public class FormGenAgent {
             Object listenerOpenUtils = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
                 @Override
                 public void run() {
-                    String activeForm = getActiveFormFilePath();
-                    notifyScmtOpenFormgenUtils(activeForm);
+                    notifyScmtOpenFormgenUtils(getActiveFormFilePath());
                 }
             });
             addListenerMethod.invoke(itemOpenUtils, SWT_Selection, listenerOpenUtils);
@@ -718,17 +888,38 @@ public class FormGenAgent {
         }
     }
 
+    private static String getSelectedFieldFormula() {
+        if (formGenInstance == null) return null;
+        try {
+            Field fvField = formGenInstance.getClass().getDeclaredField("formViewer");
+            fvField.setAccessible(true);
+            Object formViewer = fvField.get(formGenInstance);
+            if (formViewer == null) return null;
+
+            Field sfField = formViewer.getClass().getDeclaredField("selectedFields");
+            sfField.setAccessible(true);
+            Object selectedFields = sfField.get(formViewer);
+            if (selectedFields == null) return null;
+
+            Method getSingleMethod = selectedFields.getClass().getMethod("getSingleSelectedField");
+            Object field = getSingleMethod.invoke(selectedFields);
+            if (field != null) {
+                Method getExprMethod = field.getClass().getMethod("getExpression");
+                return (String) getExprMethod.invoke(field);
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
     private static void populateQuickPasteItems(final Object display, Object pasteSubMenu, Constructor<?> itemCons, Method addListenerMethod) {
         try {
             boolean hasItems = false;
             synchronized (liveVariables) {
-                // Standard variable entries
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Server ID", liveVariables.get("ServerId"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Dealership", liveVariables.get("DealershipName"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Case #", liveVariables.get("CaseNumber"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Primary Co #", liveVariables.get("PrimaryCompanyNumber"));
 
-                // Handle other company numbers
                 String companyNumbers = liveVariables.get("CompanyNumbers");
                 if (companyNumbers != null && !companyNumbers.trim().isEmpty()) {
                     String primaryCo = liveVariables.get("PrimaryCompanyNumber");
@@ -745,7 +936,6 @@ public class FormGenAgent {
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Contact Phone", liveVariables.get("ContactPhone"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Contact Email", liveVariables.get("ContactEmail"));
 
-                // Template text
                 String tmplText = liveVariables.get("ActiveTemplateText");
                 if (tmplText != null && !tmplText.trim().isEmpty()) {
                     String tmplName = liveVariables.get("ActiveTemplateName");
@@ -805,6 +995,228 @@ public class FormGenAgent {
     }
 
     // ==========================================
+    // Dialog Enhancements (Publish, Form Properties, Prompts)
+    // ==========================================
+
+    private static void enhanceDialogShell(final Object display, final Object shell) {
+        if (shell == null || isDisposed(shell)) return;
+        try {
+            Method getDataMethod = shell.getClass().getMethod("getData", String.class);
+            if (Boolean.TRUE.equals(getDataMethod.invoke(shell, "SoleraEnhanced"))) {
+                return;
+            }
+
+            // 1. Check PublishDlg
+            final Object publishDlg = findEnclosingDialog(shell, "com.automate.formgen.dialogs.checkinout.PublishDlg");
+            if (publishDlg != null) {
+                enhancePublishDialog(display, shell, publishDlg);
+                return;
+            }
+
+            // 2. Check FormPropertiesDlg
+            final Object formPropsDlg = findEnclosingDialog(shell, "com.automate.formgen.dialogs.FormPropertiesDlg");
+            if (formPropsDlg != null) {
+                enhanceFormPropertiesDialog(display, shell, formPropsDlg);
+                return;
+            }
+
+            // 3. Check UdfDlg (Prompts & Code Window)
+            final Object udfDlg = findEnclosingDialog(shell, "com.automate.formgen.dialogs.UdfDlg");
+            if (udfDlg != null) {
+                enhanceUdfDialog(display, shell, udfDlg);
+                return;
+            }
+        } catch (Throwable t) {
+            log("Error in enhanceDialogShell: " + t.getMessage());
+        }
+    }
+
+    private static void enhancePublishDialog(final Object display, final Object shell, final Object publishDlg) {
+        try {
+            log("Enhancing PublishDlg with '⚡ Fill from Solera CMS' button...");
+            Field btnPublishField = publishDlg.getClass().getDeclaredField("btnPublish");
+            btnPublishField.setAccessible(true);
+            Object btnPublish = btnPublishField.get(publishDlg);
+            if (btnPublish == null || isDisposed(btnPublish)) return;
+
+            Method getParentMethod = btnPublish.getClass().getMethod("getParent");
+            Object buttonComposite = getParentMethod.invoke(btnPublish);
+            if (buttonComposite == null) return;
+
+            Class<?> buttonClass = Class.forName("org.eclipse.swt.widgets.Button");
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            Constructor<?> btnCons = buttonClass.getConstructor(compositeClass, int.class);
+            Object btnFill = btnCons.newInstance(buttonComposite, SWT_PUSH);
+
+            btnFill.getClass().getMethod("setText", String.class).invoke(btnFill, "⚡ Fill from Solera CMS");
+            try {
+                btnFill.getClass().getMethod("setToolTipText", String.class).invoke(btnFill, "Auto-fill Authorized By, Dealer Code, Companies, and Comments from active SCMT case");
+            } catch (Throwable ignored) {}
+
+            Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        refreshLiveVariablesAsync();
+                        synchronized (liveVariables) {
+                            String serverId = liveVariables.get("ServerId");
+                            String caseNumber = liveVariables.get("CaseNumber");
+                            String primaryCo = liveVariables.get("PrimaryCompanyNumber");
+                            String contactName = liveVariables.get("ContactName");
+                            String notes = liveVariables.get("Notes");
+
+                            if (contactName != null && !contactName.trim().isEmpty()) {
+                                setWidgetText(publishDlg, "txtAuthorizedBy", contactName);
+                            }
+                            if (serverId != null && !serverId.trim().isEmpty()) {
+                                setWidgetText(publishDlg, "txtSingleDealerCode", serverId);
+                            }
+                            if (primaryCo != null && !primaryCo.trim().isEmpty()) {
+                                setWidgetText(publishDlg, "txtPublishSingleCompanies", primaryCo);
+                            }
+
+                            String comments = "";
+                            if (caseNumber != null && !caseNumber.trim().isEmpty()) comments = "Case #" + caseNumber;
+                            if (notes != null && !notes.trim().isEmpty()) comments += (comments.isEmpty() ? "" : " - ") + notes;
+                            if (!comments.isEmpty()) {
+                                setWidgetText(publishDlg, "txtComments", comments);
+                            }
+
+                            // Trigger single dealer name update
+                            try {
+                                Method m = publishDlg.getClass().getDeclaredMethod("updateSingleDealerName");
+                                m.setAccessible(true);
+                                m.invoke(publishDlg);
+                            } catch (Throwable ignored) {}
+                        }
+                        log("Successfully auto-populated PublishDlg from Solera CMS.");
+                    } catch (Throwable t) {
+                        log("Error auto-populating PublishDlg: " + t.getMessage());
+                    }
+                }
+            });
+
+            Method addListenerMethod = buttonClass.getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
+            addListenerMethod.invoke(btnFill, SWT_Selection, listener);
+
+            // Re-layout composite
+            buttonComposite.getClass().getMethod("layout", boolean.class, boolean.class).invoke(buttonComposite, true, true);
+            shell.getClass().getMethod("layout", boolean.class, boolean.class).invoke(shell, true, true);
+
+            shell.getClass().getMethod("setData", String.class, Object.class).invoke(shell, "SoleraEnhanced", Boolean.TRUE);
+            log("PublishDlg successfully enhanced.");
+        } catch (Throwable t) {
+            log("Error enhancing PublishDlg: " + t.getMessage());
+        }
+    }
+
+    private static void enhanceFormPropertiesDialog(final Object display, final Object shell, final Object formPropsDlg) {
+        try {
+            log("Enhancing FormPropertiesDlg with '🔄 Regenerate UUID' button...");
+            Field lblPublishIDField = formPropsDlg.getClass().getDeclaredField("lblPublishID");
+            lblPublishIDField.setAccessible(true);
+            final Object lblPublishID = lblPublishIDField.get(formPropsDlg);
+            if (lblPublishID == null || isDisposed(lblPublishID)) return;
+
+            Field formdefField = formPropsDlg.getClass().getDeclaredField("formdef");
+            formdefField.setAccessible(true);
+            final Object formdef = formdefField.get(formPropsDlg);
+            if (formdef == null) return;
+
+            Method getParentMethod = lblPublishID.getClass().getMethod("getParent");
+            Object parentComp = getParentMethod.invoke(lblPublishID);
+            if (parentComp == null) return;
+
+            Class<?> buttonClass = Class.forName("org.eclipse.swt.widgets.Button");
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            Constructor<?> btnCons = buttonClass.getConstructor(compositeClass, int.class);
+            Object btnRegen = btnCons.newInstance(parentComp, SWT_PUSH);
+
+            btnRegen.getClass().getMethod("setText", String.class).invoke(btnRegen, "🔄 Regenerate UUID (Clone)");
+            try {
+                btnRegen.getClass().getMethod("setToolTipText", String.class).invoke(btnRegen, "Assigns a fresh UUID so this form can be published as an independent form clone");
+            } catch (Throwable ignored) {}
+
+            Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        UUID newUuid = UUID.randomUUID();
+                        Method setUuidMethod = formdef.getClass().getMethod("setPublishedUUID", UUID.class);
+                        setUuidMethod.invoke(formdef, newUuid);
+
+                        lblPublishID.getClass().getMethod("setText", String.class).invoke(lblPublishID, newUuid.toString());
+                        log("Successfully regenerated UUID to: " + newUuid);
+                    } catch (Throwable t) {
+                        log("Error regenerating UUID: " + t.getMessage());
+                    }
+                }
+            });
+
+            Method addListenerMethod = buttonClass.getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
+            addListenerMethod.invoke(btnRegen, SWT_Selection, listener);
+
+            parentComp.getClass().getMethod("layout", boolean.class, boolean.class).invoke(parentComp, true, true);
+            shell.getClass().getMethod("layout", boolean.class, boolean.class).invoke(shell, true, true);
+
+            shell.getClass().getMethod("setData", String.class, Object.class).invoke(shell, "SoleraEnhanced", Boolean.TRUE);
+            log("FormPropertiesDlg successfully enhanced.");
+        } catch (Throwable t) {
+            log("Error enhancing FormPropertiesDlg: " + t.getMessage());
+        }
+    }
+
+    private static void enhanceUdfDialog(final Object display, final Object shell, final Object udfDlg) {
+        try {
+            log("Enhancing UdfDlg with '🛠 Send to FormGen Utilities' button...");
+            Field compButtonsField = udfDlg.getClass().getDeclaredField("compButtons");
+            compButtonsField.setAccessible(true);
+            Object compButtons = compButtonsField.get(udfDlg);
+            if (compButtons == null || isDisposed(compButtons)) return;
+
+            Class<?> buttonClass = Class.forName("org.eclipse.swt.widgets.Button");
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            Constructor<?> btnCons = buttonClass.getConstructor(compositeClass, int.class);
+            Object btnOpenUtils = btnCons.newInstance(compButtons, SWT_PUSH);
+
+            btnOpenUtils.getClass().getMethod("setText", String.class).invoke(btnOpenUtils, "🛠 Send to FormGen Utilities");
+            try {
+                btnOpenUtils.getClass().getMethod("setToolTipText", String.class).invoke(btnOpenUtils, "Opens the active form in SCMT FormGen Utilities to duplicate prompts, parse fields, and align layouts");
+            } catch (Throwable ignored) {}
+
+            Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    notifyScmtOpenFormgenUtils(getActiveFormFilePath());
+                }
+            });
+
+            Method addListenerMethod = buttonClass.getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
+            addListenerMethod.invoke(btnOpenUtils, SWT_Selection, listener);
+
+            compButtons.getClass().getMethod("layout", boolean.class, boolean.class).invoke(compButtons, true, true);
+            shell.getClass().getMethod("layout", boolean.class, boolean.class).invoke(shell, true, true);
+
+            shell.getClass().getMethod("setData", String.class, Object.class).invoke(shell, "SoleraEnhanced", Boolean.TRUE);
+            log("UdfDlg successfully enhanced.");
+        } catch (Throwable t) {
+            log("Error enhancing UdfDlg: " + t.getMessage());
+        }
+    }
+
+    private static void setWidgetText(Object target, String fieldName, String text) {
+        try {
+            Field f = target.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            Object widget = f.get(target);
+            if (widget != null && !isDisposed(widget)) {
+                Method m = widget.getClass().getMethod("setText", String.class);
+                m.invoke(widget, text);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    // ==========================================
     // Focus Control Text Helpers
     // ==========================================
 
@@ -815,22 +1227,16 @@ public class FormGenAgent {
             Object control = getFocusMethod.invoke(display);
             if (control == null) return "";
 
-            // Try getSelectionText() (Text, StyledText, Combo)
             try {
                 Method m = control.getClass().getMethod("getSelectionText");
                 String text = (String) m.invoke(control);
-                if (text != null && !text.trim().isEmpty()) {
-                    return text;
-                }
+                if (text != null && !text.trim().isEmpty()) return text;
             } catch (Throwable ignored) {}
 
-            // Fallback: getText()
             try {
                 Method m = control.getClass().getMethod("getText");
                 String text = (String) m.invoke(control);
-                if (text != null && !text.trim().isEmpty()) {
-                    return text;
-                }
+                if (text != null && !text.trim().isEmpty()) return text;
             } catch (Throwable ignored) {}
         } catch (Throwable t) {
             log("Error getting text from focus control: " + t.getMessage());
@@ -845,14 +1251,12 @@ public class FormGenAgent {
             Object control = getFocusMethod.invoke(display);
             if (control == null) return;
 
-            // Direct insertion without clipboard: Text and StyledText both support insert(String)
             try {
                 Method insertMethod = control.getClass().getMethod("insert", String.class);
                 insertMethod.invoke(control, text);
                 return;
             } catch (Throwable ignored) {}
 
-            // Fallback: paste method
             try {
                 Method pasteMethod = control.getClass().getMethod("paste");
                 java.awt.datatransfer.StringSelection selection = new java.awt.datatransfer.StringSelection(text);
@@ -864,13 +1268,22 @@ public class FormGenAgent {
         }
     }
 
+    private static String getClipboardText() {
+        try {
+            java.awt.datatransfer.Transferable t = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
+            if (t != null && t.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.stringFlavor)) {
+                return (String) t.getTransferData(java.awt.datatransfer.DataFlavor.stringFlavor);
+            }
+        } catch (Throwable ignored) {}
+        return "";
+    }
+
     // ==========================================
     // FormGen File Discovery Helpers
     // ==========================================
 
     public static String getActiveFormFilePath() {
         if (formGenInstance != null) {
-            // 1. Try getCurrentFormgenFile()
             try {
                 Method m = formGenInstance.getClass().getDeclaredMethod("getCurrentFormgenFile");
                 m.setAccessible(true);
@@ -879,7 +1292,6 @@ public class FormGenAgent {
                 if (res instanceof String && new File((String) res).exists()) return (String) res;
             } catch (Throwable ignored) {}
 
-            // 2. Try getFormDef() -> getFileName() / getFilePath()
             try {
                 Method m = formGenInstance.getClass().getDeclaredMethod("getFormDef");
                 m.setAccessible(true);
@@ -899,7 +1311,6 @@ public class FormGenAgent {
                 }
             } catch (Throwable ignored) {}
 
-            // 3. Inspect declared fields on NewFormGen
             try {
                 for (Field f : formGenInstance.getClass().getDeclaredFields()) {
                     String name = f.getName().toLowerCase();
@@ -915,7 +1326,6 @@ public class FormGenAgent {
             } catch (Throwable ignored) {}
         }
 
-        // 4. Try MainShell title
         if (mainShell != null && !isDisposed(mainShell)) {
             try {
                 String title = (String) mainShell.getClass().getMethod("getText").invoke(mainShell);
@@ -926,7 +1336,6 @@ public class FormGenAgent {
             } catch (Throwable ignored) {}
         }
 
-        // 5. Fallback to last opened file path
         if (lastOpenedFilePath != null && new File(lastOpenedFilePath).exists()) {
             return lastOpenedFilePath;
         }
@@ -983,23 +1392,26 @@ public class FormGenAgent {
             }
             json.append("}\n");
 
-            RandomAccessFile pipe = null;
             try {
-                pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
-                pipe.write(json.toString().getBytes("UTF-8"));
-                String response = pipe.readLine();
-                log("IPC message '" + action + "' successfully sent to SoleraCMS. Response: " + response);
-                return true;
-            } finally {
-                if (pipe != null) {
-                    try { pipe.close(); } catch (Throwable ignored) {}
+                File pipeFile = new File("\\\\.\\pipe\\SoleraCMS_IPC");
+                if (pipeFile.exists()) {
+                    FileOutputStream fos = new FileOutputStream(pipeFile);
+                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(pipeFile), "UTF-8"));
+                    fos.write(json.toString().getBytes("UTF-8"));
+                    fos.flush();
+                    String response = br.readLine();
+                    fos.close();
+                    br.close();
+                    log("IPC message '" + action + "' successfully sent to SoleraCMS. Response: " + response);
+                    return true;
                 }
+            } catch (Throwable t) {
+                log("Named pipe IPC send failed for action '" + action + "': " + t.getMessage());
             }
         } catch (Throwable t) {
-            log("Named pipe IPC failed for action '" + action + "': " + t.getMessage());
+            log("IPC JSON creation error: " + t.getMessage());
         }
 
-        // Fallback: Launch SCMT directly with arguments
         return launchScmtFallback(action, payload, rawData);
     }
 
@@ -1042,7 +1454,6 @@ public class FormGenAgent {
             return scmtPath;
         }
 
-        // Look for running AMFormsCST.Desktop.exe process or standard dev paths
         String devPath = "D:\\source\\TheHeartOfFire\\Solera-Case-Management-System\\AMFormsCST.Desktop\\bin\\Debug\\net9.0-windows10.0.19041.0\\AMFormsCST.Desktop.exe";
         if (new File(devPath).exists()) return devPath;
 
@@ -1052,22 +1463,27 @@ public class FormGenAgent {
         return null;
     }
 
-    public static void refreshLiveVariablesFromPipe() {
-        RandomAccessFile pipe = null;
-        try {
-            pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
-            String req = "{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n";
-            pipe.write(req.getBytes("UTF-8"));
-            String line = pipe.readLine();
-            if (line != null && !line.trim().isEmpty()) {
-                updateLiveVariablesFromJson(line);
+    public static void refreshLiveVariablesAsync() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    File pipeFile = new File("\\\\.\\pipe\\SoleraCMS_IPC");
+                    if (pipeFile.exists()) {
+                        FileOutputStream fos = new FileOutputStream(pipeFile);
+                        BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(pipeFile), "UTF-8"));
+                        fos.write("{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n".getBytes("UTF-8"));
+                        fos.flush();
+                        String line = br.readLine();
+                        fos.close();
+                        br.close();
+                        if (line != null && !line.trim().isEmpty()) {
+                            updateLiveVariablesFromJson(line);
+                        }
+                    }
+                } catch (Throwable ignored) {}
             }
-        } catch (Throwable ignored) {
-        } finally {
-            if (pipe != null) {
-                try { pipe.close(); } catch (Throwable ignored) {}
-            }
-        }
+        }, "FormGenAgent-VarSync").start();
     }
 
     public static void updateLiveVariablesFromJson(String json) {
