@@ -1418,21 +1418,26 @@ public class FormGenAgent {
             }
             json.append("}\n");
 
+            RandomAccessFile pipe = null;
             try {
-                File pipeFile = new File("\\\\.\\pipe\\SoleraCMS_IPC");
-                if (pipeFile.exists()) {
-                    FileOutputStream fos = new FileOutputStream(pipeFile);
-                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(pipeFile), "UTF-8"));
-                    fos.write(json.toString().getBytes("UTF-8"));
-                    fos.flush();
-                    String response = br.readLine();
-                    fos.close();
-                    br.close();
-                    log("IPC message '" + action + "' successfully sent to SoleraCMS. Response: " + response);
-                    return true;
+                pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
+                pipe.write(json.toString().getBytes("UTF-8"));
+
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                int b;
+                while ((b = pipe.read()) != -1) {
+                    if (b == '\n') break;
+                    if (b != '\r') bos.write(b);
                 }
+                String response = new String(bos.toByteArray(), "UTF-8");
+                log("IPC message '" + action + "' successfully sent to SoleraCMS. Response: " + response);
+                return true;
             } catch (Throwable t) {
                 log("Named pipe IPC send failed for action '" + action + "': " + t.getMessage());
+            } finally {
+                if (pipe != null) {
+                    try { pipe.close(); } catch (Throwable ignored) {}
+                }
             }
         } catch (Throwable t) {
             log("IPC JSON creation error: " + t.getMessage());
@@ -1480,11 +1485,46 @@ public class FormGenAgent {
             return scmtPath;
         }
 
-        String devPath = "D:\\source\\TheHeartOfFire\\Solera-Case-Management-System\\AMFormsCST.Desktop\\bin\\Debug\\net9.0-windows10.0.19041.0\\AMFormsCST.Desktop.exe";
-        if (new File(devPath).exists()) return devPath;
+        // 1. Query registered SCMT context menu command in registry
+        try {
+            Process process = Runtime.getRuntime().exec("reg query HKCU\\Software\\Classes\\formgenfile\\shell\\OpenInSoleraUtils\\command /ve");
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.contains("REG_SZ")) {
+                    String val = line.substring(line.indexOf("REG_SZ") + 6).trim();
+                    if (val.startsWith("\"")) {
+                        int endQuote = val.indexOf("\"", 1);
+                        if (endQuote > 1) {
+                            String exe = val.substring(1, endQuote);
+                            if (new File(exe).exists()) {
+                                scmtPath = exe;
+                                return exe;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
 
-        String appDataPath = System.getenv("LOCALAPPDATA") + "\\AMFormsCST.Desktop\\current\\AMFormsCST.Desktop.exe";
-        if (new File(appDataPath).exists()) return appDataPath;
+        // 2. Candidate developer and installed paths
+        String userName = System.getProperty("user.name");
+        String localAppData = System.getenv("LOCALAPPDATA");
+        String[] candidatePaths = new String[] {
+            "C:\\Users\\" + userName + "\\source\\repos\\TheHeartOfFire\\Solera-Case-Management-System\\AMFormsCST.Desktop\\bin\\Debug\\net9.0-windows\\AMFormsCST.Desktop.exe",
+            "D:\\source\\TheHeartOfFire\\Solera-Case-Management-System\\AMFormsCST.Desktop\\bin\\Debug\\net9.0-windows10.0.19041.0\\AMFormsCST.Desktop.exe",
+            "D:\\source\\TheHeartOfFire\\Solera-Case-Management-System\\AMFormsCST.Desktop\\bin\\Debug\\net9.0-windows\\AMFormsCST.Desktop.exe",
+            localAppData != null ? localAppData + "\\SoleraCaseManagementTool\\current\\AMFormsCST.Desktop.exe" : null,
+            localAppData != null ? localAppData + "\\SoleraCaseManagementTool\\current\\SoleraCaseManagementTool.exe" : null,
+            localAppData != null ? localAppData + "\\AMFormsCST.Desktop\\current\\AMFormsCST.Desktop.exe" : null
+        };
+
+        for (String p : candidatePaths) {
+            if (p != null && new File(p).exists()) {
+                scmtPath = p;
+                return p;
+            }
+        }
 
         return null;
     }
@@ -1493,21 +1533,26 @@ public class FormGenAgent {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                RandomAccessFile pipe = null;
                 try {
-                    File pipeFile = new File("\\\\.\\pipe\\SoleraCMS_IPC");
-                    if (pipeFile.exists()) {
-                        FileOutputStream fos = new FileOutputStream(pipeFile);
-                        BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(pipeFile), "UTF-8"));
-                        fos.write("{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n".getBytes("UTF-8"));
-                        fos.flush();
-                        String line = br.readLine();
-                        fos.close();
-                        br.close();
-                        if (line != null && !line.trim().isEmpty()) {
-                            updateLiveVariablesFromJson(line);
-                        }
+                    pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
+                    pipe.write("{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n".getBytes("UTF-8"));
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    int b;
+                    while ((b = pipe.read()) != -1) {
+                        if (b == '\n') break;
+                        if (b != '\r') bos.write(b);
                     }
-                } catch (Throwable ignored) {}
+                    String line = new String(bos.toByteArray(), "UTF-8");
+                    if (!line.trim().isEmpty()) {
+                        updateLiveVariablesFromJson(line);
+                    }
+                } catch (Throwable ignored) {
+                } finally {
+                    if (pipe != null) {
+                        try { pipe.close(); } catch (Throwable ignored) {}
+                    }
+                }
             }
         }, "FormGenAgent-VarSync").start();
     }
