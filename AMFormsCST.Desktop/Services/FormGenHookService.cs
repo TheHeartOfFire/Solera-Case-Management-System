@@ -170,23 +170,34 @@ public class FormGenHookService : IHostedService, IDisposable
 
         try
         {
+            if (processId == Environment.ProcessId) return false;
+
             using var proc = Process.GetProcessById((int)processId);
             var procName = proc.ProcessName;
 
-            var titleBuilder = new StringBuilder(256);
-            GetWindowText(rootHwnd, titleBuilder, titleBuilder.Capacity);
-            var title = titleBuilder.ToString();
+            // Never intercept Windows Explorer or desktop shell
+            if (procName.Equals("explorer", StringComparison.OrdinalIgnoreCase) ||
+                procName.Equals("ShellExperienceHost", StringComparison.OrdinalIgnoreCase) ||
+                procName.Equals("StartMenuExperienceHost", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
 
             var classBuilder = new StringBuilder(256);
             GetClassName(rootHwnd, classBuilder, classBuilder.Capacity);
             var className = classBuilder.ToString();
 
+            var titleBuilder = new StringBuilder(256);
+            GetWindowText(rootHwnd, titleBuilder, titleBuilder.Capacity);
+            var title = titleBuilder.ToString();
+
             bool isJavaProcess = procName.Contains("java", StringComparison.OrdinalIgnoreCase);
+            bool isSunAwtClass = className.StartsWith("SunAwt", StringComparison.OrdinalIgnoreCase);
             bool isFormgenTitle = title.Contains("Formgen", StringComparison.OrdinalIgnoreCase) ||
                                   title.Contains("Form Generator", StringComparison.OrdinalIgnoreCase);
-            bool isSunAwtClass = className.StartsWith("SunAwt", StringComparison.OrdinalIgnoreCase);
 
-            return isJavaProcess || isFormgenTitle || isSunAwtClass;
+            // Must be a Java process or SunAwt window AND relate to FormGen
+            return (isJavaProcess || isSunAwtClass) && (isFormgenTitle || isSunAwtClass);
         }
         catch
         {
