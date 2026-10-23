@@ -1,9 +1,9 @@
-﻿{
+{
     "name":  "com.solera.cms.bridge",
     "description":  "Solera CMS \u0026 Citadel Native Messaging Bridge",
-    "path":  "D:\\source\\TheHeartOfFire\\Solera-Case-Management-System\\AMFormsCST.Desktop\\bin\\Debug\\net9.0-windows\\AMFormsCST.Desktop.exe",
+    "path": "D:\\source\\TheHeartOfFire\\Solera-Case-Management-System\\AMFormsCST.Test\\bin\\Debug\\net9.0-windows\\testhost.exe",
     "type":  "stdio",
     "allowed_origins":  [
-                            "chrome-extension://*/"
+                            "chrome-extension://epjedpmecdfdbfalaklkfbjcpacpfhlp/"
                         ]
 }

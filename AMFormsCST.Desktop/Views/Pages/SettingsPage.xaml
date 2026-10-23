@@ -100,6 +100,64 @@
                 </StackPanel>
             </ui:CardControl>
 
+            <!--  Browser Integration Section  -->
+            <ui:CardControl Margin="0,0,0,10" Header="Browser Integration">
+                <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,10"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Integrate Solera CMS with Opera GX, Microsoft Edge, and Chrome for right-click FormGen code block parsing and live dashboard paste." />
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock FontWeight="Medium" Text="Native Messaging Bridge" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="{Binding BrowserBridgeStatus}" />
+                        </StackPanel>
+                        <ui:Button
+                            Grid.Column="1"
+                            Content="Register Bridge"
+                            Appearance="Primary"
+                            Icon="{ui:SymbolIcon CheckmarkCircle24}"
+                            Command="{Binding RegisterBrowserBridgeCommand}" />
+                    </Grid>
+
+                    <TextBlock Margin="0,4,0,6" FontWeight="Medium" Text="Launch Browser with Extension" />
+                    <TextBlock
+                        Margin="0,0,0,10"
+                        FontSize="12"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="One-click setup: registers native messaging and launches your browser with the extension automatically loaded." />
+
+                    <WrapPanel Orientation="Horizontal">
+                        <ui:Button
+                            Margin="0,0,8,8"
+                            Content="Install in Opera GX"
+                            Appearance="Secondary"
+                            Icon="{ui:SymbolIcon Globe24}"
+                            Command="{Binding LaunchOperaGXExtensionCommand}" />
+                        <ui:Button
+                            Margin="0,0,8,8"
+                            Content="Install in Microsoft Edge"
+                            Appearance="Secondary"
+                            Icon="{ui:SymbolIcon Globe24}"
+                            Command="{Binding LaunchEdgeExtensionCommand}" />
+                        <ui:Button
+                            Margin="0,0,8,8"
+                            Content="Install in Chrome"
+                            Appearance="Secondary"
+                            Icon="{ui:SymbolIcon Globe24}"
+                            Command="{Binding LaunchChromeExtensionCommand}" />
+                    </WrapPanel>
+                </StackPanel>
+            </ui:CardControl>
+
             <!--  About Section  -->
             <ui:CardControl Header="About">
                 <StackPanel>

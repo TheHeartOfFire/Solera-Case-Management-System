@@ -16,6 +16,7 @@ public partial class SettingsViewModel : ViewModel
     private readonly ISupportTool _supportTool;
     private readonly IBugReportService _bugReportService;
     private readonly Services.Interfaces.IWindowsExplorerContextMenuService? _explorerContextMenuService;
+    private readonly Services.Interfaces.IBrowserIntegrationService? _browserIntegrationService;
     private readonly ILogService? _logger;
     private bool _isInitialized = false;
 
@@ -43,17 +44,31 @@ public partial class SettingsViewModel : ViewModel
     [ObservableProperty]
     private string _formGenExecutablePath = string.Empty;
 
+    [ObservableProperty]
+    private string _browserBridgeStatus = string.Empty;
+
+    [ObservableProperty]
+    private bool _isOperaGXInstalled;
+
+    [ObservableProperty]
+    private bool _isEdgeInstalled;
+
+    [ObservableProperty]
+    private bool _isChromeInstalled;
+
     public SettingsViewModel(
         IUpdateManagerService updateManagerService,
         ISupportTool supportTool,
         IBugReportService bugReportService,
         Services.Interfaces.IWindowsExplorerContextMenuService? explorerContextMenuService = null,
+        Services.Interfaces.IBrowserIntegrationService? browserIntegrationService = null,
         ILogService? logger = null)
     {
         _updateManagerService = updateManagerService;
         _supportTool = supportTool;
         _bugReportService = bugReportService;
         _explorerContextMenuService = explorerContextMenuService;
+        _browserIntegrationService = browserIntegrationService;
         _logger = logger;
         _logger?.LogInfo("SettingsViewModel initialized.");
 
@@ -88,6 +103,8 @@ public partial class SettingsViewModel : ViewModel
         ExtSeparator = userSettings.ExtSeparator;
         EnableExplorerContextMenu = userSettings.EnableExplorerContextMenu;
         FormGenExecutablePath = userSettings.FormGenExecutablePath;
+
+        UpdateBrowserStatus();
 
         _isInitialized = true;
         _logger?.LogInfo("SettingsViewModel initialized and settings loaded.");
@@ -203,6 +220,53 @@ public partial class SettingsViewModel : ViewModel
     private async Task ReportBug()
     {
         await _bugReportService.CreateBugReportAsync();
+    }
+
+    public void UpdateBrowserStatus()
+    {
+        if (_browserIntegrationService != null)
+        {
+            IsOperaGXInstalled = _browserIntegrationService.IsBrowserInstalled(Services.Interfaces.BrowserType.OperaGX);
+            IsEdgeInstalled = _browserIntegrationService.IsBrowserInstalled(Services.Interfaces.BrowserType.Edge);
+            IsChromeInstalled = _browserIntegrationService.IsBrowserInstalled(Services.Interfaces.BrowserType.Chrome);
+
+            bool isReg = _browserIntegrationService.IsRegistered();
+            BrowserBridgeStatus = isReg
+                ? $"Registered & Ready (ID: {_browserIntegrationService.ExtensionId})"
+                : "Not Registered (Click 'Register Bridge' to connect)";
+        }
+        else
+        {
+            BrowserBridgeStatus = "Service unavailable";
+        }
+    }
+
+    [RelayCommand]
+    private void RegisterBrowserBridge()
+    {
+        _browserIntegrationService?.RegisterNativeMessagingHost();
+        UpdateBrowserStatus();
+    }
+
+    [RelayCommand]
+    private void LaunchOperaGXExtension()
+    {
+        _browserIntegrationService?.LaunchBrowserWithExtension(Services.Interfaces.BrowserType.OperaGX);
+        UpdateBrowserStatus();
+    }
+
+    [RelayCommand]
+    private void LaunchEdgeExtension()
+    {
+        _browserIntegrationService?.LaunchBrowserWithExtension(Services.Interfaces.BrowserType.Edge);
+        UpdateBrowserStatus();
+    }
+
+    [RelayCommand]
+    private void LaunchChromeExtension()
+    {
+        _browserIntegrationService?.LaunchBrowserWithExtension(Services.Interfaces.BrowserType.Chrome);
+        UpdateBrowserStatus();
     }
 
     private static string GetAppVersion() => FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileVersion ?? "1.0.0";

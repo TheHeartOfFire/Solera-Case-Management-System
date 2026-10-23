@@ -112,6 +112,7 @@ public partial class App : Application
                 _ = services.AddSingleton<WindowsProviderService>();
                 _ = services.AddSingleton<IBugReportService, BugReportService>();
                 _ = services.AddSingleton<IWindowsExplorerContextMenuService, WindowsExplorerContextMenuService>();
+                _ = services.AddSingleton<IBrowserIntegrationService, BrowserIntegrationService>();
 
                 _ = services.AddSingleton<DashboardPage>();
                 _ = services.AddSingleton<DashboardViewModel>();
