@@ -60,6 +60,10 @@ public class FormGenAgent {
             return;
         }
 
+        try {
+            new ClientHandler(null);
+        } catch (Throwable ignored) {}
+
         startIpcServer();
         setupContextMenuHook();
 
@@ -443,63 +447,85 @@ public class FormGenAgent {
                     fw.close();
 
                     while (!serverSocket.isClosed()) {
-                        final Socket socket = serverSocket.accept();
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    BufferedReader br = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
-                                    String line = br.readLine();
-                                    if (line != null) {
-                                        line = cleanFilePath(line);
-                                        if (line.equalsIgnoreCase("STATUS")) {
-                                            String st = getStatus();
-                                            OutputStream out = socket.getOutputStream();
-                                            out.write((st + "\n").getBytes("UTF-8"));
-                                            out.flush();
-                                            activateMainShell();
-                                        } else if (line.startsWith("OPEN:")) {
-                                            String target = line.substring(5).trim();
-                                            openFile(target);
-                                            OutputStream out = socket.getOutputStream();
-                                            out.write("OK\n".getBytes("UTF-8"));
-                                            out.flush();
-                                        } else if (line.startsWith("SCMT_PATH:")) {
-                                            scmtPath = line.substring(10).trim();
-                                            log("Updated SCMT executable path: " + scmtPath);
-                                            OutputStream out = socket.getOutputStream();
-                                            out.write("OK\n".getBytes("UTF-8"));
-                                            out.flush();
-                                        } else if (line.startsWith("VARS:")) {
-                                            String varsJson = line.substring(5).trim();
-                                            updateLiveVariablesFromJson(varsJson);
-                                            OutputStream out = socket.getOutputStream();
-                                            out.write("OK\n".getBytes("UTF-8"));
-                                            out.flush();
-                                        } else if (line.equalsIgnoreCase("GET_ACTIVE_FORM")) {
-                                            String formPath = getActiveFormFilePath();
-                                            OutputStream out = socket.getOutputStream();
-                                            out.write(((formPath != null ? formPath : "") + "\n").getBytes("UTF-8"));
-                                            out.flush();
-                                        } else if (!line.isEmpty()) {
-                                            openFile(line);
-                                            OutputStream out = socket.getOutputStream();
-                                            out.write("OK\n".getBytes("UTF-8"));
-                                            out.flush();
-                                        }
-                                    }
-                                    socket.close();
-                                } catch (Throwable ignored) {}
-                            }
-                        }).start();
+                        try {
+                            final Socket socket = serverSocket.accept();
+                            new Thread(new ClientHandler(socket), "FormGenAgent-Client").start();
+                        } catch (Throwable clientErr) {
+                            log("IPC Server accept error: " + clientErr.getMessage());
+                        }
                     }
                 } catch (Throwable t) {
-                    log("IPC Server error: " + t.getMessage());
+                    log("IPC Server fatal error: " + t.getMessage());
                 }
             }
         }, "FormGenAgent-IPC");
         serverThread.setDaemon(true);
         serverThread.start();
+    }
+
+    private static class ClientHandler implements Runnable {
+        private final Socket socket;
+        ClientHandler(Socket socket) {
+            this.socket = socket;
+        }
+
+        @Override
+        public void run() {
+            if (socket == null) return;
+            try {
+                handleClient(socket);
+            } catch (Throwable ignored) {
+            } finally {
+                try { socket.close(); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
+    private static void handleClient(Socket socket) {
+        try {
+            BufferedReader br = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
+            String line = br.readLine();
+            if (line != null) {
+                line = cleanFilePath(line);
+                if (line.equalsIgnoreCase("STATUS")) {
+                    String st = getStatus();
+                    OutputStream out = socket.getOutputStream();
+                    out.write((st + "\n").getBytes("UTF-8"));
+                    out.flush();
+                    activateMainShell();
+                } else if (line.startsWith("OPEN:")) {
+                    String target = line.substring(5).trim();
+                    openFile(target);
+                    OutputStream out = socket.getOutputStream();
+                    out.write("OK\n".getBytes("UTF-8"));
+                    out.flush();
+                } else if (line.startsWith("SCMT_PATH:")) {
+                    scmtPath = line.substring(10).trim();
+                    log("Updated SCMT executable path: " + scmtPath);
+                    OutputStream out = socket.getOutputStream();
+                    out.write("OK\n".getBytes("UTF-8"));
+                    out.flush();
+                } else if (line.startsWith("VARS:")) {
+                    String varsJson = line.substring(5).trim();
+                    updateLiveVariablesFromJson(varsJson);
+                    OutputStream out = socket.getOutputStream();
+                    out.write("OK\n".getBytes("UTF-8"));
+                    out.flush();
+                } else if (line.equalsIgnoreCase("GET_ACTIVE_FORM")) {
+                    String formPath = getActiveFormFilePath();
+                    OutputStream out = socket.getOutputStream();
+                    out.write(((formPath != null ? formPath : "") + "\n").getBytes("UTF-8"));
+                    out.flush();
+                } else if (!line.isEmpty()) {
+                    openFile(line);
+                    OutputStream out = socket.getOutputStream();
+                    out.write("OK\n".getBytes("UTF-8"));
+                    out.flush();
+                }
+            }
+        } catch (Throwable t) {
+            log("Error handling IPC client: " + t.getMessage());
+        }
     }
 
     private static void activateMainShell() {
