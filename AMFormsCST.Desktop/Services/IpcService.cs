@@ -305,6 +305,9 @@ public class IpcService : IHostedService, IAsyncDisposable
                 return IpcResponse.Fail($"Unknown field '{field}'.");
         }
 
+        var updatedVars = GetLiveVariables();
+        _ = Task.Run(() => FormGenLauncherHelper.SyncStateToAgent(updatedVars, Environment.ProcessPath, _logger));
+
         return IpcResponse.Ok($"Dashboard field '{field}' updated.");
     }
 
@@ -357,6 +360,9 @@ public class IpcService : IHostedService, IAsyncDisposable
 
         _dashboardViewModel.Notes.Add(newNote);
         newNote.Select();
+
+        var loadedVars = GetLiveVariables();
+        _ = Task.Run(() => FormGenLauncherHelper.SyncStateToAgent(loadedVars, Environment.ProcessPath, _logger));
 
         BringWindowToFront();
         return IpcResponse.Ok("New case loaded into Dashboard successfully.");

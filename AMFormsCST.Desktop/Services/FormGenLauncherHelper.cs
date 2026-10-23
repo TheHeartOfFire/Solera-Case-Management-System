@@ -105,6 +105,138 @@ public static class FormGenLauncherHelper
     }
 
     /// <summary>
+    /// Checks whether FormGenAgent is actively listening on localhost TCP.
+    /// </summary>
+    public static bool IsAgentActive()
+    {
+        try
+        {
+            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            if (!File.Exists(portFilePath))
+                return false;
+
+            var portText = File.ReadAllText(portFilePath).Trim();
+            if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
+                return false;
+
+            using var client = new TcpClient();
+            var connectTask = client.ConnectAsync("127.0.0.1", port);
+            if (!connectTask.Wait(300))
+            {
+                client.Close();
+                return false;
+            }
+
+            using var stream = client.GetStream();
+            using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+            using var reader = new StreamReader(stream, new UTF8Encoding(false));
+
+            writer.WriteLine("STATUS");
+            var response = reader.ReadLine();
+            return !string.IsNullOrWhiteSpace(response);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Sends current live variables and SCMT executable path to FormGenAgent via TCP socket.
+    /// </summary>
+    public static bool SyncStateToAgent(AMFormsCST.Core.Types.IPC.IpcLiveVariables? vars = null, string? scmtExecutablePath = null, ILogService? logger = null)
+    {
+        try
+        {
+            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            if (!File.Exists(portFilePath))
+                return false;
+
+            var portText = File.ReadAllText(portFilePath).Trim();
+            if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
+                return false;
+
+            using var client = new TcpClient();
+            var connectTask = client.ConnectAsync("127.0.0.1", port);
+            if (!connectTask.Wait(500))
+            {
+                client.Close();
+                return false;
+            }
+
+            using var stream = client.GetStream();
+            using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+            using var reader = new StreamReader(stream, new UTF8Encoding(false));
+
+            if (!string.IsNullOrWhiteSpace(scmtExecutablePath))
+            {
+                writer.WriteLine($"SCMT_PATH:{scmtExecutablePath}");
+                var resp = reader.ReadLine();
+                logger?.LogDebug($"FormGenAgent SCMT_PATH response: {resp}");
+            }
+
+            if (vars != null)
+            {
+                var dict = vars.ToDictionary();
+                var json = System.Text.Json.JsonSerializer.Serialize(dict);
+                writer.WriteLine($"VARS:{json}");
+                var resp = reader.ReadLine();
+                logger?.LogDebug($"FormGenAgent VARS response: {resp}");
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning($"Failed to sync state to FormGenAgent: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Queries FormGenAgent for the currently open .formgen or .fga file path.
+    /// </summary>
+    public static string? GetActiveFormFromAgent(ILogService? logger = null)
+    {
+        try
+        {
+            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            if (!File.Exists(portFilePath))
+                return null;
+
+            var portText = File.ReadAllText(portFilePath).Trim();
+            if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
+                return null;
+
+            using var client = new TcpClient();
+            var connectTask = client.ConnectAsync("127.0.0.1", port);
+            if (!connectTask.Wait(500))
+            {
+                client.Close();
+                return null;
+            }
+
+            using var stream = client.GetStream();
+            using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+            using var reader = new StreamReader(stream, new UTF8Encoding(false));
+
+            writer.WriteLine("GET_ACTIVE_FORM");
+            var response = reader.ReadLine();
+            if (!string.IsNullOrWhiteSpace(response))
+            {
+                return response.Trim();
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning($"Failed to get active form from FormGenAgent: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Resolves the path to NewFormGen.bat.
     /// </summary>
     public static string? ResolveFormGenBatchPath(string? explicitPath = null)
@@ -147,10 +279,7 @@ public static class FormGenLauncherHelper
                 return;
 
             var agentDest = Path.Combine(dir, "FormGenAgent.jar");
-            if (!File.Exists(agentDest))
-            {
-                ExtractEmbeddedAgent(agentDest, logger);
-            }
+            ExtractEmbeddedAgent(agentDest, logger);
 
             if (File.Exists(batPath))
             {
@@ -219,6 +348,9 @@ public static class FormGenLauncherHelper
                 using var stream = assembly.GetManifestResourceStream(resourceName);
                 if (stream != null)
                 {
+                    if (File.Exists(destPath) && new FileInfo(destPath).Length == stream.Length)
+                        return;
+
                     using var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write);
                     stream.CopyTo(fs);
                     logger?.LogInfo($"Extracted FormGenAgent.jar to '{destPath}'.");
@@ -229,6 +361,9 @@ public static class FormGenLauncherHelper
             var localTool = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Tools\FormGenAgent\FormGenAgent.jar");
             if (File.Exists(localTool))
             {
+                if (File.Exists(destPath) && new FileInfo(destPath).Length == new FileInfo(localTool).Length)
+                    return;
+
                 File.Copy(localTool, destPath, true);
                 logger?.LogInfo($"Copied FormGenAgent.jar from Tools to '{destPath}'.");
             }

@@ -106,6 +106,16 @@ public class FormGenHookService : IHostedService, IDisposable
             {
                 _logger.LogInfo("FormGen low-level mouse hook installed successfully.");
             }
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    var vars = _ipcService.GetLiveVariables();
+                    FormGenLauncherHelper.SyncStateToAgent(vars, Environment.ProcessPath, _logger);
+                }
+                catch {}
+            });
         }
         catch (Exception ex)
         {
@@ -143,7 +153,9 @@ public class FormGenHookService : IHostedService, IDisposable
                 else
                 {
                     // Layer 2: Companion Anchor flyout alongside native FormGen menu
-                    if (IsFormGenWindowAt(hookStruct.pt, out IntPtr rootHwnd))
+                    // When FormGenAgent is active, native SWT context menu items are injected directly inside FormGen.
+                    // We only display the external companion window as a fallback if the agent is not active.
+                    if (!FormGenLauncherHelper.IsAgentActive() && IsFormGenWindowAt(hookStruct.pt, out IntPtr rootHwnd))
                     {
                         _dispatcher.BeginInvoke(() => ShowQuickPaste(hookStruct.pt, rootHwnd, offsetForCompanion: true));
                     }
