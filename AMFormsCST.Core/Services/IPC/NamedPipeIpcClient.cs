@@ -27,17 +27,19 @@ public static class NamedPipeIpcClient
             using var timeoutCts = new CancellationTokenSource(timeoutMs);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-            await clientStream.ConnectAsync(timeoutMs, linkedCts.Token);
+            await clientStream.ConnectAsync(timeoutMs, linkedCts.Token)
+                .WaitAsync(TimeSpan.FromMilliseconds(timeoutMs), linkedCts.Token)
+                .ConfigureAwait(false);
 
             var encoding = new UTF8Encoding(false);
             using var reader = new StreamReader(clientStream, encoding, leaveOpen: true);
             using var writer = new StreamWriter(clientStream, encoding, leaveOpen: true);
 
             var messageJson = JsonSerializer.Serialize(message);
-            await writer.WriteLineAsync(messageJson.AsMemory(), linkedCts.Token);
-            await writer.FlushAsync(linkedCts.Token);
+            await writer.WriteLineAsync(messageJson.AsMemory(), linkedCts.Token).ConfigureAwait(false);
+            await writer.FlushAsync(linkedCts.Token).ConfigureAwait(false);
 
-            var responseLine = await reader.ReadLineAsync(linkedCts.Token);
+            var responseLine = await reader.ReadLineAsync(linkedCts.Token).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(responseLine))
             {
                 return IpcResponse.Fail("Empty response from IPC server.");

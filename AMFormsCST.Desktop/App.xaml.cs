@@ -304,11 +304,15 @@ public partial class App : Application
     {
         try
         {
+            var debugLogPath = System.IO.Path.Combine(AppContext.BaseDirectory, "logs", "secondary_launch.log");
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(debugLogPath)!);
+            System.IO.File.AppendAllText(debugLogPath, $"[{DateTime.Now:O}] HandleSecondInstanceLaunch PID={Environment.ProcessId} Args=[{string.Join(", ", args ?? Array.Empty<string>())}]\n");
+
             if (args != null && args.Length > 0)
             {
                 if (args.Any(a => a.Contains("--native-messaging", StringComparison.OrdinalIgnoreCase) || a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase)))
                 {
-                    NativeMessagingBridge.RunAsync().GetAwaiter().GetResult();
+                    Task.Run(() => NativeMessagingBridge.RunAsync()).GetAwaiter().GetResult();
                     return;
                 }
 
@@ -337,7 +341,8 @@ public partial class App : Application
                         Action = IpcActions.OpenFormgen,
                         Payload = { ["filePath"] = targetFilePath }
                     };
-                    var response = NamedPipeIpcClient.SendMessageAsync(msg, timeoutMs: 3000).GetAwaiter().GetResult();
+                    var response = Task.Run(() => NamedPipeIpcClient.SendMessageAsync(msg, timeoutMs: 3000)).GetAwaiter().GetResult();
+                    System.IO.File.AppendAllText(debugLogPath, $"[{DateTime.Now:O}] OpenFormgen IPC result: Success={response.Success}, Msg={response.Message}\n");
                     if (response.Success)
                     {
                         return;
@@ -350,9 +355,18 @@ public partial class App : Application
                 Target = "SoleraCMS",
                 Action = IpcActions.BringToFront
             };
-            NamedPipeIpcClient.SendMessageAsync(bringFrontMsg, timeoutMs: 3000).GetAwaiter().GetResult();
+            var bfResponse = Task.Run(() => NamedPipeIpcClient.SendMessageAsync(bringFrontMsg, timeoutMs: 3000)).GetAwaiter().GetResult();
+            System.IO.File.AppendAllText(debugLogPath, $"[{DateTime.Now:O}] BringToFront IPC result: Success={bfResponse.Success}, Msg={bfResponse.Message}\n");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            try
+            {
+                var debugLogPath = System.IO.Path.Combine(AppContext.BaseDirectory, "logs", "secondary_launch.log");
+                System.IO.File.AppendAllText(debugLogPath, $"[{DateTime.Now:O}] Exception: {ex}\n");
+            }
+            catch { }
+        }
     }
 
     /// <summary>
@@ -380,8 +394,15 @@ public partial class App : Application
 
         try
         {
-            _host.StopAsync().Wait(TimeSpan.FromSeconds(2));
-            _host.Dispose();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _host.StopAsync().ConfigureAwait(false);
+                    _host.Dispose();
+                }
+                catch { }
+            });
         }
         catch { }
 

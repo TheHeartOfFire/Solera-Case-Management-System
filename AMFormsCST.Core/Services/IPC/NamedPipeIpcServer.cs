@@ -98,7 +98,7 @@ public class NamedPipeIpcServer : IAsyncDisposable
                     try { serverStream?.Dispose(); } catch { }
                 }))
                 {
-                    await serverStream.WaitForConnectionAsync(ct);
+                    await serverStream.WaitForConnectionAsync(ct).ConfigureAwait(false);
                 }
 
                 _currentServerStream = null;
@@ -119,7 +119,7 @@ public class NamedPipeIpcServer : IAsyncDisposable
             {
                 serverStream?.Dispose();
                 if (ct.IsCancellationRequested) break;
-                await Task.Delay(200, ct); // Brief pause before retry on transient error
+                await Task.Delay(200, ct).ConfigureAwait(false); // Brief pause before retry on transient error
             }
         }
     }
@@ -134,7 +134,7 @@ public class NamedPipeIpcServer : IAsyncDisposable
                 using var reader = new StreamReader(stream, encoding, leaveOpen: true);
                 using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
 
-                var jsonLine = await reader.ReadLineAsync(ct);
+                var jsonLine = await reader.ReadLineAsync(ct).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(jsonLine)) return;
 
                 IpcMessage? message;
@@ -145,23 +145,23 @@ public class NamedPipeIpcServer : IAsyncDisposable
                 catch (Exception ex)
                 {
                     var errResponse = IpcResponse.Fail($"Invalid JSON payload: {ex.Message}");
-                    await writer.WriteLineAsync(JsonSerializer.Serialize(errResponse));
-                    await writer.FlushAsync(ct);
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(errResponse)).ConfigureAwait(false);
+                    await writer.FlushAsync(ct).ConfigureAwait(false);
                     return;
                 }
 
                 if (message == null)
                 {
                     var nullResponse = IpcResponse.Fail("Message payload was null.");
-                    await writer.WriteLineAsync(JsonSerializer.Serialize(nullResponse));
-                    await writer.FlushAsync(ct);
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(nullResponse)).ConfigureAwait(false);
+                    await writer.FlushAsync(ct).ConfigureAwait(false);
                     return;
                 }
 
                 IpcResponse response;
                 try
                 {
-                    response = await _messageHandler(message);
+                    response = await _messageHandler(message).ConfigureAwait(false);
                 }
                 catch (Exception handlerEx)
                 {
@@ -169,8 +169,8 @@ public class NamedPipeIpcServer : IAsyncDisposable
                 }
 
                 var responseJson = JsonSerializer.Serialize(response);
-                await writer.WriteLineAsync(responseJson);
-                await writer.FlushAsync(ct);
+                await writer.WriteLineAsync(responseJson).ConfigureAwait(false);
+                await writer.FlushAsync(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { }
             catch { }
