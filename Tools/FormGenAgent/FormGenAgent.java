@@ -175,7 +175,20 @@ public class FormGenAgent {
     public static Object getDisplay() {
         try {
             Class<?> displayClass = Class.forName("org.eclipse.swt.widgets.Display");
-            return displayClass.getMethod("getDefault").invoke(null);
+            Field defaultField = displayClass.getDeclaredField("Default");
+            defaultField.setAccessible(true);
+            Object defaultDisplay = defaultField.get(null);
+            if (defaultDisplay != null) return defaultDisplay;
+
+            Field displaysField = displayClass.getDeclaredField("Displays");
+            displaysField.setAccessible(true);
+            Object[] displays = (Object[]) displaysField.get(null);
+            if (displays != null) {
+                for (Object d : displays) {
+                    if (d != null) return d;
+                }
+            }
+            return null;
         } catch (Throwable t) {
             return null;
         }
