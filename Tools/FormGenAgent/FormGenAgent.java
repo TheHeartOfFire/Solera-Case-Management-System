@@ -546,21 +546,25 @@ public class FormGenAgent {
             Object widget = widgetField.get(eventObj);
             if (widget == null || isDisposed(widget)) return;
 
+            Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
+            Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
+
             if (eventType == SWT_Show) {
                 // Fired before a Menu is displayed
-                if (widget.getClass().getName().equals("org.eclipse.swt.widgets.Menu")) {
+                if (menuClass.isInstance(widget)) {
                     Method getStyleMethod = widget.getClass().getMethod("getStyle");
                     int style = (Integer) getStyleMethod.invoke(widget);
+                    log("SWT.Show for Menu (style=" + style + ", isPopUp=" + ((style & SWT_POP_UP) != 0) + ")");
                     if ((style & SWT_POP_UP) != 0) {
                         injectSoleraMenuItems(display, widget);
                     }
                 }
             } else if (eventType == SWT_MenuDetect) {
                 // Fired when user right clicks on a Control
-                Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
                 if (controlClass.isInstance(widget)) {
                     Method getMenuMethod = widget.getClass().getMethod("getMenu");
                     Object existingMenu = getMenuMethod.invoke(widget);
+                    log("SWT.MenuDetect on Control: " + widget.getClass().getName() + " (existingMenu=" + (existingMenu != null) + ")");
                     if (existingMenu == null) {
                         attachMenuToControl(display, widget, eventObj);
                     }
@@ -573,6 +577,7 @@ public class FormGenAgent {
 
     private static void attachMenuToControl(Object display, Object control, Object eventObj) {
         try {
+            log("Attaching Solera dynamic popup menu to: " + control.getClass().getName());
             Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
             Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
             Constructor<?> menuCons = menuClass.getConstructor(controlClass);
@@ -598,6 +603,7 @@ public class FormGenAgent {
             // Suppress default OS menu
             Field doitField = eventObj.getClass().getField("doit");
             doitField.setBoolean(eventObj, false);
+            log("Successfully displayed attached Solera popup menu.");
         } catch (Throwable t) {
             log("Error in attachMenuToControl: " + t.getMessage());
         }
@@ -628,6 +634,7 @@ public class FormGenAgent {
 
     private static void injectSoleraMenuItems(final Object display, Object menu) {
         try {
+            log("injectSoleraMenuItems on Menu: " + menu.getClass().getName());
             // 1. Remove previous Solera items so we have a clean refresh with latest variables
             Method getItemsMethod = menu.getClass().getMethod("getItems");
             Object[] items = (Object[]) getItemsMethod.invoke(menu);
@@ -642,8 +649,8 @@ public class FormGenAgent {
                 }
             }
 
-            // 2. Refresh live variables from Named Pipe if SCMT is running
-            refreshLiveVariablesFromPipe();
+            // 2. Trigger asynchronous variable refresh in background so UI thread never stalls
+            refreshLiveVariablesAsync();
 
             // 3. Build Solera Tools hierarchy
             Class<?> menuItemClass = Class.forName("org.eclipse.swt.widgets.MenuItem");
@@ -970,20 +977,25 @@ public class FormGenAgent {
             }
             json.append("}\n");
 
-            RandomAccessFile pipe = null;
+            // Try named pipe
             try {
-                pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
-                pipe.write(json.toString().getBytes("UTF-8"));
-                String response = pipe.readLine();
-                log("IPC message '" + action + "' successfully sent to SoleraCMS. Response: " + response);
-                return true;
-            } finally {
-                if (pipe != null) {
-                    try { pipe.close(); } catch (Throwable ignored) {}
+                File pipeFile = new File("\\\\.\\pipe\\SoleraCMS_IPC");
+                if (pipeFile.exists()) {
+                    FileOutputStream fos = new FileOutputStream(pipeFile);
+                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(pipeFile), "UTF-8"));
+                    fos.write(json.toString().getBytes("UTF-8"));
+                    fos.flush();
+                    String response = br.readLine();
+                    fos.close();
+                    br.close();
+                    log("IPC message '" + action + "' successfully sent to SoleraCMS. Response: " + response);
+                    return true;
                 }
+            } catch (Throwable t) {
+                log("Named pipe IPC failed for action '" + action + "': " + t.getMessage());
             }
         } catch (Throwable t) {
-            log("Named pipe IPC failed for action '" + action + "': " + t.getMessage());
+            log("IPC JSON creation error: " + t.getMessage());
         }
 
         // Fallback: Launch SCMT directly with arguments
@@ -1039,22 +1051,27 @@ public class FormGenAgent {
         return null;
     }
 
-    public static void refreshLiveVariablesFromPipe() {
-        RandomAccessFile pipe = null;
-        try {
-            pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
-            String req = "{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n";
-            pipe.write(req.getBytes("UTF-8"));
-            String line = pipe.readLine();
-            if (line != null && !line.trim().isEmpty()) {
-                updateLiveVariablesFromJson(line);
+    public static void refreshLiveVariablesAsync() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    File pipeFile = new File("\\\\.\\pipe\\SoleraCMS_IPC");
+                    if (pipeFile.exists()) {
+                        FileOutputStream fos = new FileOutputStream(pipeFile);
+                        BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(pipeFile), "UTF-8"));
+                        fos.write("{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n".getBytes("UTF-8"));
+                        fos.flush();
+                        String line = br.readLine();
+                        fos.close();
+                        br.close();
+                        if (line != null && !line.trim().isEmpty()) {
+                            updateLiveVariablesFromJson(line);
+                        }
+                    }
+                } catch (Throwable ignored) {}
             }
-        } catch (Throwable ignored) {
-        } finally {
-            if (pipe != null) {
-                try { pipe.close(); } catch (Throwable ignored) {}
-            }
-        }
+        }, "FormGenAgent-VarSync").start();
     }
 
     public static void updateLiveVariablesFromJson(String json) {
