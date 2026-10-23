@@ -1,4 +1,8 @@
-# PowerShell script to register Solera CMS Native Messaging Host for Chrome and Microsoft Edge
+param(
+    [string]$ExtensionId
+)
+
+# PowerShell script to register Solera CMS Native Messaging Host for Chrome, Edge, and Opera GX
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $manifestPath = Join-Path $scriptDir "com.solera.cms.bridge.json"
 
@@ -22,24 +26,42 @@ if (-not $targetExe) {
     $targetExe = "AMFormsCST.Desktop.exe"
 }
 
-# Update manifest json path
+# Update manifest json path and allowed_origins
 $jsonContent = Get-Content $manifestPath -Raw | ConvertFrom-Json
 $jsonContent.path = $targetExe
+
+if ($ExtensionId) {
+    $cleanId = $ExtensionId.Trim().TrimStart("chrome-extension://").TrimEnd("/")
+    $origin = "chrome-extension://$cleanId/"
+    if (-not $jsonContent.allowed_origins) {
+        $jsonContent.allowed_origins = @()
+    }
+    if ($jsonContent.allowed_origins -notcontains $origin) {
+        $jsonContent.allowed_origins += $origin
+    }
+    Write-Host "Added allowed origin: $origin" -ForegroundColor Cyan
+}
+
 $jsonContent | ConvertTo-Json -Depth 5 | Set-Content $manifestPath -Encoding UTF8
 
 Write-Host "Updated $manifestPath with executable path: $targetExe"
 
-# Register in HKCU for Google Chrome
-$chromeKey = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.solera.cms.bridge"
-New-Item -Path $chromeKey -Force | Out-Null
-Set-ItemProperty -Path $chromeKey -Name "(Default)" -Value $manifestPath
-Write-Host "Registered Chrome host at: $chromeKey"
+$registryTargets = @(
+    @{ Name = "Google Chrome"; Key = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.solera.cms.bridge" },
+    @{ Name = "Microsoft Edge"; Key = "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.solera.cms.bridge" },
+    @{ Name = "Opera GX"; Key = "HKCU:\Software\Opera Software\Opera GX Stable\NativeMessagingHosts\com.solera.cms.bridge" },
+    @{ Name = "Opera Stable"; Key = "HKCU:\Software\Opera Software\Opera Stable\NativeMessagingHosts\com.solera.cms.bridge" }
+)
 
-# Register in HKCU for Microsoft Edge
-$edgeKey = "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.solera.cms.bridge"
-New-Item -Path $edgeKey -Force | Out-Null
-Set-ItemProperty -Path $edgeKey -Name "(Default)" -Value $manifestPath
-Write-Host "Registered Edge host at: $edgeKey"
+foreach ($target in $registryTargets) {
+    try {
+        New-Item -Path $target.Key -Force | Out-Null
+        Set-ItemProperty -Path $target.Key -Name "(Default)" -Value $manifestPath
+        Write-Host "Registered $($target.Name) host at: $($target.Key)"
+    } catch {
+        Write-Warning "Failed to register for $($target.Name): $_"
+    }
+}
 
-Write-Host "Solera CMS Native Messaging Host registered successfully!" -ForegroundColor Green
+Write-Host "`nSolera CMS Native Messaging Host registered successfully!" -ForegroundColor Green
 
