@@ -442,6 +442,7 @@ public class IpcService : IHostedService, IAsyncDisposable
             var vm = new CodeSnippetsViewModel(supportTool, _logger);
             if (!string.IsNullOrWhiteSpace(codeText))
             {
+                vm.ClearCanvas();
                 vm.PasteFormulaText(codeText.Trim());
             }
 

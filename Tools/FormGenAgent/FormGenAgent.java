@@ -22,14 +22,18 @@ public class FormGenAgent {
     private static final String LOG_FILE = System.getProperty("java.io.tmpdir") + File.separator + "formgen_agent.log";
 
     // SWT Constants
+    private static final int SWT_KeyDown = 1;
     private static final int SWT_SEPARATOR = 2;
     private static final int SWT_POP_UP = 8;
+    private static final int SWT_PUSH = 8;
     private static final int SWT_Selection = 13;
-    private static final int SWT_Activate = 26;
+    private static final int SWT_FocusIn = 15;
     private static final int SWT_Show = 22;
-    private static final int SWT_PUSH = 32;
+    private static final int SWT_Activate = 26;
     private static final int SWT_MenuDetect = 35;
     private static final int SWT_CASCADE = 64;
+    private static final int SWT_MOD1 = 262144;  // SWT.CONTROL
+    private static final int SWT_SHIFT = 131072; // SWT.SHIFT
 
     public static void log(String msg) {
         try {
@@ -638,6 +642,181 @@ public class FormGenAgent {
         }, "FormGenAgent-MenuHook").start();
     }
 
+    // ==========================================
+    // StyledText / RainbowParenText Undo Manager
+    // ==========================================
+
+    private static class EditRecord {
+        final int start;
+        final String insertedText;
+        final String replacedText;
+
+        EditRecord(int start, String insertedText, String replacedText) {
+            this.start = start;
+            this.insertedText = insertedText != null ? insertedText : "";
+            this.replacedText = replacedText != null ? replacedText : "";
+        }
+    }
+
+    private static class StyledTextUndoManager {
+        private final Object control;
+        private final LinkedList<EditRecord> undoStack = new LinkedList<EditRecord>();
+        private final LinkedList<EditRecord> redoStack = new LinkedList<EditRecord>();
+        private boolean isUndoing = false;
+        private static final int MAX_STACK_SIZE = 500;
+
+        StyledTextUndoManager(Object control) {
+            this.control = control;
+        }
+
+        public synchronized void recordChange(int start, String insertedText, String replacedText) {
+            if (isUndoing) return;
+            if (insertedText.isEmpty() && replacedText.isEmpty()) return;
+
+            undoStack.addLast(new EditRecord(start, insertedText, replacedText));
+            if (undoStack.size() > MAX_STACK_SIZE) {
+                undoStack.removeFirst();
+            }
+            redoStack.clear();
+        }
+
+        public synchronized boolean canUndo() {
+            return !undoStack.isEmpty();
+        }
+
+        public synchronized boolean canRedo() {
+            return !redoStack.isEmpty();
+        }
+
+        public synchronized void undo() {
+            if (undoStack.isEmpty() || control == null || isDisposed(control)) return;
+            final EditRecord rec = undoStack.removeLast();
+            isUndoing = true;
+            try {
+                Method replaceMethod = control.getClass().getMethod("replaceTextRange", int.class, int.class, String.class);
+                replaceMethod.invoke(control, rec.start, rec.insertedText.length(), rec.replacedText);
+
+                int newOffset = rec.start + rec.replacedText.length();
+                Method setSelectionMethod = control.getClass().getMethod("setSelection", int.class, int.class);
+                setSelectionMethod.invoke(control, newOffset, newOffset);
+
+                redoStack.addLast(rec);
+                if (redoStack.size() > MAX_STACK_SIZE) {
+                    redoStack.removeFirst();
+                }
+            } catch (Throwable t) {
+                log("Error during undo: " + t.getMessage());
+            } finally {
+                isUndoing = false;
+            }
+        }
+
+        public synchronized void redo() {
+            if (redoStack.isEmpty() || control == null || isDisposed(control)) return;
+            final EditRecord rec = redoStack.removeLast();
+            isUndoing = true;
+            try {
+                Method replaceMethod = control.getClass().getMethod("replaceTextRange", int.class, int.class, String.class);
+                replaceMethod.invoke(control, rec.start, rec.replacedText.length(), rec.insertedText);
+
+                int newOffset = rec.start + rec.insertedText.length();
+                Method setSelectionMethod = control.getClass().getMethod("setSelection", int.class, int.class);
+                setSelectionMethod.invoke(control, newOffset, newOffset);
+
+                undoStack.addLast(rec);
+                if (undoStack.size() > MAX_STACK_SIZE) {
+                    undoStack.removeFirst();
+                }
+            } catch (Throwable t) {
+                log("Error during redo: " + t.getMessage());
+            } finally {
+                isUndoing = false;
+            }
+        }
+    }
+
+    private static synchronized StyledTextUndoManager getOrCreateUndoManager(final Object control) {
+        if (control == null || isDisposed(control)) return null;
+        try {
+            Method getDataMethod = control.getClass().getMethod("getData", String.class);
+            Object existing = getDataMethod.invoke(control, "SoleraUndoManager");
+            if (existing instanceof StyledTextUndoManager) {
+                return (StyledTextUndoManager) existing;
+            }
+
+            final StyledTextUndoManager mgr = new StyledTextUndoManager(control);
+            Method setDataMethod = control.getClass().getMethod("setData", String.class, Object.class);
+            setDataMethod.invoke(control, "SoleraUndoManager", mgr);
+
+            Class<?> extModListenerClass = Class.forName("org.eclipse.swt.custom.ExtendedModifyListener");
+            InvocationHandler handler = new InvocationHandler() {
+                @Override
+                public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                    if ("modifyText".equals(method.getName()) && args != null && args.length == 1) {
+                        try {
+                            Object eventObj = args[0];
+                            Field startField = eventObj.getClass().getField("start");
+                            Field lengthField = eventObj.getClass().getField("length");
+                            Field replacedTextField = eventObj.getClass().getField("replacedText");
+
+                            int start = startField.getInt(eventObj);
+                            int length = lengthField.getInt(eventObj);
+                            String replacedText = (String) replacedTextField.get(eventObj);
+                            if (replacedText == null) replacedText = "";
+
+                            String insertedText = "";
+                            if (length > 0) {
+                                try {
+                                    Method getTextRangeMethod = control.getClass().getMethod("getTextRange", int.class, int.class);
+                                    insertedText = (String) getTextRangeMethod.invoke(control, start, length);
+                                } catch (Throwable ignored) {}
+                            }
+                            mgr.recordChange(start, insertedText, replacedText);
+                        } catch (Throwable t) {
+                            log("Error in modifyText handler: " + t.getMessage());
+                        }
+                    }
+                    return null;
+                }
+            };
+
+            Object listenerProxy = Proxy.newProxyInstance(
+                control.getClass().getClassLoader(),
+                new Class<?>[] { extModListenerClass },
+                handler
+            );
+
+            Method addListenerMethod = control.getClass().getMethod("addExtendedModifyListener", extModListenerClass);
+            addListenerMethod.invoke(control, listenerProxy);
+
+            log("Installed StyledTextUndoManager on: " + control.getClass().getName());
+            return mgr;
+        } catch (Throwable t) {
+            log("Error installing StyledTextUndoManager: " + t.getMessage());
+            return null;
+        }
+    }
+
+    private static void attachUndoManagersRecursively(Object parent) {
+        if (parent == null || isDisposed(parent)) return;
+        try {
+            String clsName = parent.getClass().getName();
+            if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
+                getOrCreateUndoManager(parent);
+            }
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            if (compositeClass.isInstance(parent)) {
+                Method getChildrenMethod = compositeClass.getMethod("getChildren");
+                Object[] children = (Object[]) getChildrenMethod.invoke(parent);
+                if (children != null) {
+                    for (Object c : children) {
+                        attachUndoManagersRecursively(c);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
     private static void installMenuFilters(final Object display) {
         try {
             Class<?> listenerClass = Class.forName("org.eclipse.swt.widgets.Listener");
@@ -659,11 +838,13 @@ public class FormGenAgent {
             );
 
             Method addFilterMethod = display.getClass().getMethod("addFilter", int.class, listenerClass);
+            addFilterMethod.invoke(display, SWT_KeyDown, listenerProxy);     // SWT.KeyDown = 1
+            addFilterMethod.invoke(display, SWT_FocusIn, listenerProxy);     // SWT.FocusIn = 15
             addFilterMethod.invoke(display, SWT_Show, listenerProxy);        // SWT.Show = 22
             addFilterMethod.invoke(display, SWT_Activate, listenerProxy);    // SWT.Activate = 26
             addFilterMethod.invoke(display, SWT_MenuDetect, listenerProxy);  // SWT.MenuDetect = 35
 
-            log("SWT context menu & dialog filters installed (Show=22, Activate=26, MenuDetect=35).");
+            log("SWT context menu & dialog filters installed (KeyDown=1, FocusIn=15, Show=22, Activate=26, MenuDetect=35).");
             startShellEnhanceWatcher(display);
         } catch (Throwable t) {
             log("Error installing SWT menu filters: " + t.getMessage());
@@ -682,6 +863,7 @@ public class FormGenAgent {
                         for (Object s : shells) {
                             if (s != null && !isDisposed(s)) {
                                 enhanceDialogShell(display, s);
+                                attachUndoManagersRecursively(s);
                             }
                         }
                     }
@@ -707,7 +889,50 @@ public class FormGenAgent {
             Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
             Class<?> shellClass = Class.forName("org.eclipse.swt.widgets.Shell");
 
-            if (eventType == SWT_Show) {
+            if (eventType == SWT_KeyDown) {
+                if (widget != null) {
+                    String clsName = widget.getClass().getName();
+                    if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
+                        StyledTextUndoManager mgr = getOrCreateUndoManager(widget);
+                        Field stateMaskField = eventObj.getClass().getField("stateMask");
+                        Field keyCodeField = eventObj.getClass().getField("keyCode");
+                        Field characterField = eventObj.getClass().getField("character");
+                        int stateMask = stateMaskField.getInt(eventObj);
+                        int keyCode = keyCodeField.getInt(eventObj);
+                        char character = characterField.getChar(eventObj);
+
+                        boolean isCtrl = (stateMask & SWT_MOD1) != 0;
+                        boolean isShift = (stateMask & SWT_SHIFT) != 0;
+
+                        if (isCtrl && (keyCode == 'z' || keyCode == 'Z' || character == 26)) {
+                            if (mgr != null) {
+                                if (isShift) {
+                                    mgr.redo();
+                                } else {
+                                    mgr.undo();
+                                }
+                                Field doitField = eventObj.getClass().getField("doit");
+                                doitField.setBoolean(eventObj, false);
+                                return;
+                            }
+                        } else if (isCtrl && (keyCode == 'y' || keyCode == 'Y' || character == 25)) {
+                            if (mgr != null) {
+                                mgr.redo();
+                                Field doitField = eventObj.getClass().getField("doit");
+                                doitField.setBoolean(eventObj, false);
+                                return;
+                            }
+                        }
+                    }
+                }
+            } else if (eventType == SWT_FocusIn) {
+                if (widget != null) {
+                    String clsName = widget.getClass().getName();
+                    if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
+                        getOrCreateUndoManager(widget);
+                    }
+                }
+            } else if (eventType == SWT_Show) {
                 if (menuClass.isInstance(widget)) {
                     Method getStyleMethod = widget.getClass().getMethod("getStyle");
                     int style = (Integer) getStyleMethod.invoke(widget);
@@ -722,24 +947,30 @@ public class FormGenAgent {
                     }
                 } else if (shellClass.isInstance(widget)) {
                     enhanceDialogShell(display, widget);
+                    attachUndoManagersRecursively(widget);
                 }
             } else if (eventType == SWT_Activate) {
                 if (shellClass.isInstance(widget)) {
                     enhanceDialogShell(display, widget);
+                    attachUndoManagersRecursively(widget);
                 }
             } else if (eventType == SWT_MenuDetect) {
                 if (controlClass.isInstance(widget)) {
                     String clsName = widget.getClass().getName();
-                    // Intercept black code window (RainbowParenText), StyledText, or text controls
+                    // Intercept black code window (RainbowParenText), StyledText
                     if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
                         attachCodeEditorContextMenu(display, widget, eventObj);
                         return;
                     }
 
-                    Method getMenuMethod = widget.getClass().getMethod("getMenu");
-                    Object existingMenu = getMenuMethod.invoke(widget);
-                    if (existingMenu == null) {
-                        attachStandardTextContextMenu(display, widget, eventObj);
+                    // Only intercept text input controls (never PdfViewer, Canvas, Shell, or general containers)
+                    if ((clsName.contains("Text") || clsName.contains("Combo")) &&
+                        !clsName.contains("Canvas") && !clsName.contains("PdfViewer") && !clsName.contains("Shell")) {
+                        Method getMenuMethod = widget.getClass().getMethod("getMenu");
+                        Object existingMenu = getMenuMethod.invoke(widget);
+                        if (existingMenu == null) {
+                            attachStandardTextContextMenu(display, widget, eventObj);
+                        }
                     }
                 }
             }
@@ -766,6 +997,34 @@ public class FormGenAgent {
             Constructor<?> itemCons = menuItemClass.getConstructor(menuClass, int.class);
             Constructor<?> subMenuCons = menuClass.getConstructor(menuItemClass);
             Method addListenerMethod = menuItemClass.getMethod("addListener", int.class, listenerClass);
+
+            // 0. Undo, Redo
+            final StyledTextUndoManager undoMgr = getOrCreateUndoManager(control);
+            Object itemUndo = itemCons.newInstance(menu, SWT_PUSH);
+            itemUndo.getClass().getMethod("setText", String.class).invoke(itemUndo, "Undo\tCtrl+Z");
+            if (undoMgr != null && !undoMgr.canUndo()) {
+                itemUndo.getClass().getMethod("setEnabled", boolean.class).invoke(itemUndo, false);
+            }
+            addListenerMethod.invoke(itemUndo, SWT_Selection, createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    if (undoMgr != null) undoMgr.undo();
+                }
+            }));
+
+            Object itemRedo = itemCons.newInstance(menu, SWT_PUSH);
+            itemRedo.getClass().getMethod("setText", String.class).invoke(itemRedo, "Redo\tCtrl+Y");
+            if (undoMgr != null && !undoMgr.canRedo()) {
+                itemRedo.getClass().getMethod("setEnabled", boolean.class).invoke(itemRedo, false);
+            }
+            addListenerMethod.invoke(itemRedo, SWT_Selection, createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    if (undoMgr != null) undoMgr.redo();
+                }
+            }));
+
+            itemCons.newInstance(menu, SWT_SEPARATOR);
 
             // 1. Cut, Copy, Paste, Select All
             addTextActionItem(display, menu, control, "Cut\tCtrl+X", "cut");
@@ -1214,9 +1473,14 @@ public class FormGenAgent {
                                     setWidgetText(publishDlg, "txtPublishSingleCompanies", primaryCo);
                                 }
 
+                                String tmplText = liveVariables.get("ActiveTemplateText");
                                 String comments = "";
-                                if (caseNumber != null && !caseNumber.trim().isEmpty()) comments = "Case #" + caseNumber;
-                                if (notes != null && !notes.trim().isEmpty()) comments += (comments.isEmpty() ? "" : " - ") + notes;
+                                if (tmplText != null && !tmplText.trim().isEmpty()) {
+                                    comments = tmplText.trim();
+                                } else {
+                                    if (caseNumber != null && !caseNumber.trim().isEmpty()) comments = "Case #" + caseNumber;
+                                    if (notes != null && !notes.trim().isEmpty()) comments += (comments.isEmpty() ? "" : " - ") + notes;
+                                }
                                 if (!comments.isEmpty()) {
                                     setWidgetText(publishDlg, "txtComments", comments);
                                 }
