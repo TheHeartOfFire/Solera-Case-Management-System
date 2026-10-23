@@ -1278,19 +1278,12 @@ public class FormGenAgent {
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Server ID", liveVariables.get("ServerId"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Dealership", liveVariables.get("DealershipName"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Case #", liveVariables.get("CaseNumber"));
-                hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Primary Co #", liveVariables.get("PrimaryCompanyNumber"));
 
-                String companyNumbers = liveVariables.get("CompanyNumbers");
-                if (companyNumbers != null && !companyNumbers.trim().isEmpty()) {
-                    String primaryCo = liveVariables.get("PrimaryCompanyNumber");
-                    String[] comps = companyNumbers.split(",");
-                    for (String c : comps) {
-                        String cleanCo = c.trim();
-                        if (!cleanCo.isEmpty() && !cleanCo.equals(primaryCo)) {
-                            hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Company #", cleanCo);
-                        }
-                    }
+                String companyStr = liveVariables.get("NotableCompanyNumbers");
+                if (companyStr == null || companyStr.trim().isEmpty()) {
+                    companyStr = liveVariables.get("PrimaryCompanyNumber");
                 }
+                hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Company #", companyStr);
 
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Contact Name", liveVariables.get("ContactName"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Contact Phone", liveVariables.get("ContactPhone"));
@@ -1458,7 +1451,10 @@ public class FormGenAgent {
                         synchronized (liveVariables) {
                             String serverId = liveVariables.get("ServerId");
                             String caseNumber = liveVariables.get("CaseNumber");
-                            String primaryCo = liveVariables.get("PrimaryCompanyNumber");
+                            String primaryCo = liveVariables.get("NotableCompanyNumbers");
+                            if (primaryCo == null || primaryCo.trim().isEmpty()) {
+                                primaryCo = liveVariables.get("PrimaryCompanyNumber");
+                            }
                             String contactName = liveVariables.get("ContactName");
                             String notes = liveVariables.get("Notes");
                             String tmplText = liveVariables.get("ActiveTemplateText");

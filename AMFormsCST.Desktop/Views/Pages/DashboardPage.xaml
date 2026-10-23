@@ -165,8 +165,8 @@
             <ToggleButton Grid.Row="5" Grid.Column="1" Margin="0,0,10,0" IsChecked="{Binding SelectedNote.SelectedDealer.SelectedCompany.Notable, Mode=TwoWay}" ToolTip="Mark this company number as notable." HorizontalAlignment="Right">
                 <ui:SymbolIcon Symbol="Note24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
             </ToggleButton>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedDealer.SelectedCompany.CompanyCode}" Grid.Row="5" 
-                        Grid.Column="2" HorizontalAlignment="right" Margin="5,0,0,0" ToolTip="Copy company number to clipboard."/>
+            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedDealer.NotableCompanyCodes}" Grid.Row="5" 
+                        Grid.Column="2" HorizontalAlignment="right" Margin="5,0,0,0" ToolTip="Copy notable company number(s) to clipboard."/>
         </Grid>
 
 

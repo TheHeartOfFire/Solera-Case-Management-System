@@ -19,6 +19,9 @@ public class IpcLiveVariables
     [JsonPropertyName("primaryCompanyNumber")]
     public string PrimaryCompanyNumber { get; set; } = string.Empty;
 
+    [JsonPropertyName("notableCompanyNumbers")]
+    public string NotableCompanyNumbers { get; set; } = string.Empty;
+
     [JsonPropertyName("companyNumbers")]
     public List<string> CompanyNumbers { get; set; } = [];
 
@@ -54,7 +57,8 @@ public class IpcLiveVariables
             [nameof(DealershipName)] = DealershipName,
             [nameof(CaseNumber)] = CaseNumber,
             [nameof(PrimaryCompanyNumber)] = PrimaryCompanyNumber,
-            [nameof(CompanyNumbers)] = string.Join(", ", CompanyNumbers),
+            [nameof(NotableCompanyNumbers)] = NotableCompanyNumbers,
+            [nameof(CompanyNumbers)] = string.Join(",", CompanyNumbers),
             [nameof(ContactName)] = ContactName,
             [nameof(ContactEmail)] = ContactEmail,
             [nameof(ContactPhone)] = ContactPhone,

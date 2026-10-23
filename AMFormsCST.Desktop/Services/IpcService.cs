@@ -150,10 +150,21 @@ public class IpcService : IHostedService, IAsyncDisposable
         var selectedForm = note?.Forms.SelectedItem;
         var selectedTestDeal = selectedForm?.TestDeals.SelectedItem;
 
+        var notableCompanyNumbers = selectedDealer?.Companies
+            .Where(c => c.Notable && !string.IsNullOrWhiteSpace(c.CompanyCode))
+            .Select(c => c.CompanyCode!.Trim())
+            .Distinct()
+            .ToList() ?? [];
+
         var allCompanyNumbers = selectedDealer?.Companies
             .Where(c => !string.IsNullOrWhiteSpace(c.CompanyCode))
-            .Select(c => c.CompanyCode!)
+            .Select(c => c.CompanyCode!.Trim())
+            .Distinct()
             .ToList() ?? [];
+
+        string primaryCompanyNumber = notableCompanyNumbers.Count > 0
+            ? string.Join(",", notableCompanyNumbers)
+            : (selectedCompany?.CompanyCode?.Trim() ?? (allCompanyNumbers.FirstOrDefault() ?? string.Empty));
 
         string notesText = string.Empty;
         if (!string.IsNullOrWhiteSpace(note?.NotesXaml))
@@ -180,7 +191,8 @@ public class IpcService : IHostedService, IAsyncDisposable
             ServerId = selectedDealer?.ServerCode ?? string.Empty,
             DealershipName = selectedDealer?.Name ?? string.Empty,
             CaseNumber = note?.CaseNumber ?? string.Empty,
-            PrimaryCompanyNumber = selectedCompany?.CompanyCode ?? string.Empty,
+            PrimaryCompanyNumber = primaryCompanyNumber,
+            NotableCompanyNumbers = string.Join(",", notableCompanyNumbers),
             CompanyNumbers = allCompanyNumbers,
             ContactName = selectedContact?.Name ?? string.Empty,
             ContactEmail = selectedContact?.Email ?? string.Empty,
