@@ -1,9 +1,11 @@
 using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Services.IPC;
 using AMFormsCST.Core.Types.IPC;
 using AMFormsCST.Desktop.Models;
 using AMFormsCST.Desktop.ViewModels.Pages;
 using AMFormsCST.Desktop.ViewModels.Pages.Tools;
+using AMFormsCST.Desktop.Views.Dialogs;
 using AMFormsCST.Desktop.Views.Pages.Tools;
 using Microsoft.Extensions.Hosting;
 using System.IO;
@@ -364,11 +366,38 @@ public class IpcService : IHostedService, IAsyncDisposable
             return IpcResponse.Fail("Missing filePath argument in payload.");
         }
 
-        _navigationService.Navigate(typeof(FormgenUtilitiesPage));
-        _formgenViewModel.LoadFormgenFile(filePath);
-        BringWindowToFront();
-
+        OpenFormgenUtilsDialogWithFile(filePath);
         return IpcResponse.Ok($"Opened {filePath} in Formgen Utilities.");
+    }
+
+    public void OpenFormgenUtilsDialogWithFile(string? filePath = null)
+    {
+        try
+        {
+            var supportTool = App.GetRequiredService<ISupportTool>();
+            var dialogService = App.GetRequiredService<IDialogService>();
+            var fileSystem = App.GetRequiredService<IFileSystem>();
+            var navigationService = App.GetRequiredService<INavigationService>();
+
+            var vm = new FormgenUtilitiesViewModel(supportTool, dialogService, fileSystem, _logger);
+            if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+            {
+                vm.LoadFormgenFile(filePath);
+            }
+
+            var page = new FormgenUtilitiesPage(vm, navigationService, _logger);
+            var dialog = new PageHostDialog(page, "Formgen Utilities");
+            dialog.Show();
+            dialog.Activate();
+            dialog.Focus();
+
+            BringWindowToFront();
+            _logger?.LogInfo($"Opened Formgen Utilities Dialog with file: '{filePath}'.");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error opening Formgen Utilities Dialog.", ex);
+        }
     }
 
     private IpcResponse ProcessCitadelBrainDump(IpcMessage message)

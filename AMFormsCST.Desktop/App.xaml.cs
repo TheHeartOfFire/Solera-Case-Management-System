@@ -236,7 +236,7 @@ public partial class App : Application
         if (e.Args.Any(a => a.Contains("--native-messaging", StringComparison.OrdinalIgnoreCase) || a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase)))
         {
             NativeMessagingBridge.RunAsync().GetAwaiter().GetResult();
-            Shutdown();
+            Environment.Exit(0);
             return;
         }
 
@@ -244,7 +244,9 @@ public partial class App : Application
         if (!isNewInstance)
         {
             HandleSecondInstanceLaunch(e.Args);
-            Shutdown();
+            _instanceMutex.Dispose();
+            _instanceMutex = null;
+            Environment.Exit(0);
             return;
         }
 
@@ -262,6 +264,21 @@ public partial class App : Application
             }
         }
         catch { }
+
+        // Check if --open-formgen was passed on cold startup
+        if (e.Args != null && e.Args.Length > 0)
+        {
+            for (int i = 0; i < e.Args.Length; i++)
+            {
+                if (string.Equals(e.Args[i], "--open-formgen", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+                {
+                    var filePath = e.Args[i + 1];
+                    var ipcService = GetRequiredService<IpcService>();
+                    ipcService.OpenFormgenUtilsDialogWithFile(filePath);
+                    break;
+                }
+            }
+        }
     }
 
     private static void HandleSecondInstanceLaunch(string[]? args)
@@ -319,11 +336,21 @@ public partial class App : Application
         }
         catch { }
 
-        var supportTool = GetRequiredService<ISupportTool>();
-        supportTool.SaveAllSettings();
+        try
+        {
+            var supportTool = GetRequiredService<ISupportTool>();
+            supportTool.SaveAllSettings();
+        }
+        catch { }
 
-        _host.StopAsync().Wait();
-        _host.Dispose();
+        try
+        {
+            _host.StopAsync().Wait(TimeSpan.FromSeconds(2));
+            _host.Dispose();
+        }
+        catch { }
+
+        Environment.Exit(0);
     }
 
     /// <summary>
