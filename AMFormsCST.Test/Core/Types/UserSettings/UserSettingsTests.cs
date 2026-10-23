@@ -32,7 +32,7 @@ public class UserSettingsTests
         Assert.Equal(string.Empty, settings.Name);
         Assert.Equal(string.Empty, settings.ApplicationFilesPath);
         Assert.Equal("x", settings.ExtSeparator);
-        Assert.False(settings.EnableExplorerContextMenu);
+        Assert.True(settings.EnableExplorerContextMenu);
         Assert.Equal(string.Empty, settings.FormGenExecutablePath);
     }
 

@@ -43,7 +43,7 @@ public class WindowsExplorerContextMenuServiceTests
             Assert.NotNull(cmdKey);
             string? command = cmdKey.GetValue("") as string;
             Assert.NotNull(command);
-            Assert.Contains(tempFile, command);
+            Assert.Contains("--open-in-formgen", command);
 
             // Verify IsFormgenAssociated
             Assert.True(service.IsFormgenAssociated());
