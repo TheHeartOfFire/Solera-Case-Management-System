@@ -90,8 +90,12 @@ public partial class App : Application
                 _ = services.AddTransient<IDebounceService, DebounceService>();
 
                 _ = services.AddHostedService<ApplicationHostService>();
-                _ = services.AddHostedService<IpcService>();
-                _ = services.AddHostedService<FormGenHookService>();
+
+                _ = services.AddSingleton<IpcService>();
+                _ = services.AddHostedService(sp => sp.GetRequiredService<IpcService>());
+
+                _ = services.AddSingleton<FormGenHookService>();
+                _ = services.AddHostedService(sp => sp.GetRequiredService<FormGenHookService>());
 
                 _ = services.AddSingleton<IWindow, MainWindow>();
                 _ = services.AddSingleton<MainWindowViewModel>();
