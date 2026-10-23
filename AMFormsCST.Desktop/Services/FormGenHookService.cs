@@ -128,21 +128,23 @@ public class FormGenHookService : IHostedService, IDisposable
             try
             {
                 var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-                if (IsFormGenWindowAt(hookStruct.pt, out IntPtr rootHwnd))
-                {
-                    bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 
-                    if (isShift)
+                if (isShift)
+                {
+                    // Layer 3: Shift + RMB hotkey override across all external apps (Notepad, FormGen, VS Code, etc.)
+                    // Directly display Solera Quick-Paste and Parse flyout at cursor
+                    if (IsValidTargetWindowAt(hookStruct.pt, out IntPtr rootHwnd))
                     {
-                        // Layer 3: Shift + RMB hotkey override
-                        // Suppress FormGen native popup and display Solera Quick-Paste directly at cursor
                         _dispatcher.BeginInvoke(() => ShowQuickPaste(hookStruct.pt, rootHwnd, offsetForCompanion: false));
-                        return (IntPtr)1; // Suppress RMB event
+                        return (IntPtr)1; // Suppress native RMB event
                     }
-                    else
+                }
+                else
+                {
+                    // Layer 2: Companion Anchor flyout alongside native FormGen menu
+                    if (IsFormGenWindowAt(hookStruct.pt, out IntPtr rootHwnd))
                     {
-                        // Layer 2: Companion Anchor flyout alongside native FormGen menu
-                        // Do NOT suppress; let FormGen handle RMB normally
                         _dispatcher.BeginInvoke(() => ShowQuickPaste(hookStruct.pt, rootHwnd, offsetForCompanion: true));
                     }
                 }
@@ -156,7 +158,7 @@ public class FormGenHookService : IHostedService, IDisposable
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
-    private bool IsFormGenWindowAt(POINT pt, out IntPtr rootHwnd)
+    private bool IsValidTargetWindowAt(POINT pt, out IntPtr rootHwnd)
     {
         rootHwnd = IntPtr.Zero;
         var hwnd = WindowFromPoint(pt);
@@ -182,6 +184,26 @@ public class FormGenHookService : IHostedService, IDisposable
             {
                 return false;
             }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool IsFormGenWindowAt(POINT pt, out IntPtr rootHwnd)
+    {
+        if (!IsValidTargetWindowAt(pt, out rootHwnd)) return false;
+
+        GetWindowThreadProcessId(rootHwnd, out uint processId);
+        if (processId == 0) return false;
+
+        try
+        {
+            using var proc = Process.GetProcessById((int)processId);
+            var procName = proc.ProcessName;
 
             var classBuilder = new StringBuilder(256);
             GetClassName(rootHwnd, classBuilder, classBuilder.Capacity);

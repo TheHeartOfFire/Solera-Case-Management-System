@@ -108,6 +108,9 @@ public class IpcService : IHostedService, IAsyncDisposable
             case IpcActions.OpenFormgen:
                 return await Application.Current.Dispatcher.InvokeAsync(() => OpenFormgen(message));
 
+            case IpcActions.ParseCodeBlock:
+                return await Application.Current.Dispatcher.InvokeAsync(() => HandleParseCodeBlock(message));
+
             case IpcActions.CitadelBrainDump:
                 return await Application.Current.Dispatcher.InvokeAsync(() => ProcessCitadelBrainDump(message));
 
@@ -410,6 +413,52 @@ public class IpcService : IHostedService, IAsyncDisposable
         catch (Exception ex)
         {
             _logger?.LogError("Error opening Formgen Utilities Dialog.", ex);
+        }
+    }
+
+    private IpcResponse HandleParseCodeBlock(IpcMessage message)
+    {
+        message.Payload.TryGetValue("code", out var code);
+        if (string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(message.RawData))
+        {
+            code = message.RawData;
+        }
+
+        OpenCodeSnippetsDialogWithCode(code);
+        return IpcResponse.Ok("Code parsed into Code Snippets.");
+    }
+
+    public void OpenCodeSnippetsDialogWithCode(string? codeText = null)
+    {
+        try
+        {
+            var supportTool = App.GetRequiredService<ISupportTool>();
+            var vm = new CodeSnippetsViewModel(supportTool, _logger);
+            if (!string.IsNullOrWhiteSpace(codeText))
+            {
+                vm.PasteFormulaText(codeText.Trim());
+            }
+
+            BringWindowToFront();
+
+            var page = new CodeSnippetsPage(vm, _logger);
+            var dialog = new PageHostDialog(page, "Code Snippets");
+
+            if (Application.Current?.MainWindow is Window mainWindow && mainWindow.IsVisible)
+            {
+                dialog.Owner = mainWindow;
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            }
+
+            dialog.Show();
+            dialog.Activate();
+            dialog.Focus();
+
+            _logger?.LogInfo($"Opened Code Snippets Dialog with code text (length: {codeText?.Length ?? 0}).");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error opening Code Snippets Dialog.", ex);
         }
     }
 

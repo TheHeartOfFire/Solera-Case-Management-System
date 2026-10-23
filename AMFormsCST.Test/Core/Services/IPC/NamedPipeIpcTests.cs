@@ -103,5 +103,37 @@ public class NamedPipeIpcTests
         Assert.NotNull(response);
         Assert.False(response.Success);
     }
+
+    [Fact]
+    public async Task SendMessageAsync_ParseCodeBlock_PayloadTransfersCorrectly()
+    {
+        var pipeName = $"SoleraCMS_TestPipe_{Guid.NewGuid():N}";
+        const string testFormula = "IF(DEAL_TYPE = 'LEASE', 500, 0)";
+
+        await using var server = new NamedPipeIpcServer(async message =>
+        {
+            if (message.Action == IpcActions.ParseCodeBlock)
+            {
+                message.Payload.TryGetValue("code", out var code);
+                return IpcResponse.Ok("Code parsed", new Dictionary<string, string> { ["parsedCode"] = code ?? "" });
+            }
+            return IpcResponse.Fail("Invalid action");
+        }, pipeName);
+
+        server.Start();
+
+        var request = new IpcMessage
+        {
+            Target = "SoleraCMS",
+            Action = IpcActions.ParseCodeBlock,
+            Payload = { ["code"] = testFormula }
+        };
+
+        var response = await NamedPipeIpcClient.SendMessageAsync(request, pipeName, timeoutMs: 3000);
+
+        Assert.NotNull(response);
+        Assert.True(response.Success);
+        Assert.Equal(testFormula, response.Data["parsedCode"]);
+    }
 }
 

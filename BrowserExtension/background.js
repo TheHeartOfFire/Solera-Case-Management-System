@@ -52,6 +52,12 @@ function setupContextMenus() {
         });
 
         chrome.contextMenus.create({
+            id: "send_parse_codeblock",
+            title: "🔬 Parse as FormGen Code Block",
+            contexts: ["selection"]
+        });
+
+        chrome.contextMenus.create({
             id: "send_citadel_capture",
             parentId: "solera_send_parent",
             title: "Citadel: Quick Capture Selection",
@@ -150,6 +156,14 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "contactname", value: selection }
+            });
+            break;
+
+        case "send_parse_codeblock":
+            sendIpcMessage({
+                target: "SoleraCMS",
+                action: "ParseCodeBlock",
+                payload: { code: selection }
             });
             break;
 

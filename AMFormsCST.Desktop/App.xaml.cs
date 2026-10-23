@@ -39,6 +39,9 @@ using Velopack;
 using Wpf.Ui;
 using Wpf.Ui.DependencyInjection;
 using System.Threading;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Input;
 using AMFormsCST.Core.Services.IPC;
 using AMFormsCST.Core.Types.IPC;
 
@@ -258,6 +261,12 @@ public partial class App : Application
         VelopackApp.Build().SetLogger(velopackLogger).Run();
         _host.Start();
 
+        // Register global context menu handler for all TextBoxes / RichTextBoxes across SCMT
+        EventManager.RegisterClassHandler(
+            typeof(System.Windows.Controls.Primitives.TextBoxBase),
+            FrameworkElement.ContextMenuOpeningEvent,
+            new ContextMenuEventHandler(OnTextBoxBaseContextMenuOpening));
+
         try
         {
             var supportTool = GetRequiredService<ISupportTool>();
@@ -269,15 +278,21 @@ public partial class App : Application
         }
         catch { }
 
-        // Check if a formgen file was passed on cold startup
+        // Check if a formgen file or code to parse was passed on cold startup
         if (e.Args != null && e.Args.Length > 0)
         {
             string? coldFilePath = null;
+            string? coldParseCode = null;
             for (int i = 0; i < e.Args.Length; i++)
             {
                 if (string.Equals(e.Args[i], "--open-formgen", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
                 {
                     coldFilePath = e.Args[i + 1];
+                    break;
+                }
+                if (string.Equals(e.Args[i], "--parse-code", StringComparison.OrdinalIgnoreCase) && i + 1 < e.Args.Length)
+                {
+                    coldParseCode = e.Args[i + 1];
                     break;
                 }
                 if (e.Args[i].EndsWith(".formgen", StringComparison.OrdinalIgnoreCase) ||
@@ -297,7 +312,90 @@ public partial class App : Application
                     ipcService.OpenFormgenUtilsDialogWithFile(coldFilePath);
                 });
             }
+            else if (!string.IsNullOrWhiteSpace(coldParseCode))
+            {
+                var ipcService = GetRequiredService<IpcService>();
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
+                {
+                    ipcService.OpenCodeSnippetsDialogWithCode(coldParseCode);
+                });
+            }
         }
+    }
+
+    private static void OnTextBoxBaseContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Primitives.TextBoxBase textBoxBase)
+            return;
+
+        // Ensure ContextMenu exists
+        if (textBoxBase.ContextMenu == null)
+        {
+            var menu = new ContextMenu();
+            menu.Items.Add(new MenuItem { Command = ApplicationCommands.Cut });
+            menu.Items.Add(new MenuItem { Command = ApplicationCommands.Copy });
+            menu.Items.Add(new MenuItem { Command = ApplicationCommands.Paste });
+            textBoxBase.ContextMenu = menu;
+        }
+
+        var contextMenu = textBoxBase.ContextMenu;
+
+        // Look for existing parse item
+        MenuItem? parseItem = null;
+        foreach (var item in contextMenu.Items)
+        {
+            if (item is MenuItem mi && Equals(mi.Tag, "ParseInCodeSnippets"))
+            {
+                parseItem = mi;
+                break;
+            }
+        }
+
+        if (parseItem == null)
+        {
+            contextMenu.Items.Add(new Separator());
+            parseItem = new MenuItem
+            {
+                Header = "🔬 Parse as Code Blocks",
+                Tag = "ParseInCodeSnippets"
+            };
+            parseItem.Click += (s, args) =>
+            {
+                string textToParse = string.Empty;
+                if (textBoxBase is TextBox tb)
+                {
+                    textToParse = !string.IsNullOrWhiteSpace(tb.SelectedText) ? tb.SelectedText : tb.Text;
+                }
+                else if (textBoxBase is RichTextBox rtb)
+                {
+                    textToParse = new TextRange(rtb.Selection.Start, rtb.Selection.End).Text;
+                }
+
+                if (!string.IsNullOrWhiteSpace(textToParse))
+                {
+                    try
+                    {
+                        var ipcService = GetRequiredService<IpcService>();
+                        ipcService.OpenCodeSnippetsDialogWithCode(textToParse);
+                    }
+                    catch { }
+                }
+            };
+            contextMenu.Items.Add(parseItem);
+        }
+
+        // Enable or disable based on current content
+        string currentText = string.Empty;
+        if (textBoxBase is TextBox t)
+        {
+            currentText = !string.IsNullOrWhiteSpace(t.SelectedText) ? t.SelectedText : t.Text;
+        }
+        else if (textBoxBase is RichTextBox r)
+        {
+            currentText = new TextRange(r.Selection.Start, r.Selection.End).Text;
+        }
+
+        parseItem.IsEnabled = !string.IsNullOrWhiteSpace(currentText);
     }
 
     private static void HandleSecondInstanceLaunch(string[]? args)
@@ -317,11 +415,17 @@ public partial class App : Application
                 }
 
                 string? targetFilePath = null;
+                string? targetParseCode = null;
                 for (int i = 0; i < args.Length; i++)
                 {
                     if (string.Equals(args[i], "--open-formgen", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
                     {
                         targetFilePath = args[i + 1];
+                        break;
+                    }
+                    if (string.Equals(args[i], "--parse-code", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                    {
+                        targetParseCode = args[i + 1];
                         break;
                     }
                     if (args[i].EndsWith(".formgen", StringComparison.OrdinalIgnoreCase) ||
@@ -332,7 +436,22 @@ public partial class App : Application
                     }
                 }
 
-                if (!string.IsNullOrWhiteSpace(targetFilePath))
+                if (!string.IsNullOrWhiteSpace(targetParseCode))
+                {
+                    var msg = new IpcMessage
+                    {
+                        Target = "SoleraCMS",
+                        Action = IpcActions.ParseCodeBlock,
+                        Payload = { ["code"] = targetParseCode }
+                    };
+                    var response = Task.Run(() => NamedPipeIpcClient.SendMessageAsync(msg, timeoutMs: 3000)).GetAwaiter().GetResult();
+                    System.IO.File.AppendAllText(debugLogPath, $"[{DateTime.Now:O}] ParseCodeBlock IPC result: Success={response.Success}, Msg={response.Message}\n");
+                    if (response.Success)
+                    {
+                        return;
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(targetFilePath))
                 {
                     targetFilePath = targetFilePath.Trim('\"', ' ');
                     var msg = new IpcMessage

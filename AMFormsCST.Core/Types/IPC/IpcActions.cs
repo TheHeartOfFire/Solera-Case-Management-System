@@ -12,6 +12,7 @@ public static class IpcActions
     public const string SetDashboardField = "SetDashboardField";
     public const string GetLiveVariables = "GetLiveVariables";
     public const string ParseCaseNotes = "ParseCaseNotes";
+    public const string ParseCodeBlock = "ParseCodeBlock";
 
     // Standard Project Citadel actions for seamless future bridge
     public const string CitadelBrainDump = "Citadel.BrainDump";

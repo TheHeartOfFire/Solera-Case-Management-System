@@ -120,6 +120,62 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- Action: Parse in Code Snippets -->
+            <Border
+                Margin="0,4,0,0"
+                Padding="0,4,0,0"
+                BorderBrush="#353535"
+                BorderThickness="0,1,0,0">
+                <ui:Button
+                    Margin="0,2"
+                    Padding="8,6"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Appearance="Secondary"
+                    Click="OnParseClicked">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Badge -->
+                        <Border
+                            Grid.Column="0"
+                            Margin="0,0,8,0"
+                            Padding="5,1"
+                            VerticalAlignment="Center"
+                            Background="#3D2352"
+                            CornerRadius="4">
+                            <TextBlock
+                                FontSize="9"
+                                FontWeight="Bold"
+                                Foreground="#EA80FC"
+                                Text="PARSE" />
+                        </Border>
+
+                        <!-- Text -->
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            FontSize="12"
+                            Foreground="#DDDDDD"
+                            Text="Parse in Code Snippets"
+                            TextTrimming="CharacterEllipsis" />
+
+                        <!-- Shortcut hint -->
+                        <TextBlock
+                            Grid.Column="2"
+                            Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            FontSize="10"
+                            Foreground="#888888"
+                            Text="P" />
+                    </Grid>
+                </ui:Button>
+            </Border>
         </StackPanel>
     </Border>
 </Window>

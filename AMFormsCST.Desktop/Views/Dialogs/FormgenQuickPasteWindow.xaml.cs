@@ -25,6 +25,7 @@ public partial class FormgenQuickPasteWindow : Window
     private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
     private const byte VK_CONTROL = 0x11;
+    private const byte VK_C = 0x43;
     private const byte VK_V = 0x56;
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
@@ -198,6 +199,60 @@ public partial class FormgenQuickPasteWindow : Window
         }
     }
 
+    private void OnParseClicked(object sender, RoutedEventArgs e)
+    {
+        ExecuteParseInCodeSnippets();
+    }
+
+    public async void ExecuteParseInCodeSnippets()
+    {
+        Hide();
+
+        string? textToParse = null;
+
+        if (_targetHwnd != IntPtr.Zero)
+        {
+            SetForegroundWindow(_targetHwnd);
+            await Task.Delay(60);
+
+            // Synthesize Ctrl+C to copy selected text in target window
+            keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_C, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_C, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+            await Task.Delay(100);
+
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    textToParse = Clipboard.GetText();
+                }
+            }
+            catch { }
+        }
+
+        if (string.IsNullOrWhiteSpace(textToParse))
+        {
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    textToParse = Clipboard.GetText();
+                }
+            }
+            catch { }
+        }
+
+        try
+        {
+            var ipc = App.GetRequiredService<Services.IpcService>();
+            ipc.OpenCodeSnippetsDialogWithCode(textToParse);
+        }
+        catch { }
+    }
+
     protected override void OnDeactivated(EventArgs e)
     {
         base.OnDeactivated(e);
@@ -210,6 +265,11 @@ public partial class FormgenQuickPasteWindow : Window
         if (e.Key == Key.Escape)
         {
             Hide();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.P)
+        {
+            ExecuteParseInCodeSnippets();
             e.Handled = true;
         }
         else if (e.Key >= Key.D1 && e.Key <= Key.D9)
