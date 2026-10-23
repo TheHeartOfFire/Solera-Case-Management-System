@@ -2033,13 +2033,59 @@ public class FormGenAgent {
     public static void updateLiveVariablesFromJson(String json) {
         if (json == null || json.trim().isEmpty()) return;
         try {
-            Pattern p = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"");
-            Matcher m = p.matcher(json);
+            int i = 0, len = json.length();
             synchronized (liveVariables) {
-                while (m.find()) {
-                    String key = m.group(1);
-                    String val = unescapeJson(m.group(2));
-                    liveVariables.put(key, val);
+                while (i < len) {
+                    // Find start of key
+                    int keyStart = json.indexOf('"', i);
+                    if (keyStart == -1) break;
+                    int keyEnd = json.indexOf('"', keyStart + 1);
+                    if (keyEnd == -1) break;
+                    String key = json.substring(keyStart + 1, keyEnd);
+
+                    // Find ':' separator
+                    int colon = json.indexOf(':', keyEnd + 1);
+                    if (colon == -1) break;
+
+                    // Skip whitespace after colon
+                    int valStart = colon + 1;
+                    while (valStart < len && Character.isWhitespace(json.charAt(valStart))) {
+                        valStart++;
+                    }
+                    if (valStart >= len) break;
+
+                    if (json.charAt(valStart) == '"') {
+                        // String value: scan until unescaped closing quote
+                        StringBuilder valSb = new StringBuilder();
+                        int idx = valStart + 1;
+                        while (idx < len) {
+                            char c = json.charAt(idx);
+                            if (c == '\\' && idx + 1 < len) {
+                                valSb.append(c);
+                                valSb.append(json.charAt(idx + 1));
+                                idx += 2;
+                            } else if (c == '"') {
+                                idx++;
+                                break;
+                            } else {
+                                valSb.append(c);
+                                idx++;
+                            }
+                        }
+                        String val = unescapeJson(valSb.toString());
+                        liveVariables.put(key, val);
+                        i = idx;
+                    } else {
+                        // Non-string value (e.g. true, false, number, null)
+                        int nextComma = json.indexOf(',', valStart);
+                        int nextBrace = json.indexOf('}', valStart);
+                        int end = len;
+                        if (nextComma != -1) end = Math.min(end, nextComma);
+                        if (nextBrace != -1) end = Math.min(end, nextBrace);
+                        String val = json.substring(valStart, end).trim();
+                        liveVariables.put(key, val);
+                        i = end;
+                    }
                 }
             }
         } catch (Throwable t) {
