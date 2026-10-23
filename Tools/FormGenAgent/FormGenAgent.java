@@ -264,7 +264,7 @@ public class FormGenAgent {
                 if (listeners != null) {
                     for (Object l : listeners) {
                         if (l != null) {
-                            Object nfg = extractFromThis0(l, "com.automate.formgen.NewFormGen");
+                            Object nfg = extractTargetObject(l, "com.automate.formgen.NewFormGen", 0);
                             if (nfg != null) return nfg;
                         }
                     }
@@ -289,59 +289,67 @@ public class FormGenAgent {
         return null;
     }
 
-    private static Object extractFromThis0(Object obj, String targetClassName) {
-        if (obj == null) return null;
+    public static Object extractTargetObject(Object obj, String targetClassName, int depth) {
+        if (obj == null || depth > 5) return null;
         Class<?> cls = obj.getClass();
-        while (cls != null && cls != Object.class) {
-            for (Field f : cls.getDeclaredFields()) {
-                if (f.getName().startsWith("this$")) {
-                    try {
-                        f.setAccessible(true);
-                        Object val = f.get(obj);
-                        if (val != null) {
-                            if (targetClassName == null || val.getClass().getName().equals(targetClassName)) {
-                                return val;
-                            }
-                        }
-                    } catch (Throwable ignored) {}
-                }
-            }
-            cls = cls.getSuperclass();
-        }
-        return null;
-    }
+        if (cls.getName().equals(targetClassName)) return obj;
+        if (cls.getSuperclass() != null && cls.getSuperclass().getName().equals(targetClassName)) return obj;
 
-    public static Object findEnclosingDialog(Object widget, String targetClassName) {
-        if (widget == null || isDisposed(widget)) return null;
+        // 1. If obj is a Widget, inspect its eventTable.listeners
         try {
             Class<?> widgetClass = Class.forName("org.eclipse.swt.widgets.Widget");
-            Field eventTableField = widgetClass.getDeclaredField("eventTable");
-            eventTableField.setAccessible(true);
-            Object eventTable = eventTableField.get(widget);
-            if (eventTable != null) {
-                Field listenersField = eventTable.getClass().getDeclaredField("listeners");
-                listenersField.setAccessible(true);
-                Object[] listeners = (Object[]) listenersField.get(eventTable);
-                if (listeners != null) {
-                    for (Object l : listeners) {
-                        if (l != null) {
-                            Object dlg = extractFromThis0(l, targetClassName);
-                            if (dlg != null) return dlg;
+            if (widgetClass.isInstance(obj)) {
+                Field eventTableField = widgetClass.getDeclaredField("eventTable");
+                eventTableField.setAccessible(true);
+                Object eventTable = eventTableField.get(obj);
+                if (eventTable != null) {
+                    Field listenersField = eventTable.getClass().getDeclaredField("listeners");
+                    listenersField.setAccessible(true);
+                    Object[] listeners = (Object[]) listenersField.get(eventTable);
+                    if (listeners != null) {
+                        for (Object l : listeners) {
+                            if (l != null) {
+                                Object found = extractTargetObject(l, targetClassName, depth + 1);
+                                if (found != null) return found;
+                            }
                         }
                     }
                 }
             }
         } catch (Throwable ignored) {}
 
+        // 2. Inspect all declared fields of this class and its superclasses
+        Class<?> c = cls;
+        while (c != null && c != Object.class) {
+            for (Field f : c.getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object val = f.get(obj);
+                    if (val != null) {
+                        if (val.getClass().getName().equals(targetClassName)) return val;
+                        if (val.getClass().getSuperclass() != null && val.getClass().getSuperclass().getName().equals(targetClassName)) return val;
+
+                        String fName = f.getName();
+                        if (fName.startsWith("this$") || fName.startsWith("arg$") || fName.equals("eventListener")) {
+                            Object found = extractTargetObject(val, targetClassName, depth + 1);
+                            if (found != null) return found;
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+            c = c.getSuperclass();
+        }
+
+        // 3. If obj is a Composite, check its children
         try {
             Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
-            if (compositeClass.isInstance(widget)) {
+            if (compositeClass.isInstance(obj)) {
                 Method getChildrenMethod = compositeClass.getMethod("getChildren");
-                Object[] children = (Object[]) getChildrenMethod.invoke(widget);
+                Object[] children = (Object[]) getChildrenMethod.invoke(obj);
                 if (children != null) {
-                    for (Object c : children) {
-                        Object dlg = findEnclosingDialog(c, targetClassName);
-                        if (dlg != null) return dlg;
+                    for (Object child : children) {
+                        Object found = extractTargetObject(child, targetClassName, depth + 1);
+                        if (found != null) return found;
                     }
                 }
             }
@@ -349,6 +357,54 @@ public class FormGenAgent {
 
         return null;
     }
+
+    public static Object findChildButton(Object parent, String textSubstring) {
+        if (parent == null || isDisposed(parent)) return null;
+        try {
+            Class<?> buttonClass = Class.forName("org.eclipse.swt.widgets.Button");
+            if (buttonClass.isInstance(parent)) {
+                Method getTextMethod = parent.getClass().getMethod("getText");
+                String t = (String) getTextMethod.invoke(parent);
+                if (t != null && (textSubstring == null || t.toLowerCase().contains(textSubstring.toLowerCase()))) {
+                    return parent;
+                }
+            }
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            if (compositeClass.isInstance(parent)) {
+                Method getChildrenMethod = compositeClass.getMethod("getChildren");
+                Object[] children = (Object[]) getChildrenMethod.invoke(parent);
+                if (children != null) {
+                    for (Object c : children) {
+                        Object found = findChildButton(c, textSubstring);
+                        if (found != null) return found;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    public static Object findChildControl(Object parent, String classNameSubstring) {
+        if (parent == null || isDisposed(parent)) return null;
+        try {
+            if (parent.getClass().getName().contains(classNameSubstring)) {
+                return parent;
+            }
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            if (compositeClass.isInstance(parent)) {
+                Method getChildrenMethod = compositeClass.getMethod("getChildren");
+                Object[] children = (Object[]) getChildrenMethod.invoke(parent);
+                if (children != null) {
+                    for (Object c : children) {
+                        Object found = findChildControl(c, classNameSubstring);
+                        if (found != null) return found;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
 
     public static String getStatus() {
         if (formGenInstance == null) return "DISCONNECTED";
@@ -608,9 +664,33 @@ public class FormGenAgent {
             addFilterMethod.invoke(display, SWT_MenuDetect, listenerProxy);  // SWT.MenuDetect = 35
 
             log("SWT context menu & dialog filters installed (Show=22, Activate=26, MenuDetect=35).");
+            startShellEnhanceWatcher(display);
         } catch (Throwable t) {
             log("Error installing SWT menu filters: " + t.getMessage());
         }
+    }
+
+    private static void startShellEnhanceWatcher(final Object display) {
+        runTimer(display, 500, new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (display == null || isDisposed(display)) return;
+                    Method getShellsMethod = display.getClass().getMethod("getShells");
+                    Object[] shells = (Object[]) getShellsMethod.invoke(display);
+                    if (shells != null) {
+                        for (Object s : shells) {
+                            if (s != null && !isDisposed(s)) {
+                                enhanceDialogShell(display, s);
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+                if (!isDisposed(display)) {
+                    runTimer(display, 500, this);
+                }
+            }
+        });
     }
 
     private static void handleSwtEvent(Object display, Object eventObj) {
@@ -632,6 +712,12 @@ public class FormGenAgent {
                     Method getStyleMethod = widget.getClass().getMethod("getStyle");
                     int style = (Integer) getStyleMethod.invoke(widget);
                     if ((style & SWT_POP_UP) != 0) {
+                        try {
+                            Method getDataMethod = widget.getClass().getMethod("getData", String.class);
+                            if (Boolean.TRUE.equals(getDataMethod.invoke(widget, "SoleraInjected"))) {
+                                return;
+                            }
+                        } catch (Throwable ignored) {}
                         injectSoleraMenuItems(display, widget);
                     }
                 } else if (shellClass.isInstance(widget)) {
@@ -728,31 +814,11 @@ public class FormGenAgent {
             });
             addListenerMethod.invoke(itemPasteFormula, SWT_Selection, listenerPasteFormula);
 
-            // Separator
-            itemCons.newInstance(menu, SWT_SEPARATOR);
+            // 4. Inject Solera Tools & variables cleanly without duplicating
+            injectSoleraMenuItems(display, menu);
 
-            // 4. Solera Tools Cascade
-            Object soleraCascade = itemCons.newInstance(menu, SWT_CASCADE);
-            soleraCascade.getClass().getMethod("setText", String.class).invoke(soleraCascade, "⚡ Solera Tools");
-            Object soleraSubMenu = subMenuCons.newInstance(soleraCascade);
-            soleraCascade.getClass().getMethod("setMenu", menuClass).invoke(soleraCascade, soleraSubMenu);
-
-            Object itemOpenUtils = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
-            itemOpenUtils.getClass().getMethod("setText", String.class).invoke(itemOpenUtils, "🛠 Open in FormGen Utilities");
-            Object listenerOpenUtils = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
-                @Override
-                public void run() {
-                    notifyScmtOpenFormgenUtils(getActiveFormFilePath());
-                }
-            });
-            addListenerMethod.invoke(itemOpenUtils, SWT_Selection, listenerOpenUtils);
-
-            // Quick Paste Variables submenu
-            Object pasteCascade = itemCons.newInstance(soleraSubMenu, SWT_CASCADE);
-            pasteCascade.getClass().getMethod("setText", String.class).invoke(pasteCascade, "📋 Quick Paste Variable");
-            Object pasteSubMenu = subMenuCons.newInstance(pasteCascade);
-            pasteCascade.getClass().getMethod("setMenu", menuClass).invoke(pasteCascade, pasteSubMenu);
-            populateQuickPasteItems(display, pasteSubMenu, itemCons, addListenerMethod);
+            Method setDataMethod = menu.getClass().getMethod("setData", String.class, Object.class);
+            setDataMethod.invoke(menu, "SoleraInjected", Boolean.TRUE);
 
             Method setMenuMethod = control.getClass().getMethod("setMenu", menuClass);
             setMenuMethod.invoke(control, menu);
@@ -784,6 +850,9 @@ public class FormGenAgent {
             }
 
             injectSoleraMenuItems(display, newMenu);
+
+            Method setDataMethod = newMenu.getClass().getMethod("setData", String.class, Object.class);
+            setDataMethod.invoke(newMenu, "SoleraInjected", Boolean.TRUE);
 
             Method setMenuMethod = control.getClass().getMethod("setMenu", menuClass);
             setMenuMethod.invoke(control, newMenu);
@@ -829,9 +898,11 @@ public class FormGenAgent {
             if (items != null) {
                 for (int i = items.length - 1; i >= 0; i--) {
                     Object it = items[i];
-                    Method getDataMethod = it.getClass().getMethod("getData", String.class);
-                    Object tag = getDataMethod.invoke(it, "SoleraItem");
-                    if (Boolean.TRUE.equals(tag)) {
+                    String itText = "";
+                    try { itText = (String) it.getClass().getMethod("getText").invoke(it); } catch (Throwable ignored) {}
+                    Object tag = null;
+                    try { tag = it.getClass().getMethod("getData", String.class).invoke(it, "SoleraItem"); } catch (Throwable ignored) {}
+                    if (Boolean.TRUE.equals(tag) || itText.contains("Solera") || itText.contains("Parse Field") || itText.contains("FormGen Utilities")) {
                         it.getClass().getMethod("dispose").invoke(it);
                     }
                 }
@@ -909,6 +980,10 @@ public class FormGenAgent {
             pasteCascade.getClass().getMethod("setMenu", menuClass).invoke(pasteCascade, pasteSubMenu);
 
             populateQuickPasteItems(display, pasteSubMenu, itemCons, addListenerMethod);
+
+            // Mark the menu as having Solera injected
+            Method setMenuData = menu.getClass().getMethod("setData", String.class, Object.class);
+            setMenuData.invoke(menu, "SoleraInjected", Boolean.TRUE);
         } catch (Throwable t) {
             log("Error injecting Solera menu items: " + t.getMessage());
         }
@@ -1032,23 +1107,38 @@ public class FormGenAgent {
                 return;
             }
 
-            // 1. Check PublishDlg
-            final Object publishDlg = findEnclosingDialog(shell, "com.automate.formgen.dialogs.checkinout.PublishDlg");
-            if (publishDlg != null) {
+            Method isVisibleMethod = shell.getClass().getMethod("isVisible");
+            boolean visible = (Boolean) isVisibleMethod.invoke(shell);
+            if (!visible) return;
+
+            Method getTextMethod = shell.getClass().getMethod("getText");
+            String title = (String) getTextMethod.invoke(shell);
+            if (title == null) title = "";
+
+            // 1. Check Publish / Revoke Dialog
+            if (title.contains("Publish") || title.contains("Revoke")) {
+                Object publishDlg = extractTargetObject(shell, "com.automate.formgen.dialogs.checkinout.PublishDlg", 0);
                 enhancePublishDialog(display, shell, publishDlg);
                 return;
             }
 
-            // 2. Check FormPropertiesDlg
-            final Object formPropsDlg = findEnclosingDialog(shell, "com.automate.formgen.dialogs.FormPropertiesDlg");
-            if (formPropsDlg != null) {
+            // 2. Check Form Properties Dialog
+            if (title.contains("Form Properties")) {
+                Object formPropsDlg = extractTargetObject(shell, "com.automate.formgen.dialogs.FormPropertiesDlg", 0);
                 enhanceFormPropertiesDialog(display, shell, formPropsDlg);
                 return;
             }
 
-            // 3. Check UdfDlg (Prompts & Code Window)
-            final Object udfDlg = findEnclosingDialog(shell, "com.automate.formgen.dialogs.UdfDlg");
-            if (udfDlg != null) {
+            // 3. Check UDF Code & Prompts Dialog
+            if (title.contains("UDF") || title.contains("Screen Prompts") || title.contains("Prompts")) {
+                Object udfDlg = extractTargetObject(shell, "com.automate.formgen.dialogs.UdfDlg", 0);
+                if (udfDlg == null && formGenInstance != null) {
+                    try {
+                        Field f = formGenInstance.getClass().getDeclaredField("dlgCode");
+                        f.setAccessible(true);
+                        udfDlg = f.get(formGenInstance);
+                    } catch (Throwable ignored) {}
+                }
                 enhanceUdfDialog(display, shell, udfDlg);
                 return;
             }
@@ -1060,14 +1150,36 @@ public class FormGenAgent {
     private static void enhancePublishDialog(final Object display, final Object shell, final Object publishDlg) {
         try {
             log("Enhancing PublishDlg with '⚡ Fill from Solera CMS' button...");
-            Field btnPublishField = publishDlg.getClass().getDeclaredField("btnPublish");
-            btnPublishField.setAccessible(true);
-            Object btnPublish = btnPublishField.get(publishDlg);
+            Object btnPublish = null;
+            if (publishDlg != null) {
+                try {
+                    Field btnPublishField = publishDlg.getClass().getDeclaredField("btnPublish");
+                    btnPublishField.setAccessible(true);
+                    btnPublish = btnPublishField.get(publishDlg);
+                } catch (Throwable ignored) {}
+            }
+            if (btnPublish == null || isDisposed(btnPublish)) {
+                btnPublish = findChildButton(shell, "Publish");
+            }
+            if (btnPublish == null || isDisposed(btnPublish)) {
+                btnPublish = findChildButton(shell, "Revoke");
+            }
             if (btnPublish == null || isDisposed(btnPublish)) return;
 
             Method getParentMethod = btnPublish.getClass().getMethod("getParent");
             Object buttonComposite = getParentMethod.invoke(btnPublish);
             if (buttonComposite == null) return;
+
+            if (findChildButton(buttonComposite, "Fill from Solera") != null) return;
+
+            // Expand numColumns of GridLayout
+            try {
+                Object layout = buttonComposite.getClass().getMethod("getLayout").invoke(buttonComposite);
+                if (layout != null) {
+                    Field nc = layout.getClass().getField("numColumns");
+                    nc.setInt(layout, nc.getInt(layout) + 1);
+                }
+            } catch (Throwable ignored) {}
 
             Class<?> buttonClass = Class.forName("org.eclipse.swt.widgets.Button");
             Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
@@ -1091,29 +1203,30 @@ public class FormGenAgent {
                             String contactName = liveVariables.get("ContactName");
                             String notes = liveVariables.get("Notes");
 
-                            if (contactName != null && !contactName.trim().isEmpty()) {
-                                setWidgetText(publishDlg, "txtAuthorizedBy", contactName);
-                            }
-                            if (serverId != null && !serverId.trim().isEmpty()) {
-                                setWidgetText(publishDlg, "txtSingleDealerCode", serverId);
-                            }
-                            if (primaryCo != null && !primaryCo.trim().isEmpty()) {
-                                setWidgetText(publishDlg, "txtPublishSingleCompanies", primaryCo);
-                            }
+                            if (publishDlg != null) {
+                                if (contactName != null && !contactName.trim().isEmpty()) {
+                                    setWidgetText(publishDlg, "txtAuthorizedBy", contactName);
+                                }
+                                if (serverId != null && !serverId.trim().isEmpty()) {
+                                    setWidgetText(publishDlg, "txtSingleDealerCode", serverId);
+                                }
+                                if (primaryCo != null && !primaryCo.trim().isEmpty()) {
+                                    setWidgetText(publishDlg, "txtPublishSingleCompanies", primaryCo);
+                                }
 
-                            String comments = "";
-                            if (caseNumber != null && !caseNumber.trim().isEmpty()) comments = "Case #" + caseNumber;
-                            if (notes != null && !notes.trim().isEmpty()) comments += (comments.isEmpty() ? "" : " - ") + notes;
-                            if (!comments.isEmpty()) {
-                                setWidgetText(publishDlg, "txtComments", comments);
-                            }
+                                String comments = "";
+                                if (caseNumber != null && !caseNumber.trim().isEmpty()) comments = "Case #" + caseNumber;
+                                if (notes != null && !notes.trim().isEmpty()) comments += (comments.isEmpty() ? "" : " - ") + notes;
+                                if (!comments.isEmpty()) {
+                                    setWidgetText(publishDlg, "txtComments", comments);
+                                }
 
-                            // Trigger single dealer name update
-                            try {
-                                Method m = publishDlg.getClass().getDeclaredMethod("updateSingleDealerName");
-                                m.setAccessible(true);
-                                m.invoke(publishDlg);
-                            } catch (Throwable ignored) {}
+                                try {
+                                    Method m = publishDlg.getClass().getDeclaredMethod("updateSingleDealerName");
+                                    m.setAccessible(true);
+                                    m.invoke(publishDlg);
+                                } catch (Throwable ignored) {}
+                            }
                         }
                         log("Successfully auto-populated PublishDlg from Solera CMS.");
                     } catch (Throwable t) {
@@ -1125,7 +1238,6 @@ public class FormGenAgent {
             Method addListenerMethod = buttonClass.getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
             addListenerMethod.invoke(btnFill, SWT_Selection, listener);
 
-            // Re-layout composite
             buttonComposite.getClass().getMethod("layout", boolean.class, boolean.class).invoke(buttonComposite, true, true);
             shell.getClass().getMethod("layout", boolean.class, boolean.class).invoke(shell, true, true);
 
@@ -1139,24 +1251,43 @@ public class FormGenAgent {
     private static void enhanceFormPropertiesDialog(final Object display, final Object shell, final Object formPropsDlg) {
         try {
             log("Enhancing FormPropertiesDlg with '🔄 Regenerate UUID' button...");
-            Field lblPublishIDField = formPropsDlg.getClass().getDeclaredField("lblPublishID");
-            lblPublishIDField.setAccessible(true);
-            final Object lblPublishID = lblPublishIDField.get(formPropsDlg);
-            if (lblPublishID == null || isDisposed(lblPublishID)) return;
 
-            Field formdefField = formPropsDlg.getClass().getDeclaredField("formdef");
-            formdefField.setAccessible(true);
-            final Object formdef = formdefField.get(formPropsDlg);
-            if (formdef == null) return;
+            // Look for btnOk or composite containing Ok/Cancel
+            Object btnOk = null;
+            if (formPropsDlg != null) {
+                try {
+                    Field btnOkField = formPropsDlg.getClass().getDeclaredField("btnOk");
+                    btnOkField.setAccessible(true);
+                    btnOk = btnOkField.get(formPropsDlg);
+                } catch (Throwable ignored) {}
+            }
+            if (btnOk == null || isDisposed(btnOk)) {
+                btnOk = findChildButton(shell, "Ok");
+            }
+            if (btnOk == null || isDisposed(btnOk)) {
+                btnOk = findChildButton(shell, "&Ok");
+            }
+            if (btnOk == null || isDisposed(btnOk)) return;
 
-            Method getParentMethod = lblPublishID.getClass().getMethod("getParent");
-            Object parentComp = getParentMethod.invoke(lblPublishID);
-            if (parentComp == null) return;
+            Method getParentMethod = btnOk.getClass().getMethod("getParent");
+            Object buttonComposite = getParentMethod.invoke(btnOk);
+            if (buttonComposite == null) return;
+
+            if (findChildButton(buttonComposite, "Regenerate UUID") != null) return;
+
+            // Expand numColumns of GridLayout
+            try {
+                Object layout = buttonComposite.getClass().getMethod("getLayout").invoke(buttonComposite);
+                if (layout != null) {
+                    Field nc = layout.getClass().getField("numColumns");
+                    nc.setInt(layout, nc.getInt(layout) + 1);
+                }
+            } catch (Throwable ignored) {}
 
             Class<?> buttonClass = Class.forName("org.eclipse.swt.widgets.Button");
             Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
             Constructor<?> btnCons = buttonClass.getConstructor(compositeClass, int.class);
-            Object btnRegen = btnCons.newInstance(parentComp, SWT_PUSH);
+            Object btnRegen = btnCons.newInstance(buttonComposite, SWT_PUSH);
 
             btnRegen.getClass().getMethod("setText", String.class).invoke(btnRegen, "🔄 Regenerate UUID (Clone)");
             try {
@@ -1167,11 +1298,41 @@ public class FormGenAgent {
                 @Override
                 public void run() {
                     try {
+                        Object formdef = null;
+                        if (formPropsDlg != null) {
+                            try {
+                                Field f = formPropsDlg.getClass().getDeclaredField("formdef");
+                                f.setAccessible(true);
+                                formdef = f.get(formPropsDlg);
+                            } catch (Throwable ignored) {}
+                        }
+                        if (formdef == null) {
+                            formdef = getActiveFormDef();
+                        }
+                        if (formdef == null) {
+                            log("Could not resolve FormDef for UUID regeneration.");
+                            return;
+                        }
+
                         UUID newUuid = UUID.randomUUID();
                         Method setUuidMethod = formdef.getClass().getMethod("setPublishedUUID", UUID.class);
                         setUuidMethod.invoke(formdef, newUuid);
 
-                        lblPublishID.getClass().getMethod("setText", String.class).invoke(lblPublishID, newUuid.toString());
+                        Object lblPublishID = null;
+                        if (formPropsDlg != null) {
+                            try {
+                                Field f = formPropsDlg.getClass().getDeclaredField("lblPublishID");
+                                f.setAccessible(true);
+                                lblPublishID = f.get(formPropsDlg);
+                            } catch (Throwable ignored) {}
+                        }
+                        if (lblPublishID == null || isDisposed(lblPublishID)) {
+                            lblPublishID = findChildControl(shell, "AMLabel");
+                        }
+                        if (lblPublishID != null && !isDisposed(lblPublishID)) {
+                            lblPublishID.getClass().getMethod("setText", String.class).invoke(lblPublishID, newUuid.toString());
+                        }
+
                         log("Successfully regenerated UUID to: " + newUuid);
                     } catch (Throwable t) {
                         log("Error regenerating UUID: " + t.getMessage());
@@ -1182,7 +1343,7 @@ public class FormGenAgent {
             Method addListenerMethod = buttonClass.getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
             addListenerMethod.invoke(btnRegen, SWT_Selection, listener);
 
-            parentComp.getClass().getMethod("layout", boolean.class, boolean.class).invoke(parentComp, true, true);
+            buttonComposite.getClass().getMethod("layout", boolean.class, boolean.class).invoke(buttonComposite, true, true);
             shell.getClass().getMethod("layout", boolean.class, boolean.class).invoke(shell, true, true);
 
             shell.getClass().getMethod("setData", String.class, Object.class).invoke(shell, "SoleraEnhanced", Boolean.TRUE);
@@ -1195,10 +1356,36 @@ public class FormGenAgent {
     private static void enhanceUdfDialog(final Object display, final Object shell, final Object udfDlg) {
         try {
             log("Enhancing UdfDlg with '🛠 Send to FormGen Utilities' button...");
-            Field compButtonsField = udfDlg.getClass().getDeclaredField("compButtons");
-            compButtonsField.setAccessible(true);
-            Object compButtons = compButtonsField.get(udfDlg);
-            if (compButtons == null || isDisposed(compButtons)) return;
+
+            Object compButtons = null;
+            if (udfDlg != null) {
+                try {
+                    Field compButtonsField = udfDlg.getClass().getDeclaredField("compButtons");
+                    compButtonsField.setAccessible(true);
+                    compButtons = compButtonsField.get(udfDlg);
+                } catch (Throwable ignored) {}
+            }
+            if (compButtons == null || isDisposed(compButtons)) {
+                Object btnApply = findChildButton(shell, "Apply");
+                if (btnApply != null && !isDisposed(btnApply)) {
+                    compButtons = btnApply.getClass().getMethod("getParent").invoke(btnApply);
+                }
+            }
+            if (compButtons == null || isDisposed(compButtons)) {
+                log("Could not find compButtons in UdfDlg.");
+                return;
+            }
+
+            if (findChildButton(compButtons, "FormGen Utilities") != null) return;
+
+            // Expand numColumns of GridLayout
+            try {
+                Object layout = compButtons.getClass().getMethod("getLayout").invoke(compButtons);
+                if (layout != null) {
+                    Field nc = layout.getClass().getField("numColumns");
+                    nc.setInt(layout, nc.getInt(layout) + 1);
+                }
+            } catch (Throwable ignored) {}
 
             Class<?> buttonClass = Class.forName("org.eclipse.swt.widgets.Button");
             Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
@@ -1228,6 +1415,20 @@ public class FormGenAgent {
         } catch (Throwable t) {
             log("Error enhancing UdfDlg: " + t.getMessage());
         }
+    }
+
+    public static Object getActiveFormDef() {
+        if (!discoverFormGen()) return null;
+        try {
+            Field fvField = formGenInstance.getClass().getDeclaredField("formViewer");
+            fvField.setAccessible(true);
+            Object formViewer = fvField.get(formGenInstance);
+            if (formViewer != null) {
+                Method getFormDefMethod = formViewer.getClass().getMethod("getFormDef");
+                return getFormDefMethod.invoke(formViewer);
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     private static void setWidgetText(Object target, String fieldName, String text) {
