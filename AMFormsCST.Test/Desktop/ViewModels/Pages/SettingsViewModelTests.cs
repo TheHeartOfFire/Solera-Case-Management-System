@@ -1,3 +1,4 @@
+using System.IO;
 using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.UserSettings;
 using AMFormsCST.Desktop.Models.UserSettings;
@@ -151,5 +152,58 @@ public class SettingsViewModelTests
         // Assert
         // Verify that the CheckForUpdatesAsync method on the service was called exactly once.
         _mockUpdateManagerService.Verify(ums => ums.CheckForUpdatesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public void AssociateFormGenCommand_WhenPathIsValid_CallsAssociateFormgen()
+    {
+        // Arrange
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var mockContextMenu = new Mock<AMFormsCST.Desktop.Services.Interfaces.IWindowsExplorerContextMenuService>();
+            mockContextMenu.Setup(m => m.AssociateFormgen(tempFile)).Returns(true);
+            mockContextMenu.Setup(m => m.IsFormgenAssociated()).Returns(true);
+
+            var viewModel = new SettingsViewModel(
+                _mockUpdateManagerService.Object,
+                _mockSupportTool.Object,
+                _mockBugReportService.Object,
+                explorerContextMenuService: mockContextMenu.Object);
+
+            viewModel.FormGenExecutablePath = tempFile;
+
+            // Act
+            viewModel.AssociateFormGenCommand.Execute(null);
+
+            // Assert
+            mockContextMenu.Verify(m => m.AssociateFormgen(tempFile), Times.Once);
+            Assert.True(viewModel.IsFormgenAssociated);
+            Assert.Contains("default handler", viewModel.FormgenAssociationStatus);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void AssociateFormGenCommand_WhenPathIsEmpty_DoesNotCallService()
+    {
+        // Arrange
+        var mockContextMenu = new Mock<AMFormsCST.Desktop.Services.Interfaces.IWindowsExplorerContextMenuService>();
+        var viewModel = new SettingsViewModel(
+            _mockUpdateManagerService.Object,
+            _mockSupportTool.Object,
+            _mockBugReportService.Object,
+            explorerContextMenuService: mockContextMenu.Object);
+
+        viewModel.FormGenExecutablePath = "";
+
+        // Act
+        viewModel.AssociateFormGenCommand.Execute(null);
+
+        // Assert
+        mockContextMenu.Verify(m => m.AssociateFormgen(It.IsAny<string>()), Times.Never);
     }
 }

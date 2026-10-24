@@ -587,6 +587,11 @@ public partial class CodeSnippetsViewModel : ViewModel
     [RelayCommand]
     public void ClearCanvas()
     {
+        if (SelectedCodeSnippet != null)
+        {
+            SelectedCodeSnippet.IsSelected = false;
+            SelectedCodeSnippet = null;
+        }
         Nodes.Clear();
         ActiveRootNode = null;
         ActiveOutputCode = string.Empty;

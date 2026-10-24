@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Desktop.BaseClasses;
 using AMFormsCST.Desktop.Types;
@@ -26,6 +26,21 @@ namespace AMFormsCST.Desktop.Models
         internal IDealer? CoreType { get; set; }
 
         public Company? SelectedCompany => Companies.SelectedItem;
+        public string NotableCompanyCodes
+        {
+            get
+            {
+                var notable = Companies?.Where(c => c.Notable && !string.IsNullOrWhiteSpace(c.CompanyCode))
+                                       .Select(c => c.CompanyCode!.Trim())
+                                       .Distinct()
+                                       .ToList() ?? [];
+                if (notable.Count > 0)
+                {
+                    return string.Join(",", notable);
+                }
+                return SelectedCompany?.CompanyCode ?? string.Empty;
+            }
+        }
         public override Guid Id { get; } = Guid.NewGuid();
 
         public override bool IsBlank
@@ -108,12 +123,17 @@ namespace AMFormsCST.Desktop.Models
             if (e.PropertyName == nameof(ManagedObservableCollection<Company>.SelectedItem))
             {
                 OnPropertyChanged(nameof(SelectedCompany));
+                OnPropertyChanged(nameof(NotableCompanyCodes));
             }
         }
 
         private void OnCompanyPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             OnPropertyChanged(nameof(IsBlank));
+            if (e.PropertyName == nameof(Company.Notable) || e.PropertyName == nameof(Company.CompanyCode))
+            {
+                OnPropertyChanged(nameof(NotableCompanyCodes));
+            }
         }
 
         private void Companies_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -131,6 +151,7 @@ namespace AMFormsCST.Desktop.Models
 
             UpdateCore();
             Parent?.Parent?.NotifyCompanyNavigationChanged();
+            OnPropertyChanged(nameof(NotableCompanyCodes));
             _logger?.LogDebug("Companies collection changed.");
         }
 

@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core;
+using AMFormsCST.Core;
 using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Core.Interfaces.Utils;
@@ -719,17 +719,27 @@ public partial class DashboardViewModel : ViewModel
         }
     }
     private TemplatesViewModel? _templatesvm;
+    public TemplatesViewModel? ActiveTemplatesViewModel => _templatesvm;
+
     [RelayCommand]
     private void OpenTemplateDialog()
     {
         try
         {
-            var vm = new TemplatesViewModel(_supportTool, _fileSystem);
+            TemplatesViewModel vm;
+            try
+            {
+                vm = App.GetRequiredService<TemplatesViewModel>();
+            }
+            catch
+            {
+                vm = new TemplatesViewModel(_supportTool, _fileSystem);
+            }
+
             _templatesvm = vm;
             var page = new TemplatesPage(vm);
             var dialog = new PageHostDialog(page, "Templates");
             dialog.Show();
-            dialog.Closed += (s, e) => _templatesvm = null;
             _logger?.LogInfo("Opened Template Dialog.");
         }
         catch (Exception ex)

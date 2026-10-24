@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Solera CMS & Project Citadel Assistant",
+  "version": "1.0.0",
+  "description": "Context menu integration bridging Salesforce with Solera Case Management System and Project Citadel.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAllB5xxoCWHLtdVAe6s5C1x55D9tusb4Ts/yiMHu1Dy68XNSZ1OpxIS7c116blnkDqgkLPRZ3eoiDl8FKFh9dD1sqDtpVFo497Emj9XowQyagJoHbjbBIhDWfzQbyc+2aA5dhEfyRqqMhfsMuAvgwrf1tLcqAfC66nPt+t9ky3VXF6xvzOYda07Biy8uE+LymNR8znTwTCYg6jEKWw3ROrOZ46cpleH7L+V76BYb/y5F6Bf+zbgvloAg3+482dFn5KzVoQVjbCpyBDgEriYtnYs/RSX+7jrbVo8KLEHdFU2aMPtjr+4jmUpOOHRpMBYGknUtBijbj87uyMxamZkKr2QIDAQAB",
+  "permissions": [
+    "contextMenus",
+    "nativeMessaging",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.force.com/*",
+    "https://*.lightning.force.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.force.com/*",
+        "https://*.lightning.force.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
+

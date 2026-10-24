@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces.UserSettings;
+using AMFormsCST.Core.Interfaces.UserSettings;
 using AMFormsCST.Core.Interfaces;
 using System.Text.Json.Serialization;
 
@@ -12,6 +12,35 @@ public class UserSettings : IUserSettings
     private string _name = string.Empty;
     private string _applicationFilesPath = string.Empty;
     private string _extSeparator = "x";
+    private bool _enableExplorerContextMenu = true;
+    private string _formGenExecutablePath = string.Empty;
+
+    public bool EnableExplorerContextMenu
+    {
+        get => _enableExplorerContextMenu;
+        set
+        {
+            if (_enableExplorerContextMenu != value)
+            {
+                _enableExplorerContextMenu = value;
+                _logger?.LogInfo($"EnableExplorerContextMenu property set to '{value}'.");
+            }
+        }
+    }
+
+    public string FormGenExecutablePath
+    {
+        get => _formGenExecutablePath;
+        set
+        {
+            value ??= string.Empty;
+            if (_formGenExecutablePath != value)
+            {
+                _formGenExecutablePath = value;
+                _logger?.LogInfo($"FormGenExecutablePath property set to '{value}'.");
+            }
+        }
+    }
 
     public IOrgVariables Organization
     {
