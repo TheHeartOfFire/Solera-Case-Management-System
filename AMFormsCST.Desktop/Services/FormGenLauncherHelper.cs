@@ -17,6 +17,15 @@ public static class FormGenLauncherHelper
     private const string PortFileName = "formgen_agent.port";
 
     /// <summary>
+    /// Test seam: lets a test (and only the async flow it starts) point the helper at a private directory,
+    /// so parallel tests and background sync calls don't fight over the shared %TEMP% port file.
+    /// </summary>
+    internal static readonly System.Threading.AsyncLocal<string?> PortFileDirectoryOverride = new();
+
+    private static string GetPortFilePath() =>
+        Path.Combine(PortFileDirectoryOverride.Value ?? Path.GetTempPath(), PortFileName);
+
+    /// <summary>
     /// Opens the specified .formgen or .fga file in FormGen.
     /// If FormGen is already running with FormGenAgent, the file is sent over localhost TCP in milliseconds.
     /// If not running, FormGen is launched with the agent and opens the file on startup.
@@ -100,7 +109,7 @@ public static class FormGenLauncherHelper
     {
         try
         {
-            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            var portFilePath = GetPortFilePath();
             if (!File.Exists(portFilePath))
                 return false;
 
@@ -152,7 +161,7 @@ public static class FormGenLauncherHelper
                 || ex.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionRefused }
                 || (ex is AggregateException agg && agg.InnerExceptions.Any(e => e is SocketException { SocketErrorCode: SocketError.ConnectionRefused }));
             if (!refused) return;
-            var p = Path.Combine(Path.GetTempPath(), PortFileName);
+            var p = GetPortFilePath();
             if (File.Exists(p)) File.Delete(p);
         }
         catch { }
@@ -166,7 +175,7 @@ public static class FormGenLauncherHelper
     {
         try
         {
-            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            var portFilePath = GetPortFilePath();
             if (!File.Exists(portFilePath))
                 return false;
 
@@ -205,7 +214,7 @@ public static class FormGenLauncherHelper
     {
         try
         {
-            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            var portFilePath = GetPortFilePath();
             if (!File.Exists(portFilePath))
                 return false;
 
@@ -242,7 +251,7 @@ public static class FormGenLauncherHelper
     {
         try
         {
-            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            var portFilePath = GetPortFilePath();
             if (!File.Exists(portFilePath))
                 return false;
 
@@ -250,9 +259,9 @@ public static class FormGenLauncherHelper
             if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
                 return false;
 
-            using var client = new TcpClient();
+            using var client = new TcpClient { ReceiveTimeout = IpcIoTimeoutMs, SendTimeout = IpcIoTimeoutMs };
             var connectTask = client.ConnectAsync("127.0.0.1", port);
-            if (!connectTask.Wait(500))
+            if (!connectTask.Wait(IpcConnectTimeoutMs))
             {
                 client.Close();
                 return false;
@@ -294,7 +303,7 @@ public static class FormGenLauncherHelper
     {
         try
         {
-            var portFilePath = Path.Combine(Path.GetTempPath(), PortFileName);
+            var portFilePath = GetPortFilePath();
             if (!File.Exists(portFilePath))
                 return null;
 
@@ -302,9 +311,9 @@ public static class FormGenLauncherHelper
             if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
                 return null;
 
-            using var client = new TcpClient();
+            using var client = new TcpClient { ReceiveTimeout = IpcIoTimeoutMs, SendTimeout = IpcIoTimeoutMs };
             var connectTask = client.ConnectAsync("127.0.0.1", port);
-            if (!connectTask.Wait(500))
+            if (!connectTask.Wait(IpcConnectTimeoutMs))
             {
                 client.Close();
                 return null;

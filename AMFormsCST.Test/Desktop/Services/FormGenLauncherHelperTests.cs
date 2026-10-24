@@ -86,7 +86,7 @@ public class FormGenLauncherHelperTests
     [Fact]
     public void IsAgentActive_WhenPortFileDoesNotExist_ReturnsFalse()
     {
-        var tempPortFile = Path.Combine(Path.GetTempPath(), "formgen_agent.port");
+        var tempPortFile = UsePrivatePortFile();
         try
         {
             if (File.Exists(tempPortFile)) File.Delete(tempPortFile);
@@ -98,7 +98,7 @@ public class FormGenLauncherHelperTests
     [Fact]
     public void SyncStateToAgent_WhenPortFileDoesNotExist_ReturnsFalse()
     {
-        var tempPortFile = Path.Combine(Path.GetTempPath(), "formgen_agent.port");
+        var tempPortFile = UsePrivatePortFile();
         try
         {
             if (File.Exists(tempPortFile)) File.Delete(tempPortFile);
@@ -110,7 +110,7 @@ public class FormGenLauncherHelperTests
     [Fact]
     public void GetActiveFormFromAgent_WhenPortFileDoesNotExist_ReturnsNull()
     {
-        var tempPortFile = Path.Combine(Path.GetTempPath(), "formgen_agent.port");
+        var tempPortFile = UsePrivatePortFile();
         try
         {
             if (File.Exists(tempPortFile)) File.Delete(tempPortFile);
@@ -122,7 +122,7 @@ public class FormGenLauncherHelperTests
     [Fact]
     public void AgentSocketMethods_WithMockTcpServer_RespondCorrectly()
     {
-        var tempPortFile = Path.Combine(Path.GetTempPath(), "formgen_agent.port");
+        var tempPortFile = UsePrivatePortFile();
         using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         listener.Start();
         int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
@@ -184,7 +184,7 @@ public class FormGenLauncherHelperTests
     [Fact]
     public void TryPushViaIpc_WhenAgentReceivesPushCommand_ReturnsTrue()
     {
-        var tempPortFile = Path.Combine(Path.GetTempPath(), "formgen_agent.port");
+        var tempPortFile = UsePrivatePortFile();
         var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         listener.Start();
         int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
@@ -224,6 +224,18 @@ public class FormGenLauncherHelperTests
             if (File.Exists(tempPortFile)) File.Delete(tempPortFile);
             listener.Stop();
         }
+    }
+
+    /// <summary>
+    /// Points the launcher helper at a private directory for the current test's async flow, so parallel tests
+    /// and background sync calls never share (or delete) the real %TEMP%\formgen_agent.port.
+    /// </summary>
+    private static string UsePrivatePortFile()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "FormGenPort_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        FormGenLauncherHelper.PortFileDirectoryOverride.Value = dir;
+        return Path.Combine(dir, "formgen_agent.port");
     }
 }
 
