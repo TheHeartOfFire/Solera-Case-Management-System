@@ -210,19 +210,31 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         }
     }
 
-    private DateTime _lastPushUtc = DateTime.MinValue;
-    private static readonly TimeSpan PushDebounce = TimeSpan.FromSeconds(1);
+    private const string PushIdleText = "Push to FormGen";
+    private const string PushSendingText = "Sending...";
+    private const string PushSentText = "Sent ✓";
+    private static readonly TimeSpan PushSentDisplayTime = TimeSpan.FromMilliseconds(1500);
 
-    [RelayCommand]
-    private void PushToFormGen()
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PushToFormGenCommand))]
+    private bool _isPushing;
+
+    [ObservableProperty]
+    private string _pushButtonText = PushIdleText;
+
+    private bool CanPushToFormGen() => !IsPushing;
+
+    [RelayCommand(CanExecute = nameof(CanPushToFormGen))]
+    private async Task PushToFormGen()
     {
-        if (!IsFileLoaded || string.IsNullOrWhiteSpace(FilePath)) return;
+        if (!IsFileLoaded || string.IsNullOrWhiteSpace(FilePath) || IsPushing) return;
 
-        // Ignore re-entrant or rapid repeat clicks; each push saves to disk and triggers a full form reload in FormGen.
-        if (IsBusy || DateTime.UtcNow - _lastPushUtc < PushDebounce) return;
-        _lastPushUtc = DateTime.UtcNow;
-
+        // The button stays disabled while sending and briefly after "Sent", which limits rapid repeat pushes
+        // (each push saves to disk and triggers a full form reload in FormGen).
+        IsPushing = true;
+        PushButtonText = PushSendingText;
         IsBusy = true;
+        bool? success = null;
         try
         {
             if (HasChanged && _supportTool?.FormgenUtils.ParsedFormgenFile is not null)
@@ -247,10 +259,16 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             }
 
             var formgenBatPath = _supportTool?.Settings?.UserSettings?.FormGenExecutablePath;
-            bool success = FormGenLauncherHelper.PushFormToFormGen(FilePath, Uuid, formgenBatPath, _logger);
-            if (success)
+            var path = FilePath;
+            var uuid = Uuid;
+            var logger = _logger;
+            success = await Task.Run(() => FormGenLauncherHelper.PushFormToFormGen(path, uuid, formgenBatPath, logger));
+
+            if (success == true)
             {
                 _logger?.LogInfo($"Form successfully pushed to FormGen: {FilePath}");
+                PushButtonText = PushSentText;
+                await Task.Delay(PushSentDisplayTime);
             }
             else
             {
@@ -264,6 +282,8 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         }
         finally
         {
+            PushButtonText = PushIdleText;
+            IsPushing = false;
             IsBusy = false;
         }
     }

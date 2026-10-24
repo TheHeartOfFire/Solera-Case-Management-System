@@ -56,7 +56,7 @@
                     Margin="0,8,0,0"
                     Appearance="Info"
                     Command="{Binding PushToFormGenCommand}"
-                    Content="Push to FormGen"
+                    Content="{Binding PushButtonText}"
                     Icon="{ui:SymbolIcon ArrowUpload24}"
                     IsEnabled="{Binding IsFileLoaded}"
                     ToolTip="Push this form to FormGen (reloads if open, or opens in a new tab)" />
