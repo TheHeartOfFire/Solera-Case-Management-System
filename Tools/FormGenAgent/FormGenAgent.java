@@ -753,6 +753,15 @@ public class FormGenAgent {
         return null;
     }
 
+    private static void writePortFile(int port) throws IOException {
+        FileWriter fw = new FileWriter(PORT_FILE);
+        try {
+            fw.write(String.valueOf(port));
+        } finally {
+            fw.close();
+        }
+    }
+
     private static synchronized void startIpcServer() {
         if (serverStarted) return;
         serverStarted = true;
@@ -766,9 +775,28 @@ public class FormGenAgent {
                     int port = serverSocket.getLocalPort();
                     log("IPC Server listening on 127.0.0.1:" + port);
 
-                    FileWriter fw = new FileWriter(PORT_FILE);
-                    fw.write(String.valueOf(port));
-                    fw.close();
+                    final int listenPort = port;
+                    writePortFile(listenPort);
+
+                    Thread watchdog = new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            while (true) {
+                                try {
+                                    Thread.sleep(2000);
+                                    File pf = new File(PORT_FILE);
+                                    if (!pf.exists()) {
+                                        writePortFile(listenPort);
+                                        log("Port file was missing; recreated for port " + listenPort);
+                                    }
+                                } catch (InterruptedException ie) {
+                                    return;
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                    }, "FormGenAgent-PortWatchdog");
+                    watchdog.setDaemon(true);
+                    watchdog.start();
 
                     while (!serverSocket.isClosed()) {
                         try {

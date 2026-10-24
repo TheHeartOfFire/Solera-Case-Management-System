@@ -210,10 +210,17 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         }
     }
 
+    private DateTime _lastPushUtc = DateTime.MinValue;
+    private static readonly TimeSpan PushDebounce = TimeSpan.FromSeconds(1);
+
     [RelayCommand]
     private void PushToFormGen()
     {
         if (!IsFileLoaded || string.IsNullOrWhiteSpace(FilePath)) return;
+
+        // Ignore re-entrant or rapid repeat clicks; each push saves to disk and triggers a full form reload in FormGen.
+        if (IsBusy || DateTime.UtcNow - _lastPushUtc < PushDebounce) return;
+        _lastPushUtc = DateTime.UtcNow;
 
         IsBusy = true;
         try

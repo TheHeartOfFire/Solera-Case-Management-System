@@ -108,12 +108,12 @@ public static class FormGenLauncherHelper
             if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
                 return false;
 
-            using var client = new TcpClient();
+            using var client = new TcpClient { ReceiveTimeout = IpcIoTimeoutMs, SendTimeout = IpcIoTimeoutMs };
             var connectTask = client.ConnectAsync("127.0.0.1", port);
-            if (!connectTask.Wait(1000))
+            if (!connectTask.Wait(IpcConnectTimeoutMs))
             {
+                // A slow response is not proof FormGen exited, so the port file is left alone.
                 client.Close();
-                try { File.Delete(portFilePath); } catch {}
                 return false;
             }
 
@@ -132,9 +132,32 @@ public static class FormGenLauncherHelper
         catch (Exception ex)
         {
             logger?.LogWarning($"IPC push to FormGen agent failed: {ex.Message}");
+            DeletePortFileIfRefused(ex);
             return false;
         }
     }
+
+    private const int IpcConnectTimeoutMs = 3000;
+    private const int IpcIoTimeoutMs = 3000;
+
+    /// <summary>
+    /// Deletes the stale port file only when the OS confirms nothing is listening (connection refused).
+    /// Timeouts and other transient errors must not delete it, since FormGen writes it only once at startup.
+    /// </summary>
+    private static void DeletePortFileIfRefused(Exception ex)
+    {
+        try
+        {
+            var refused = ex is SocketException { SocketErrorCode: SocketError.ConnectionRefused }
+                || ex.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionRefused }
+                || (ex is AggregateException agg && agg.InnerExceptions.Any(e => e is SocketException { SocketErrorCode: SocketError.ConnectionRefused }));
+            if (!refused) return;
+            var p = Path.Combine(Path.GetTempPath(), PortFileName);
+            if (File.Exists(p)) File.Delete(p);
+        }
+        catch { }
+    }
+
 
     /// <summary>
     /// Attempts to send the file path to the FormGen agent via localhost TCP.
@@ -151,12 +174,11 @@ public static class FormGenLauncherHelper
             if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
                 return false;
 
-            using var client = new TcpClient();
+            using var client = new TcpClient { ReceiveTimeout = IpcIoTimeoutMs, SendTimeout = IpcIoTimeoutMs };
             var connectTask = client.ConnectAsync("127.0.0.1", port);
-            if (!connectTask.Wait(1000))
+            if (!connectTask.Wait(IpcConnectTimeoutMs))
             {
                 client.Close();
-                try { File.Delete(portFilePath); } catch {}
                 return false;
             }
 
@@ -171,7 +193,7 @@ public static class FormGenLauncherHelper
         catch (Exception ex)
         {
             logger?.LogWarning($"IPC communication with FormGen agent failed: {ex.Message}");
-            try { var p = Path.Combine(Path.GetTempPath(), PortFileName); if (File.Exists(p)) File.Delete(p); } catch {}
+            DeletePortFileIfRefused(ex);
             return false;
         }
     }
