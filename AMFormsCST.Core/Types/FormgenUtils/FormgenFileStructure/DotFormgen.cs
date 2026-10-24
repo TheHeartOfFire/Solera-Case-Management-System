@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Text;
 using System.Xml;
@@ -317,16 +317,19 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
             return new DotFormgen(xmlDoc.DocumentElement!);
         }
 
+        // Null and empty are equivalent: a clone round-trips through XML, which turns null strings into empty ones.
+        private static bool StrEq(string? a, string? b) => string.Equals(a ?? string.Empty, b ?? string.Empty);
+
         public bool Equals(DotFormgen? other) =>
             other is not null &&
             Settings.Equals(other.Settings) &&
             Pages.SequenceEqual(other.Pages) &&
-            (Title?.Equals(other.Title) ?? false) &&
+            StrEq(Title, other.Title) &&
             TradePrompt == other.TradePrompt &&
             FormType == other.FormType &&
             SalesPersonPrompt == other.SalesPersonPrompt &&
-            (Username?.Equals(other.Username) ?? false) &&
-            (BillingName?.Equals(other.BillingName) ?? false) &&
+            StrEq(Username, other.Username) &&
+            StrEq(BillingName, other.BillingName) &&
             CodeLines.SequenceEqual(other.CodeLines) &&
             Category == other.Category &&
             States.SequenceEqual(other.States);

@@ -94,6 +94,34 @@ public class FormgenUtilsTests
     }
 
     [Fact]
+    public void HasChanged_AfterSave_DetectsSubsequentEdits()
+    {
+        var fakeFilePath = "C:\\forms\\test.formgen";
+        var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<formDef version=""1"" publishedUUID=""some-guid"" legacyImport=""false"" totalPages=""1"" defaultPoints=""10"" missingSourceJpeg=""false"" duplex=""false"" maxAccessoryLines=""0"" prePrintedLaserForm=""false"">
+  <title>My Test Form</title>
+  <formPrintType>Pdf</formPrintType>
+</formDef>";
+        _mockFileSystem.Setup(fs => fs.ReadAllText(fakeFilePath)).Returns(xml);
+        var formgenUtils = new FormgenUtils(_mockFileSystem.Object, _formgenUtilsProperties);
+        formgenUtils.OpenFile(fakeFilePath);
+        Assert.False(formgenUtils.HasChanged);
+
+        formgenUtils.ParsedFormgenFile!.Title = "Edit 1";
+        Assert.True(formgenUtils.HasChanged);
+
+        formgenUtils.SaveFile(fakeFilePath);
+        Assert.False(formgenUtils.HasChanged);
+
+        // Regression: the baseline used to alias the live object, so every later edit looked unchanged.
+        formgenUtils.ParsedFormgenFile.Title = "Edit 2";
+        Assert.True(formgenUtils.HasChanged);
+
+        formgenUtils.SaveFile(fakeFilePath);
+        Assert.False(formgenUtils.HasChanged);
+    }
+
+    [Fact]
     public void CloseFile_ResetsParsedFormgenFile_ToNull()
     {
         // Arrange
