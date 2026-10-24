@@ -603,6 +603,11 @@ public class FormGenAgent {
                         } catch (Throwable ignored) {}
 
                         // Reload form in viewer
+                        int previousPage = 0;
+                        try {
+                            Object pg = matchingViewer.getClass().getMethod("getCurrentPageNumber").invoke(matchingViewer);
+                            if (pg instanceof Integer) previousPage = Math.max(0, (Integer) pg);
+                        } catch (Throwable ignored) {}
                         try {
                             Method openFormFileMethod = matchingViewer.getClass().getMethod("openFormFile", formOpenModeClass, File.class, Class.forName("com.automate.formgen.dialogs.checkinout.CheckoutInfo"));
                             openFormFileMethod.setAccessible(true);
@@ -610,6 +615,27 @@ public class FormGenAgent {
                             log("Form reloaded in existing tab: " + res);
                         } catch (Throwable t) {
                             log("Error reloading form in viewer: " + t.getMessage());
+                        }
+
+                        // openFormFile resets currentPageNumber to -1 (via onClose/reset) and never re-shows a page.
+                        // Without restoring it, any mouse click hits FormDef.getPage(-1) -> ArrayIndexOutOfBounds.
+                        try {
+                            int numPages = 1;
+                            try {
+                                Object np = matchingViewer.getClass().getMethod("getNumPages").invoke(matchingViewer);
+                                if (np instanceof Integer) numPages = (Integer) np;
+                            } catch (Throwable ignored) {}
+                            int pageToShow = (previousPage >= 0 && previousPage < numPages) ? previousPage : 0;
+                            try {
+                                Method spc = formGenInstance.getClass().getDeclaredMethod("setupPageControl", int.class);
+                                spc.setAccessible(true);
+                                spc.invoke(formGenInstance, pageToShow);
+                            } catch (Throwable t) {
+                                Method sp = matchingViewer.getClass().getMethod("showPage", int.class);
+                                sp.invoke(matchingViewer, pageToShow);
+                            }
+                        } catch (Throwable t) {
+                            log("Error restoring page after reload: " + t.getMessage());
                         }
 
                         // Refresh titles and return focus
