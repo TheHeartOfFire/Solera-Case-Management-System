@@ -133,7 +133,10 @@ function isValidServerCode(val) {
     const invalidWords = [
         "close", "close dialog", "cancel", "save", "edit", "help", "view all", 
         "details", "more", "show more", "preview", "delete", "loading", 
-        "server code", "server id", "automate server code", "server", "none", "null"
+        "server code", "server id", "automate server code", "server", "none", "null",
+        "great", "great plains", "plains", "institutional", "fex", "marketing",
+        "crs", "ics", "crs/ics", "client", "client id", "account", "account number",
+        "phone", "name", "opp", "opportunities", "cases", "opportunity", "case"
     ];
     if (invalidWords.includes(lower)) return false;
     if (isLabelText(clean)) return false;
@@ -149,7 +152,11 @@ function isLabelText(text, patterns = []) {
         "mobile", "contact mobile", "business phone", "email", "contact email", 
         "server code", "server id", "automate server code", "auto/mate server code", 
         "am server code", "server", "close", "close dialog", "cancel", "save", "edit",
-        "help", "view all", "details", "more", "show more", "preview", "delete", "loading"
+        "help", "view all", "details", "more", "show more", "preview", "delete", "loading",
+        "great", "great plains", "great plains account number", "plains", "institutional",
+        "fex institutional id", "fex", "marketing", "marketing account number",
+        "crs", "ics", "crs/ics", "client id - crs/ics", "client id", "account number",
+        "opportunities", "cases"
     ];
     if (commonLabels.includes(lower)) return true;
     for (const p of patterns) {
@@ -260,7 +267,7 @@ function findFieldInPopovers(labelPatterns) {
     try {
         popovers = document.querySelectorAll(popoverSelectors.join(', '));
     } catch (e) {
-        popovers = document.querySelectorAll('.slds-popover, [role="dialog"], force-hoverable-popover, .forceHoverPanel');
+        popovers = document.querySelectorAll('.slds-popover, [role="dialog"], force-hoverable-popover');
     }
 
     for (const popover of popovers) {
@@ -269,14 +276,7 @@ function findFieldInPopovers(labelPatterns) {
             if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
         } catch (e) {}
 
-        // Strategy A: Regex on popover innerText (Handles compact layout 2-column key/value grids flawlessly)
-        const popoverText = popover.innerText || "";
-        const regexMatch = popoverText.match(/(?:automate\s*server\s*code|auto\/mate\s*server\s*code|server\s*code|server\s*id)[\s\r\n:]+([A-Za-z0-9_-]{2,15})/i);
-        if (regexMatch && isValidServerCode(regexMatch[1])) {
-            return regexMatch[1].trim();
-        }
-
-        // Strategy B: Check records-record-layout-item elements with field-label attribute inside popover
+        // Method 1: Check records-record-layout-item elements with field-label attribute inside popover
         const layoutItems = popover.querySelectorAll("records-record-layout-item[field-label]");
         for (const item of layoutItems) {
             const attr = (item.getAttribute("field-label") || "").trim();
@@ -295,14 +295,14 @@ function findFieldInPopovers(labelPatterns) {
             }
         }
 
-        // Strategy C: Check compact layout field containers (strictly excluding headers, buttons, close icons)
+        // Method 2: Check compact layout field containers (strictly excluding headers, buttons, close icons)
         const labelCandidates = popover.querySelectorAll(
-            '.slds-form-element__label, .test-id__field-label, dt, .slds-item_label, .slds-text-title'
+            '.slds-text-title, .slds-form-element__label, .test-id__field-label, dt, .slds-item_label, [title*="Server" i]'
         );
         for (const el of labelCandidates) {
             if (el.closest('button, .slds-button, .slds-popover__close, header, .slds-popover__header, .slds-assistive-text')) continue;
 
-            const txt = cleanFieldValue(el.innerText || el.textContent);
+            const txt = cleanFieldValue(el.innerText || el.textContent || el.getAttribute("title"));
             if (!txt || txt.length > 40) continue;
 
             for (const pattern of labelPatterns) {
@@ -310,7 +310,7 @@ function findFieldInPopovers(labelPatterns) {
                     ? txt.toLowerCase() === pattern.toLowerCase()
                     : pattern.test(txt);
                 if (matches) {
-                    // 1. Look in parent field column/container
+                    // Look in parent field column/container (e.g. .slds-col, .slds-form-element, dl, records-record-layout-item)
                     const container = el.closest('.slds-col, .slds-form-element, records-record-layout-item, dl, [class*="layout-item"]');
                     if (container) {
                         const valEl = container.querySelector(
@@ -322,12 +322,29 @@ function findFieldInPopovers(labelPatterns) {
                         }
                     }
 
-                    // 2. Check next sibling
+                    // Look at next sibling
                     let sibling = el.nextElementSibling;
                     if (sibling && !sibling.matches('button, .slds-button, .slds-popover__close')) {
                         const sibValEl = sibling.querySelector("lightning-formatted-text, .uiOutputText, .slds-text-body_regular") || sibling;
                         const val = cleanFieldValue(sibValEl.innerText || sibValEl.textContent);
                         if (isValidServerCode(val)) return val;
+                    }
+                }
+            }
+        }
+
+        // Method 3: Check all lightning-formatted-text and .slds-text-body_regular elements in popover body
+        const bodyValues = popover.querySelectorAll('.slds-popover__body lightning-formatted-text, .slds-popover__body .slds-text-body_regular');
+        for (const bv of bodyValues) {
+            if (bv.closest('button, .slds-button, .slds-popover__close, header')) continue;
+            const val = cleanFieldValue(bv.innerText || bv.textContent);
+            if (isValidServerCode(val)) {
+                // Ensure this value belongs to the server code field
+                const fieldContainer = bv.closest('.slds-col, .slds-form-element, records-record-layout-item, dl, div');
+                if (fieldContainer) {
+                    const cText = (fieldContainer.innerText || "").toLowerCase();
+                    if (cText.includes("server") || cText.includes("automate")) {
+                        return val;
                     }
                 }
             }
@@ -666,10 +683,13 @@ async function fetchServerCodeViaUiApi(accountId) {
 
 function extractServerCodeFromText(text) {
     if (!text) return "";
-    const m = text.match(/(?:automate\s*server\s*code|auto\/mate\s*server\s*code|server\s*code|server\s*id)[\s\r\n:]+([A-Za-z0-9_-]{2,15})/i);
-    if (m && m[1]) {
-        const val = m[1].trim();
-        if (isValidServerCode(val)) return val;
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const m = line.match(/(?:automate\s*server\s*code|auto\/mate\s*server\s*code|server\s*code|server\s*id)[ \t:]+([A-Za-z0-9_-]{2,15})/i);
+        if (m && m[1] && isValidServerCode(m[1])) {
+            return m[1].trim();
+        }
     }
     return "";
 }
@@ -681,15 +701,8 @@ async function extractSalesforceCaseAsync() {
     }
     data.serverCode = "";
 
-    // Step 1: Check document text regex
-    const textCode = extractServerCodeFromText(document.body ? document.body.innerText : "");
-    if (isValidServerCode(textCode)) {
-        data.serverCode = textCode;
-        return data;
-    }
-
     if (data.accountId) {
-        // Step 2: Synthetic hover popover lookup (triggers Compact Layout render as shown in screenshot)
+        // Step 1: Synthetic hover popover lookup (triggers Compact Layout render as shown in screenshot)
         try {
             const hoverCode = await fetchServerCodeViaHover(data.accountId);
             if (isValidServerCode(hoverCode)) {
@@ -698,7 +711,7 @@ async function extractSalesforceCaseAsync() {
             }
         } catch (e) {}
 
-        // Step 3: Same-origin UI API fetch
+        // Step 2: Same-origin UI API fetch
         try {
             const uiApiCode = await fetchServerCodeViaUiApi(data.accountId);
             if (isValidServerCode(uiApiCode)) {
@@ -706,6 +719,13 @@ async function extractSalesforceCaseAsync() {
                 return data;
             }
         } catch (e) {}
+    }
+
+    // Step 3: Check document text on same line as last resort
+    const textCode = extractServerCodeFromText(document.body ? document.body.innerText : "");
+    if (isValidServerCode(textCode)) {
+        data.serverCode = textCode;
+        return data;
     }
 
     return data;
