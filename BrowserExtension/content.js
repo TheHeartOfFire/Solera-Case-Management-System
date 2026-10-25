@@ -121,7 +121,23 @@ function cleanFieldValue(text) {
     let clean = text.trim();
     clean = clean.replace(/^Edit\s+/i, "");
     clean = clean.replace(/\s+Help$/i, "");
+    clean = clean.replace(/\s+Close$/i, "");
     return clean.trim();
+}
+
+function isValidServerCode(val) {
+    if (!val || typeof val !== "string") return false;
+    const clean = cleanFieldValue(val).trim();
+    if (!clean || clean.length < 2 || clean.length > 15) return false;
+    const lower = clean.toLowerCase();
+    const invalidWords = [
+        "close", "close dialog", "cancel", "save", "edit", "help", "view all", 
+        "details", "more", "show more", "preview", "delete", "loading", 
+        "server code", "server id", "automate server code", "server", "none", "null"
+    ];
+    if (invalidWords.includes(lower)) return false;
+    if (isLabelText(clean)) return false;
+    return /^[A-Za-z0-9_-]{2,15}$/.test(clean);
 }
 
 function isLabelText(text, patterns = []) {
@@ -132,7 +148,8 @@ function isLabelText(text, patterns = []) {
         "account name", "account", "dealership", "dealer", "phone", "contact phone", 
         "mobile", "contact mobile", "business phone", "email", "contact email", 
         "server code", "server id", "automate server code", "auto/mate server code", 
-        "am server code", "server"
+        "am server code", "server", "close", "close dialog", "cancel", "save", "edit",
+        "help", "view all", "details", "more", "show more", "preview", "delete", "loading"
     ];
     if (commonLabels.includes(lower)) return true;
     for (const p of patterns) {
@@ -230,18 +247,14 @@ function findFieldByLabel(labelPatterns, preferredSubSelectors = []) {
 
 function findFieldInPopovers(labelPatterns) {
     const popoverSelectors = [
+        'section.slds-popover',
+        '.slds-popover[role="dialog"]',
         '.slds-popover',
-        '[role="dialog"]',
         'force-hoverable-popover',
         '.forceHoverPanel',
-        'records-hoverable-link',
         'records-compact-layout-panel',
         'force-record-compact-layout',
-        'records-record-layout-compact',
-        '.cuf-compact-feed',
-        '.uiPanel',
-        '.panel-content',
-        '.slds-popover__body'
+        'records-record-layout-compact'
     ];
     let popovers;
     try {
@@ -256,7 +269,14 @@ function findFieldInPopovers(labelPatterns) {
             if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
         } catch (e) {}
 
-        // 1. Check records-record-layout-item elements with field-label attribute inside popover
+        // Strategy A: Regex on popover innerText (Handles compact layout 2-column key/value grids flawlessly)
+        const popoverText = popover.innerText || "";
+        const regexMatch = popoverText.match(/(?:automate\s*server\s*code|auto\/mate\s*server\s*code|server\s*code|server\s*id)[\s\r\n:]+([A-Za-z0-9_-]{2,15})/i);
+        if (regexMatch && isValidServerCode(regexMatch[1])) {
+            return regexMatch[1].trim();
+        }
+
+        // Strategy B: Check records-record-layout-item elements with field-label attribute inside popover
         const layoutItems = popover.querySelectorAll("records-record-layout-item[field-label]");
         for (const item of layoutItems) {
             const attr = (item.getAttribute("field-label") || "").trim();
@@ -267,43 +287,47 @@ function findFieldInPopovers(labelPatterns) {
                 if (matches) {
                     const valContainer = item.querySelector(".test-id__field-value, .slds-form-element__control, [data-field-value]");
                     if (valContainer) {
-                        const valEl = valContainer.querySelector("lightning-formatted-text, .uiOutputText, span");
+                        const valEl = valContainer.querySelector("lightning-formatted-text, .uiOutputText, span:not(.slds-assistive-text)");
                         const val = cleanFieldValue(valEl ? (valEl.innerText || valEl.textContent) : (valContainer.innerText || valContainer.textContent));
-                        if (val && !isLabelText(val, labelPatterns)) return val;
+                        if (isValidServerCode(val)) return val;
                     }
                 }
             }
         }
 
-        // 2. Check label candidates (dt, span, p, label, div)
+        // Strategy C: Check compact layout field containers (strictly excluding headers, buttons, close icons)
         const labelCandidates = popover.querySelectorAll(
-            'dt, .slds-item_label, .slds-text-title, .slds-form-element__label, .test-id__field-label, [class*="label"], p, span, div'
+            '.slds-form-element__label, .test-id__field-label, dt, .slds-item_label, .slds-text-title'
         );
         for (const el of labelCandidates) {
+            if (el.closest('button, .slds-button, .slds-popover__close, header, .slds-popover__header, .slds-assistive-text')) continue;
+
             const txt = cleanFieldValue(el.innerText || el.textContent);
-            if (!txt) continue;
+            if (!txt || txt.length > 40) continue;
+
             for (const pattern of labelPatterns) {
                 const matches = typeof pattern === "string"
                     ? txt.toLowerCase() === pattern.toLowerCase()
                     : pattern.test(txt);
                 if (matches) {
-                    // Check next sibling
-                    let sibling = el.nextElementSibling;
-                    if (sibling) {
-                        const sibValEl = sibling.querySelector("lightning-formatted-text, .uiOutputText, span") || sibling;
-                        const val = cleanFieldValue(sibValEl.innerText || sibValEl.textContent);
-                        if (val && !isLabelText(val, labelPatterns)) return val;
-                    }
-                    // Check parent container
-                    const parent = el.parentElement;
-                    if (parent) {
-                        const valEls = parent.querySelectorAll('dd, .slds-item_detail, .slds-text-body_regular, lightning-formatted-text, .uiOutputText, span');
-                        for (const valEl of valEls) {
-                            if (valEl !== el && !el.contains(valEl)) {
-                                const val = cleanFieldValue(valEl.innerText || valEl.textContent);
-                                if (val && !isLabelText(val, labelPatterns)) return val;
-                            }
+                    // 1. Look in parent field column/container
+                    const container = el.closest('.slds-col, .slds-form-element, records-record-layout-item, dl, [class*="layout-item"]');
+                    if (container) {
+                        const valEl = container.querySelector(
+                            '.slds-text-body_regular, .test-id__field-value, dd, .slds-item_detail, lightning-formatted-text, .uiOutputText'
+                        );
+                        if (valEl && valEl !== el && !el.contains(valEl)) {
+                            const val = cleanFieldValue(valEl.innerText || valEl.textContent);
+                            if (isValidServerCode(val)) return val;
                         }
+                    }
+
+                    // 2. Check next sibling
+                    let sibling = el.nextElementSibling;
+                    if (sibling && !sibling.matches('button, .slds-button, .slds-popover__close')) {
+                        const sibValEl = sibling.querySelector("lightning-formatted-text, .uiOutputText, .slds-text-body_regular") || sibling;
+                        const val = cleanFieldValue(sibValEl.innerText || sibValEl.textContent);
+                        if (isValidServerCode(val)) return val;
                     }
                 }
             }
@@ -451,15 +475,17 @@ function extractSalesforceCase() {
 
     // 8. Automate Server Code (from Case / Account record)
     data.serverCode = findFieldByLabel(
-        [/automate\s*server/i, /auto\/mate\s*server/i, /server\s*code/i, /server\s*id/i, "Automate Server Code", "Auto/Mate Server Code", "Server Code", "Server ID", "AM Server Code", "Server"],
+        [/automate\s*server/i, /auto\/mate\s*server/i, /server\s*code/i, /server\s*id/i, "Automate Server Code", "Auto/Mate Server Code", "Server Code", "Server ID", "AM Server Code"],
         ["lightning-formatted-text", ".uiOutputText", "span"]
     ) || queryFirstVisibleText([
         '[data-target-selection-name*="Server_Code"] lightning-formatted-text',
-        '[data-target-selection-name*="Server"] lightning-formatted-text',
         'records-record-layout-item[field-label*="Server" i] .test-id__field-value lightning-formatted-text',
-        '[data-field-name*="Server_Code"] lightning-formatted-text',
-        '[data-field-name*="Server"] lightning-formatted-text'
+        '[data-field-name*="Server_Code"] lightning-formatted-text'
     ], [/server/i, "Server", "Server Code", "Server ID"]);
+
+    if (!isValidServerCode(data.serverCode)) {
+        data.serverCode = "";
+    }
 
     // If server code not found on main page, check any active compact layout popovers
     if (!data.serverCode) {
@@ -467,6 +493,10 @@ function extractSalesforceCase() {
             /automate\s*server/i, /auto\/mate\s*server/i, /server\s*code/i, /server\s*id/i,
             "Automate Server Code", "Auto/Mate Server Code", "Server Code", "Server ID"
         ]);
+    }
+
+    if (!isValidServerCode(data.serverCode)) {
+        data.serverCode = "";
     }
 
     // Build structured text block compatible with DashboardViewModel.ParseCaseText
@@ -550,15 +580,15 @@ async function fetchServerCodeViaHover(accountId) {
 
     const patterns = [
         /automate\s*server/i, /auto\/mate\s*server/i, /server\s*code/i, /server\s*id/i,
-        /server__c/i, /dms.*server/i, /^server$/i, "Automate Server Code", "Auto/Mate Server Code",
-        "Server Code", "Server ID", "AM Server Code", "Server"
+        /server__c/i, /dms.*server/i, "Automate Server Code", "Auto/Mate Server Code",
+        "Server Code", "Server ID", "AM Server Code"
     ];
 
     try {
         triggerHoverOnElement(accLink);
 
-        // Wait 250ms for Lightning popover to mount
-        await new Promise(r => setTimeout(r, 250));
+        // Wait 300ms for Lightning popover to mount
+        await new Promise(r => setTimeout(r, 300));
 
         let code = findFieldInPopovers(patterns);
         if (!code) {
@@ -567,7 +597,7 @@ async function fetchServerCodeViaHover(accountId) {
         }
 
         triggerUnhoverOnElement(accLink);
-        return code || null;
+        return isValidServerCode(code) ? code : null;
     } catch (e) {
         triggerUnhoverOnElement(accLink);
         return null;
@@ -584,7 +614,7 @@ function extractServerCodeFromJson(obj) {
                 const val = f?.displayValue || f?.value;
                 if (val != null) {
                     const str = String(val).trim();
-                    if (str && !isLabelText(str)) return str;
+                    if (isValidServerCode(str)) return str;
                 }
             }
         }
@@ -595,10 +625,10 @@ function extractServerCodeFromJson(obj) {
         if (/server.*code|automate.*server|server.*id|server__c|dms.*server|^server$|am.*server/i.test(k)) {
             if (v != null && (typeof v === "string" || typeof v === "number")) {
                 const str = String(v).trim();
-                if (str && !isLabelText(str)) return str;
+                if (isValidServerCode(str)) return str;
             } else if (v && typeof v === "object" && (v.displayValue != null || v.value != null)) {
                 const str = String(v.displayValue || v.value).trim();
-                if (str && !isLabelText(str)) return str;
+                if (isValidServerCode(str)) return str;
             }
         }
         if (v && typeof v === "object") {
@@ -627,7 +657,7 @@ async function fetchServerCodeViaUiApi(accountId) {
             if (resp.ok) {
                 const json = await resp.json();
                 const code = extractServerCodeFromJson(json);
-                if (code) return code;
+                if (isValidServerCode(code)) return code;
             }
         } catch (e) {}
     }
@@ -636,32 +666,33 @@ async function fetchServerCodeViaUiApi(accountId) {
 
 function extractServerCodeFromText(text) {
     if (!text) return "";
-    const m = text.match(/(?:automate\s*server\s*code|auto\/mate\s*server\s*code|server\s*code|server\s*id|automate\s*server)[\s:]+([A-Za-z0-9_-]{2,15})/i);
+    const m = text.match(/(?:automate\s*server\s*code|auto\/mate\s*server\s*code|server\s*code|server\s*id)[\s\r\n:]+([A-Za-z0-9_-]{2,15})/i);
     if (m && m[1]) {
         const val = m[1].trim();
-        if (!isLabelText(val)) return val;
+        if (isValidServerCode(val)) return val;
     }
     return "";
 }
 
 async function extractSalesforceCaseAsync() {
     const data = extractSalesforceCase();
-    if (data.serverCode && !isLabelText(data.serverCode)) {
+    if (isValidServerCode(data.serverCode)) {
         return data;
     }
+    data.serverCode = "";
 
     // Step 1: Check document text regex
     const textCode = extractServerCodeFromText(document.body ? document.body.innerText : "");
-    if (textCode) {
+    if (isValidServerCode(textCode)) {
         data.serverCode = textCode;
         return data;
     }
 
     if (data.accountId) {
-        // Step 2: Synthetic hover popover lookup
+        // Step 2: Synthetic hover popover lookup (triggers Compact Layout render as shown in screenshot)
         try {
             const hoverCode = await fetchServerCodeViaHover(data.accountId);
-            if (hoverCode && !isLabelText(hoverCode)) {
+            if (isValidServerCode(hoverCode)) {
                 data.serverCode = hoverCode;
                 return data;
             }
@@ -670,7 +701,7 @@ async function extractSalesforceCaseAsync() {
         // Step 3: Same-origin UI API fetch
         try {
             const uiApiCode = await fetchServerCodeViaUiApi(data.accountId);
-            if (uiApiCode && !isLabelText(uiApiCode)) {
+            if (isValidServerCode(uiApiCode)) {
                 data.serverCode = uiApiCode;
                 return data;
             }
