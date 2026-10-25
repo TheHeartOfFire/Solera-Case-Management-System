@@ -52,6 +52,9 @@ public class IpcLiveVariables
     [JsonPropertyName("activeCodeSnippetText")]
     public string ActiveCodeSnippetText { get; set; } = string.Empty;
 
+    [JsonPropertyName("activeCodeSnippetOutputType")]
+    public string ActiveCodeSnippetOutputType { get; set; } = string.Empty;
+
     public Dictionary<string, string> ToDictionary()
     {
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -70,7 +73,8 @@ public class IpcLiveVariables
             [nameof(Notes)] = Notes,
             [nameof(ActiveTemplateName)] = ActiveTemplateName,
             [nameof(ActiveTemplateText)] = ActiveTemplateText,
-            [nameof(ActiveCodeSnippetText)] = ActiveCodeSnippetText
+            [nameof(ActiveCodeSnippetText)] = ActiveCodeSnippetText,
+            [nameof(ActiveCodeSnippetOutputType)] = ActiveCodeSnippetOutputType
         };
     }
 }

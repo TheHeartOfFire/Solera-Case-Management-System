@@ -32,7 +32,386 @@ public partial class CodeSnippetsViewModel : ViewModel
         return string.Empty;
     }
 
+    public string GetFormulaOutputTypeForPaste()
+    {
+        return InferFormulaOutputType(GetFormulaTextForPaste());
+    }
+
     public static string GetActiveFormulaText() => ActiveInstance?.GetFormulaTextForPaste() ?? string.Empty;
+
+    public static string GetActiveFormulaOutputType() =>
+        ActiveInstance != null
+            ? ActiveInstance.GetFormulaOutputTypeForPaste()
+            : InferFormulaOutputType(GetActiveFormulaText());
+
+    private static readonly HashSet<string> NumericFunctions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "NUM", "ROUND", "FLOOR", "CEILING", "ABS", "MAX", "MIN", "SQRT",
+        "LOG", "LOG10", "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN",
+        "SINH", "COSH", "TANH", "RAD", "DEG", "RANDOM", "LEN",
+        "MONTH", "DAY", "YEAR"
+    };
+
+    private static readonly HashSet<string> TextOrNonNumericFunctions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TEXT", "XIF", "XXIF", "STRIP", "REPLACE", "SEPLIST",
+        "TRIM", "LTRIM", "RTRIM", "ADDDAYS", "ADDWEEKS", "ADDMONTHS", "ADDYEARS",
+        "DATE", "TODAY", "NOT", "AND", "OR", "CONTAINS", "BLANK", "NOTBLANK"
+    };
+
+    /// <summary>
+    /// Infers whether a FormGen formula/expression is expected to output a NUMERIC or TEXT value.
+    /// Defaults to "TEXT" if unable to determine.
+    /// </summary>
+    public static string InferFormulaOutputType(string? rawExpr)
+    {
+        return InferFormulaOutputTypeInternal(rawExpr, 0);
+    }
+
+    private static string InferFormulaOutputTypeInternal(string? rawExpr, int depth)
+    {
+        if (string.IsNullOrWhiteSpace(rawExpr) || depth > 24)
+            return "TEXT";
+
+        string s = StripOuterParentheses(rawExpr.Trim());
+        if (string.IsNullOrEmpty(s))
+            return "TEXT";
+
+        // 1. Quoted string literal
+        if (s.Length >= 2 && s[0] == '\'' && s[^1] == '\'' && IsSingleQuotedLiteral(s))
+            return "TEXT";
+
+        // 2. Numeric literal or PI constant
+        if (string.Equals(s, "PI", StringComparison.OrdinalIgnoreCase) ||
+            double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _))
+        {
+            return "NUMERIC";
+        }
+
+        // 3. Check top-level comparison/equality/assignment operators outside parentheses and quotes
+        int eqIdx = FindTopLevelAssignmentOrEquality(s);
+        if (eqIdx > 0)
+        {
+            string lhs = s[..eqIdx].Trim();
+            string rhs = s[(eqIdx + 1)..].Trim();
+            // If LHS is a simple identifier (assignment like VAR = expr), infer RHS
+            if (IsSimpleIdentifier(lhs))
+            {
+                return InferFormulaOutputTypeInternal(rhs, depth + 1);
+            }
+            return "TEXT";
+        }
+
+        if (HasTopLevelComparisonOperator(s))
+        {
+            return "TEXT";
+        }
+
+        // 4. Check top-level '+' or '-' (lowest arithmetic precedence)
+        int addSubIdx = FindLastTopLevelAddOrSub(s, out char addSubOp);
+        if (addSubIdx > 0)
+        {
+            if (addSubOp == '-')
+                return "NUMERIC";
+
+            string left = s[..addSubIdx].Trim();
+            string right = s[(addSubIdx + 1)..].Trim();
+            return string.Equals(InferFormulaOutputTypeInternal(left, depth + 1), "NUMERIC", StringComparison.OrdinalIgnoreCase) &&
+                   string.Equals(InferFormulaOutputTypeInternal(right, depth + 1), "NUMERIC", StringComparison.OrdinalIgnoreCase)
+                ? "NUMERIC"
+                : "TEXT";
+        }
+
+        // 5. Check top-level '*', '/', '%' (higher arithmetic precedence)
+        if (HasTopLevelMulDivMod(s))
+        {
+            return "NUMERIC";
+        }
+
+        // 6. Unary '-' or '+'
+        if ((s[0] == '-' || s[0] == '+') && s.Length > 1)
+        {
+            return InferFormulaOutputTypeInternal(s[1..], depth + 1);
+        }
+
+        // 7. Function call: FUNC(arg1, arg2, ...)
+        int openParen = s.IndexOf('(');
+        if (openParen > 0 && s[^1] == ')' && IsBalancedOuterCall(s, openParen))
+        {
+            string funcName = s[..openParen].Trim();
+            string argsBody = s[(openParen + 1)..^1];
+            var args = SplitTopLevelArgs(argsBody);
+
+            if (NumericFunctions.Contains(funcName))
+                return "NUMERIC";
+
+            if (TextOrNonNumericFunctions.Contains(funcName))
+                return "TEXT";
+
+            if (string.Equals(funcName, "IF", StringComparison.OrdinalIgnoreCase) && args.Count >= 3)
+            {
+                string trueType = InferFormulaOutputTypeInternal(args[1], depth + 1);
+                string falseType = InferFormulaOutputTypeInternal(args[2], depth + 1);
+                return string.Equals(trueType, "NUMERIC", StringComparison.OrdinalIgnoreCase) &&
+                       string.Equals(falseType, "NUMERIC", StringComparison.OrdinalIgnoreCase)
+                    ? "NUMERIC"
+                    : "TEXT";
+            }
+
+            if ((string.Equals(funcName, "CASE", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(funcName, "CASELTE", StringComparison.OrdinalIgnoreCase)) && args.Count >= 3)
+            {
+                bool anyResult = false;
+                for (int i = 2; i < args.Count; i += 2)
+                {
+                    anyResult = true;
+                    if (!string.Equals(InferFormulaOutputTypeInternal(args[i], depth + 1), "NUMERIC", StringComparison.OrdinalIgnoreCase))
+                        return "TEXT";
+                }
+                if (args.Count % 2 == 0)
+                {
+                    anyResult = true;
+                    if (!string.Equals(InferFormulaOutputTypeInternal(args[^1], depth + 1), "NUMERIC", StringComparison.OrdinalIgnoreCase))
+                        return "TEXT";
+                }
+                return anyResult ? "NUMERIC" : "TEXT";
+            }
+
+            if (string.Equals(funcName, "MATCHRANGE", StringComparison.OrdinalIgnoreCase) && args.Count >= 4)
+            {
+                bool anyResult = false;
+                for (int i = 3; i < args.Count; i += 3)
+                {
+                    anyResult = true;
+                    if (!string.Equals(InferFormulaOutputTypeInternal(args[i], depth + 1), "NUMERIC", StringComparison.OrdinalIgnoreCase))
+                        return "TEXT";
+                }
+                if ((args.Count - 1) % 3 == 1)
+                {
+                    anyResult = true;
+                    if (!string.Equals(InferFormulaOutputTypeInternal(args[^1], depth + 1), "NUMERIC", StringComparison.OrdinalIgnoreCase))
+                        return "TEXT";
+                }
+                return anyResult ? "NUMERIC" : "TEXT";
+            }
+
+            return "TEXT";
+        }
+
+        // 8. Single Deal Field reference (e.g. F3, F61, F72)
+        var fieldInfo = FormgenReferenceCatalog.TryGetField(s);
+        if (fieldInfo != null)
+        {
+            return fieldInfo.IsNumeric ? "NUMERIC" : "TEXT";
+        }
+
+        return "TEXT";
+    }
+
+    private static string StripOuterParentheses(string s)
+    {
+        while (s.Length >= 2 && s[0] == '(' && s[^1] == ')')
+        {
+            int depth = 0;
+            bool inQuotes = false;
+            bool wrapsEntire = true;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '\'') inQuotes = !inQuotes;
+                else if (!inQuotes)
+                {
+                    if (c == '(') depth++;
+                    else if (c == ')')
+                    {
+                        depth--;
+                        if (depth == 0 && i < s.Length - 1)
+                        {
+                            wrapsEntire = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (wrapsEntire && depth == 0)
+                s = s[1..^1].Trim();
+            else
+                break;
+        }
+        return s;
+    }
+
+    private static bool IsSingleQuotedLiteral(string s)
+    {
+        for (int i = 1; i < s.Length - 1; i++)
+        {
+            if (s[i] == '\'') return false;
+        }
+        return true;
+    }
+
+    private static bool IsSimpleIdentifier(string s)
+    {
+        if (string.IsNullOrEmpty(s) || !(char.IsLetter(s[0]) || s[0] == '_')) return false;
+        for (int i = 1; i < s.Length; i++)
+        {
+            if (!(char.IsLetterOrDigit(s[i]) || s[i] == '_')) return false;
+        }
+        return true;
+    }
+
+    private static int FindTopLevelAssignmentOrEquality(string s)
+    {
+        int depth = 0;
+        bool inQuotes = false;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '\'') inQuotes = !inQuotes;
+            else if (!inQuotes)
+            {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0 && c == '=')
+                {
+                    char prev = i > 0 ? s[i - 1] : '\0';
+                    char next = i + 1 < s.Length ? s[i + 1] : '\0';
+                    if (prev != '!' && prev != '<' && prev != '>' && prev != '=' && next != '=')
+                        return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static bool HasTopLevelComparisonOperator(string s)
+    {
+        int depth = 0;
+        bool inQuotes = false;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '\'') inQuotes = !inQuotes;
+            else if (!inQuotes)
+            {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0)
+                {
+                    if (c == '<' || c == '>') return true;
+                    if (c == '!' && i + 1 < s.Length && s[i + 1] == '=') return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static int FindLastTopLevelAddOrSub(string s, out char op)
+    {
+        op = '\0';
+        int depth = 0;
+        bool inQuotes = false;
+        int foundIdx = -1;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '\'') inQuotes = !inQuotes;
+            else if (!inQuotes)
+            {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0 && (c == '+' || c == '-') && i > 0)
+                {
+                    // Ensure it is binary, not unary after another operator or scientific notation '1e-2'
+                    int prevIdx = i - 1;
+                    while (prevIdx >= 0 && char.IsWhiteSpace(s[prevIdx])) prevIdx--;
+                    if (prevIdx >= 0)
+                    {
+                        char prev = s[prevIdx];
+                        bool isSciNotation = (prev == 'e' || prev == 'E') && prevIdx > 0 && char.IsDigit(s[prevIdx - 1]);
+                        if (!isSciNotation && prev != '+' && prev != '-' && prev != '*' && prev != '/' && prev != '%' && prev != '(' && prev != ',' && prev != '=' && prev != '<' && prev != '>')
+                        {
+                            foundIdx = i;
+                            op = c;
+                        }
+                    }
+                }
+            }
+        }
+        return foundIdx;
+    }
+
+    private static bool HasTopLevelMulDivMod(string s)
+    {
+        int depth = 0;
+        bool inQuotes = false;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '\'') inQuotes = !inQuotes;
+            else if (!inQuotes)
+            {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0 && (c == '*' || c == '/' || c == '%'))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsBalancedOuterCall(string s, int openParenIndex)
+    {
+        for (int i = 0; i < openParenIndex; i++)
+        {
+            char c = s[i];
+            if (!(char.IsLetterOrDigit(c) || c == '_' || char.IsWhiteSpace(c)))
+                return false;
+        }
+        int depth = 0;
+        bool inQuotes = false;
+        for (int i = openParenIndex; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '\'') inQuotes = !inQuotes;
+            else if (!inQuotes)
+            {
+                if (c == '(') depth++;
+                else if (c == ')')
+                {
+                    depth--;
+                    if (depth == 0 && i < s.Length - 1)
+                        return false;
+                }
+            }
+        }
+        return depth == 0;
+    }
+
+    private static List<string> SplitTopLevelArgs(string argsBody)
+    {
+        var result = new List<string>();
+        int depth = 0;
+        bool inQuotes = false;
+        int start = 0;
+        for (int i = 0; i < argsBody.Length; i++)
+        {
+            char c = argsBody[i];
+            if (c == '\'') inQuotes = !inQuotes;
+            else if (!inQuotes)
+            {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0 && c == ',')
+                {
+                    result.Add(argsBody[start..i].Trim());
+                    start = i + 1;
+                }
+            }
+        }
+        result.Add(argsBody[start..].Trim());
+        return result;
+    }
 
     [ObservableProperty]
     private ObservableCollection<CodeSnippetItemViewModel> _codeSnippets = [];

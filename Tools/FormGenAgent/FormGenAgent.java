@@ -18,6 +18,10 @@ public class FormGenAgent {
 
     private static volatile boolean serverStarted = false;
     private static volatile boolean menuHookInstalled = false;
+    private static volatile boolean transformerInstalled = false;
+    private static volatile int lastUdfTabIndex = -1;
+    private static volatile int lastMenuDetectX = -1;
+    private static volatile int lastMenuDetectY = -1;
     private static final String PORT_FILE = System.getProperty("java.io.tmpdir") + File.separator + "formgen_agent.port";
     private static final String LOG_FILE = System.getProperty("java.io.tmpdir") + File.separator + "formgen_agent.log";
 
@@ -45,14 +49,14 @@ public class FormGenAgent {
     }
 
     public static void premain(String agentArgs, Instrumentation inst) {
-        init(agentArgs, false);
+        init(agentArgs, false, inst);
     }
 
     public static void agentmain(String agentArgs, Instrumentation inst) {
-        init(agentArgs, true);
+        init(agentArgs, true, inst);
     }
 
-    private static synchronized void init(final String agentArgs, boolean isDynamicAttach) {
+    private static synchronized void init(final String agentArgs, boolean isDynamicAttach, Instrumentation inst) {
         log("Initializing agent (args: " + agentArgs + ", dynamic: " + isDynamicAttach + ")...");
 
         String sysPropFile = System.getProperty("formgen.file");
@@ -68,6 +72,7 @@ public class FormGenAgent {
             new ClientHandler(null);
         } catch (Throwable ignored) {}
 
+        installClassTransformer(inst);
         startIpcServer();
         setupContextMenuHook();
 
@@ -84,6 +89,101 @@ public class FormGenAgent {
 
         if (!fileToOpen.isEmpty()) {
             openFileWithRetry(fileToOpen, 120);
+        }
+    }
+
+    private static synchronized void installClassTransformer(Instrumentation inst) {
+        if (inst == null || transformerInstalled) return;
+        transformerInstalled = true;
+        try {
+            inst.addTransformer(new java.lang.instrument.ClassFileTransformer() {
+                @Override
+                public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
+                                        java.security.ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+                    if (className == null) return null;
+                    if (!"com/automate/formgen/dialogs/UdfDlg".equals(className) &&
+                        !"com/automate/formgen/NewFormGen".equals(className)) {
+                        return null;
+                    }
+                    try {
+                        ClassLoader cl = loader != null ? loader : ClassLoader.getSystemClassLoader();
+                        Class<?> poolClass = Class.forName("javassist.ClassPool", true, cl);
+                        Object pool = poolClass.getMethod("getDefault").invoke(null);
+                        try {
+                            Class<?> loaderClassPathClass = Class.forName("javassist.LoaderClassPath", true, cl);
+                            Object lcp = loaderClassPathClass.getConstructor(ClassLoader.class).newInstance(cl);
+                            Class<?> classPathInterface = Class.forName("javassist.ClassPath", true, cl);
+                            poolClass.getMethod("insertClassPath", classPathInterface).invoke(pool, lcp);
+                        } catch (Throwable ignored) {}
+
+                        Method makeClassMethod = poolClass.getMethod("makeClass", InputStream.class);
+                        Object ctClass = makeClassMethod.invoke(pool, new ByteArrayInputStream(classfileBuffer));
+                        try {
+                            Method stopPruning = ctClass.getClass().getMethod("stopPruning", boolean.class);
+                            stopPruning.invoke(ctClass, true);
+                        } catch (Throwable ignored) {}
+                        try {
+                            Boolean isFrozen = (Boolean) ctClass.getClass().getMethod("isFrozen").invoke(ctClass);
+                            if (Boolean.TRUE.equals(isFrozen)) {
+                                ctClass.getClass().getMethod("defrost").invoke(ctClass);
+                            }
+                        } catch (Throwable ignored) {}
+
+                        Method getDeclaredMethods = ctClass.getClass().getMethod("getDeclaredMethods");
+                        Object[] methods = (Object[]) getDeclaredMethods.invoke(ctClass);
+
+                        if ("com/automate/formgen/dialogs/UdfDlg".equals(className) && methods != null) {
+                            for (Object m : methods) {
+                                String mName = (String) m.getClass().getMethod("getName").invoke(m);
+                                if ("loadCode".equals(mName)) {
+                                    m.getClass().getMethod("insertBefore", String.class)
+                                        .invoke(m, "com.solera.formgen.FormGenAgent.onBeforeUdfLoadCode($0);");
+                                    m.getClass().getMethod("insertAfter", String.class)
+                                        .invoke(m, "com.solera.formgen.FormGenAgent.onAfterUdfLoadCode($0);");
+                                    log("Instrumented UdfDlg.loadCode to preserve selected tab.");
+                                }
+                            }
+                        } else if ("com/automate/formgen/NewFormGen".equals(className) && methods != null) {
+                            for (Object m : methods) {
+                                String mName = (String) m.getClass().getMethod("getName").invoke(m);
+                                if ("openFormgenFile".equals(mName)) {
+                                    Object[] paramTypes = (Object[]) m.getClass().getMethod("getParameterTypes").invoke(m);
+                                    if (paramTypes != null && paramTypes.length == 3) {
+                                        m.getClass().getMethod("insertBefore", String.class)
+                                            .invoke(m, "if (com.solera.formgen.FormGenAgent.onPreOpenFormgenFile($0, $1)) { return true; }");
+                                        log("Instrumented NewFormGen.openFormgenFile to focus existing tab with toast notification.");
+                                    }
+                                }
+                            }
+                        }
+
+                        byte[] transformed = (byte[]) ctClass.getClass().getMethod("toBytecode").invoke(ctClass);
+                        try {
+                            ctClass.getClass().getMethod("detach").invoke(ctClass);
+                        } catch (Throwable ignored) {}
+                        return transformed;
+                    } catch (Throwable t) {
+                        log("Note: Javassist transform skipped for " + className + " (using SWT/reflection fallback): " + t.getMessage());
+                        return null;
+                    }
+                }
+            }, true);
+
+            if (inst.isRetransformClassesSupported()) {
+                for (Class<?> loaded : inst.getAllLoadedClasses()) {
+                    if (loaded != null) {
+                        String name = loaded.getName();
+                        if ("com.automate.formgen.dialogs.UdfDlg".equals(name) ||
+                            "com.automate.formgen.NewFormGen".equals(name)) {
+                            try {
+                                inst.retransformClasses(loaded);
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            log("Error installing ClassFileTransformer: " + t.getMessage());
         }
     }
 
@@ -443,6 +543,283 @@ public class FormGenAgent {
         return result[0];
     }
 
+    public static Object getUdfDlg() {
+        if (formGenInstance == null) return null;
+        try {
+            Field dlgCodeField = formGenInstance.getClass().getDeclaredField("dlgCode");
+            dlgCodeField.setAccessible(true);
+            return dlgCodeField.get(formGenInstance);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    public static Object getUdfTabFolder(Object udfDlg) {
+        if (udfDlg == null || isDisposed(udfDlg)) return null;
+        try {
+            Field tfField = udfDlg.getClass().getDeclaredField("tabFolder");
+            tfField.setAccessible(true);
+            Object tf = tfField.get(udfDlg);
+            if (tf != null && !isDisposed(tf)) return tf;
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    public static int getCurrentOrLastUdfTabIndex() {
+        try {
+            Object udfDlg = getUdfDlg();
+            Object tf = getUdfTabFolder(udfDlg);
+            if (tf != null) {
+                Method getSelIdx = tf.getClass().getMethod("getSelectionIndex");
+                int idx = (Integer) getSelIdx.invoke(tf);
+                if (idx >= 0) {
+                    lastUdfTabIndex = idx;
+                    return idx;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return lastUdfTabIndex;
+    }
+
+    public static void onBeforeUdfLoadCode(Object udfDlg) {
+        try {
+            Object tf = getUdfTabFolder(udfDlg);
+            if (tf != null) {
+                Method getSelIdx = tf.getClass().getMethod("getSelectionIndex");
+                int idx = (Integer) getSelIdx.invoke(tf);
+                if (idx >= 0) {
+                    lastUdfTabIndex = idx;
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    public static void onAfterUdfLoadCode(Object udfDlg) {
+        if (lastUdfTabIndex >= 0) {
+            restoreUdfTabSelection(udfDlg, lastUdfTabIndex);
+        }
+    }
+
+    public static void restoreUdfTabSelection(Object udfDlg, int tabIndex) {
+        if (udfDlg == null || tabIndex < 0 || isDisposed(udfDlg)) return;
+        try {
+            Object tf = getUdfTabFolder(udfDlg);
+            if (tf == null) return;
+            Field itemsField = udfDlg.getClass().getDeclaredField("tabItems");
+            itemsField.setAccessible(true);
+            Object[] tabItems = (Object[]) itemsField.get(udfDlg);
+            if (tabItems != null && tabIndex < tabItems.length && tabItems[tabIndex] != null && !isDisposed(tabItems[tabIndex])) {
+                Method setSel = tf.getClass().getMethod("setSelection", Class.forName("org.eclipse.swt.custom.CTabItem"));
+                setSel.invoke(tf, tabItems[tabIndex]);
+                lastUdfTabIndex = tabIndex;
+            }
+        } catch (Throwable t) {
+            log("Error restoring UdfDlg tab selection: " + t.getMessage());
+        }
+    }
+
+    public static void ensureUdfAndMainTabHooksInstalled(final Object display) {
+        if (display == null || isDisposed(display)) return;
+        try {
+            discoverFormGen();
+            if (formGenInstance == null) return;
+
+            // 1. Hook UdfDlg.tabFolder Selection event to record user's selected tab (Init=0, Prompts=1, Post=2)
+            final Object udfDlg = getUdfDlg();
+            final Object udfTabFolder = getUdfTabFolder(udfDlg);
+            if (udfTabFolder != null) {
+                Method getData = udfTabFolder.getClass().getMethod("getData", String.class);
+                if (!Boolean.TRUE.equals(getData.invoke(udfTabFolder, "SoleraUdfTabHook"))) {
+                    Method setData = udfTabFolder.getClass().getMethod("setData", String.class, Object.class);
+                    setData.invoke(udfTabFolder, "SoleraUdfTabHook", Boolean.TRUE);
+
+                    Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                int idx = (Integer) udfTabFolder.getClass().getMethod("getSelectionIndex").invoke(udfTabFolder);
+                                if (idx >= 0) {
+                                    lastUdfTabIndex = idx;
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    Method addListener = udfTabFolder.getClass().getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
+                    addListener.invoke(udfTabFolder, SWT_Selection, listener);
+                }
+            }
+
+            // 2. Hook NewFormGen.mainTabFolder Selection event so switching open forms preserves UdfDlg's active tab
+            Field mtfField = formGenInstance.getClass().getDeclaredField("mainTabFolder");
+            mtfField.setAccessible(true);
+            final Object mainTabFolder = mtfField.get(formGenInstance);
+            if (mainTabFolder != null && !isDisposed(mainTabFolder)) {
+                Method getData = mainTabFolder.getClass().getMethod("getData", String.class);
+                if (!Boolean.TRUE.equals(getData.invoke(mainTabFolder, "SoleraMainTabHook"))) {
+                    Method setData = mainTabFolder.getClass().getMethod("setData", String.class, Object.class);
+                    setData.invoke(mainTabFolder, "SoleraMainTabHook", Boolean.TRUE);
+
+                    Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                        @Override
+                        public void run() {
+                            final int targetTab = lastUdfTabIndex;
+                            if (targetTab >= 0) {
+                                restoreUdfTabSelection(getUdfDlg(), targetTab);
+                                runOnDisplay(display, new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        restoreUdfTabSelection(getUdfDlg(), targetTab);
+                                    }
+                                });
+                            }
+                        }
+                    });
+                    Method addListener = mainTabFolder.getClass().getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
+                    addListener.invoke(mainTabFolder, SWT_Selection, listener);
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    public static boolean onPreOpenFormgenFile(Object nfgInstance, File file) {
+        try {
+            if (nfgInstance != null && formGenInstance == null) {
+                formGenInstance = nfgInstance;
+                try {
+                    Field shField = nfgInstance.getClass().getDeclaredField("shell");
+                    shField.setAccessible(true);
+                    mainShell = shField.get(nfgInstance);
+                } catch (Throwable ignored) {}
+            }
+            return focusExistingTabIfOpen(file, true);
+        } catch (Throwable t) {
+            log("Error in onPreOpenFormgenFile: " + t.getMessage());
+            return false;
+        }
+    }
+
+    public static boolean focusExistingTabIfOpen(File file, boolean showToast) {
+        if (file == null || formGenInstance == null) return false;
+        try {
+            Field f = formGenInstance.getClass().getDeclaredField("mainTabFolder");
+            f.setAccessible(true);
+            Object mainTabFolder = f.get(formGenInstance);
+            if (mainTabFolder == null || isDisposed(mainTabFolder)) return false;
+
+            Method getItemsMethod = mainTabFolder.getClass().getMethod("getItems");
+            Object[] tabItems = (Object[]) getItemsMethod.invoke(mainTabFolder);
+            if (tabItems == null) return false;
+
+            String targetCanonical = null;
+            try { targetCanonical = file.getCanonicalPath(); } catch (Throwable ignored) {}
+
+            Object matchingTab = null;
+            Object matchingViewer = null;
+
+            for (Object tabItem : tabItems) {
+                if (tabItem == null || isDisposed(tabItem)) continue;
+                try {
+                    Object viewer = tabItem.getClass().getMethod("getControl").invoke(tabItem);
+                    if (viewer == null || isDisposed(viewer)) continue;
+
+                    boolean inUse = false;
+                    try {
+                        Method fiuMethod = viewer.getClass().getMethod("fileIsInUse", File.class);
+                        inUse = Boolean.TRUE.equals(fiuMethod.invoke(viewer, file));
+                    } catch (Throwable ignored) {}
+
+                    if (!inUse && targetCanonical != null) {
+                        try {
+                            File curFile = (File) viewer.getClass().getMethod("getCurrentFormgenFile").invoke(viewer);
+                            if (curFile != null && curFile.getCanonicalPath().equalsIgnoreCase(targetCanonical)) {
+                                inUse = true;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+
+                    if (inUse) {
+                        matchingTab = tabItem;
+                        matchingViewer = viewer;
+                        break;
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            if (matchingTab == null || matchingViewer == null) return false;
+
+            log("File is already open in FormGen: " + file.getAbsolutePath() + ". Switching focus without reloading.");
+            int savedUdfTab = getCurrentOrLastUdfTabIndex();
+
+            try {
+                Method setSelectionMethod = mainTabFolder.getClass().getMethod("setSelection", Class.forName("org.eclipse.swt.custom.CTabItem"));
+                setSelectionMethod.invoke(mainTabFolder, matchingTab);
+            } catch (Throwable ignored) {}
+
+            try {
+                Field fvField = formGenInstance.getClass().getDeclaredField("formViewer");
+                fvField.setAccessible(true);
+                fvField.set(formGenInstance, matchingViewer);
+            } catch (Throwable ignored) {}
+
+            try {
+                Method onTabSel = formGenInstance.getClass().getDeclaredMethod("onTabSelected", Class.forName("org.eclipse.swt.custom.CTabItem"));
+                onTabSel.setAccessible(true);
+                onTabSel.invoke(formGenInstance, matchingTab);
+            } catch (Throwable ignored) {}
+
+            if (savedUdfTab >= 0) {
+                restoreUdfTabSelection(getUdfDlg(), savedUdfTab);
+            }
+
+            try {
+                Method m = formGenInstance.getClass().getMethod("returnFocusToForm");
+                m.invoke(formGenInstance);
+            } catch (Throwable ignored) {}
+
+            activateMainShell();
+
+            if (showToast) {
+                showToastNotification("File already open, focus switched to the form you attempted to open.");
+            }
+            return true;
+        } catch (Throwable t) {
+            log("Error in focusExistingTabIfOpen: " + t.getMessage());
+            return false;
+        }
+    }
+
+    public static void showToastNotification(final String message) {
+        if (message == null || message.isEmpty()) return;
+        final Object display = getDisplay();
+        if (display == null || isDisposed(display)) return;
+
+        runOnDisplay(display, new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    discoverFormGen();
+                    if (mainShell == null || isDisposed(mainShell)) return;
+
+                    Class<?> shellClass = Class.forName("org.eclipse.swt.widgets.Shell");
+                    Class<?> stdImageClass = Class.forName("com.automate.controls.stdimages.StdImages$StdImage");
+                    Class<?> nwClass = Class.forName("com.automate.controls.notifications.NotificationWindow");
+
+                    Object iconInfo = null;
+                    try {
+                        Field iconField = stdImageClass.getField("IconInformation");
+                        iconInfo = iconField.get(null);
+                    } catch (Throwable ignored) {}
+
+                    Constructor<?> cons = nwClass.getConstructor(shellClass, stdImageClass, String.class);
+                    cons.newInstance(mainShell, iconInfo, message);
+                    log("Displayed toast notification: " + message);
+                } catch (Throwable t) {
+                    log("Error displaying NotificationWindow toast: " + t.getMessage());
+                }
+            }
+        });
+    }
+
     public static void openFile(final String rawPath) {
         Object display = getDisplay();
         if (display == null || isDisposed(display)) {
@@ -467,11 +844,22 @@ public class FormGenAgent {
                     }
 
                     lastOpenedFilePath = cleanPath;
+
+                    // If the file is already open in FormGen, switch focus to its tab and show a toast without reloading
+                    if (focusExistingTabIfOpen(file, true)) {
+                        return;
+                    }
+
+                    int savedUdfTab = getCurrentOrLastUdfTabIndex();
                     log("Invoking openFormgenFile on: " + file.getAbsolutePath());
                     Method openMethod = formGenInstance.getClass().getDeclaredMethod("openFormgenFile", File.class, boolean.class);
                     openMethod.setAccessible(true);
                     Object result = openMethod.invoke(formGenInstance, file, false);
                     log("openFormgenFile returned: " + result);
+
+                    if (savedUdfTab >= 0) {
+                        restoreUdfTabSelection(getUdfDlg(), savedUdfTab);
+                    }
 
                     if (mainShell != null && !isDisposed(mainShell)) {
                         try {
@@ -518,6 +906,8 @@ public class FormGenAgent {
                         : readUuidFromFormgenFile(cleanPath);
 
                     log("pushForm: Target UUID=" + resolvedUuid + ", File=" + cleanPath);
+
+                    int savedUdfTab = getCurrentOrLastUdfTabIndex();
 
                     Object mainTabFolder = null;
                     try {
@@ -649,6 +1039,10 @@ public class FormGenAgent {
                             log("Error re-selecting tab after reload: " + t.getMessage());
                         }
 
+                        if (savedUdfTab >= 0) {
+                            restoreUdfTabSelection(getUdfDlg(), savedUdfTab);
+                        }
+
                         // Refresh titles and return focus
                         try {
                             Method m = formGenInstance.getClass().getMethod("setCurrentTabTitle");
@@ -660,7 +1054,7 @@ public class FormGenAgent {
                             m.invoke(formGenInstance);
                         } catch (Throwable ignored) {}
 
-                        refreshOpenFormDialogs(display, matchingViewer, file);
+                        refreshOpenFormDialogs(display, matchingViewer, file, savedUdfTab);
 
                         try {
                             Method m = formGenInstance.getClass().getMethod("returnFocusToForm");
@@ -684,6 +1078,10 @@ public class FormGenAgent {
                             createNewTabMethod.setAccessible(true);
                             createNewTabMethod.invoke(formGenInstance, newViewer);
 
+                            if (savedUdfTab >= 0) {
+                                restoreUdfTabSelection(getUdfDlg(), savedUdfTab);
+                            }
+
                             try {
                                 Method m = formGenInstance.getClass().getMethod("setCurrentTabTitle");
                                 m.invoke(formGenInstance);
@@ -694,7 +1092,7 @@ public class FormGenAgent {
                                 m.invoke(formGenInstance);
                             } catch (Throwable ignored) {}
 
-                            refreshOpenFormDialogs(display, newViewer, file);
+                            refreshOpenFormDialogs(display, newViewer, file, savedUdfTab);
 
                             try {
                                 Method m = formGenInstance.getClass().getMethod("returnFocusToForm");
@@ -705,6 +1103,9 @@ public class FormGenAgent {
                             Method openMethod = formGenInstance.getClass().getDeclaredMethod("openFormgenFile", File.class, boolean.class);
                             openMethod.setAccessible(true);
                             openMethod.invoke(formGenInstance, file, false);
+                            if (savedUdfTab >= 0) {
+                                restoreUdfTabSelection(getUdfDlg(), savedUdfTab);
+                            }
                         }
 
                         activateMainShell();
@@ -718,22 +1119,21 @@ public class FormGenAgent {
         });
     }
 
-    private static void refreshOpenFormDialogs(Object display, Object viewer, File file) {
+    private static void refreshOpenFormDialogs(Object display, Object viewer, File file, int savedUdfTab) {
         if (display == null || isDisposed(display) || viewer == null) return;
         try {
             Method getFormDefMethod = viewer.getClass().getMethod("getFormDef");
             Object newFormDef = getFormDefMethod.invoke(viewer);
             if (newFormDef == null) return;
 
-            // 1. Explicitly refresh UdfDlg (dlgCode) if visible
+            // 1. Explicitly refresh UdfDlg (dlgCode) if visible, preserving its active tab (Init / Prompts / Post)
             if (formGenInstance != null) {
                 try {
-                    Field dlgCodeField = formGenInstance.getClass().getDeclaredField("dlgCode");
-                    dlgCodeField.setAccessible(true);
-                    Object dlgCode = dlgCodeField.get(formGenInstance);
+                    Object dlgCode = getUdfDlg();
                     if (dlgCode != null && !isDisposed(dlgCode)) {
                         Method isVisMethod = dlgCode.getClass().getMethod("isVisible");
                         if (Boolean.TRUE.equals(isVisMethod.invoke(dlgCode))) {
+                            int tabToRestore = savedUdfTab >= 0 ? savedUdfTab : getCurrentOrLastUdfTabIndex();
                             boolean editAllowed = true;
                             try {
                                 Method eaMethod = formGenInstance.getClass().getDeclaredMethod("editAllowed");
@@ -742,7 +1142,10 @@ public class FormGenAgent {
                             } catch (Throwable ignored) {}
                             Method loadCodeMethod = dlgCode.getClass().getMethod("loadCode", boolean.class, newFormDef.getClass());
                             loadCodeMethod.invoke(dlgCode, editAllowed, newFormDef);
-                            log("Refreshed open UdfDlg with updated FormDef.");
+                            if (tabToRestore >= 0) {
+                                restoreUdfTabSelection(dlgCode, tabToRestore);
+                            }
+                            log("Refreshed open UdfDlg with updated FormDef (preserved tab index=" + tabToRestore + ").");
                         }
                     }
                 } catch (Throwable t) {
@@ -1277,12 +1680,13 @@ public class FormGenAgent {
 
             Method addFilterMethod = display.getClass().getMethod("addFilter", int.class, listenerClass);
             addFilterMethod.invoke(display, SWT_KeyDown, listenerProxy);     // SWT.KeyDown = 1
+            addFilterMethod.invoke(display, SWT_Selection, listenerProxy);   // SWT.Selection = 13
             addFilterMethod.invoke(display, SWT_FocusIn, listenerProxy);     // SWT.FocusIn = 15
             addFilterMethod.invoke(display, SWT_Show, listenerProxy);        // SWT.Show = 22
             addFilterMethod.invoke(display, SWT_Activate, listenerProxy);    // SWT.Activate = 26
             addFilterMethod.invoke(display, SWT_MenuDetect, listenerProxy);  // SWT.MenuDetect = 35
 
-            log("SWT context menu & dialog filters installed (KeyDown=1, FocusIn=15, Show=22, Activate=26, MenuDetect=35).");
+            log("SWT context menu & dialog filters installed (KeyDown=1, Selection=13, FocusIn=15, Show=22, Activate=26, MenuDetect=35).");
             startShellEnhanceWatcher(display);
         } catch (Throwable t) {
             log("Error installing SWT menu filters: " + t.getMessage());
@@ -1295,6 +1699,7 @@ public class FormGenAgent {
             public void run() {
                 try {
                     if (display == null || isDisposed(display)) return;
+                    ensureUdfAndMainTabHooksInstalled(display);
                     Method getShellsMethod = display.getClass().getMethod("getShells");
                     Object[] shells = (Object[]) getShellsMethod.invoke(display);
                     if (shells != null) {
@@ -1327,7 +1732,22 @@ public class FormGenAgent {
             Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
             Class<?> shellClass = Class.forName("org.eclipse.swt.widgets.Shell");
 
-            if (eventType == SWT_KeyDown) {
+            if (eventType == SWT_Selection) {
+                try {
+                    Object udfDlg = getUdfDlg();
+                    if (udfDlg != null) {
+                        Object udfTabFolder = getUdfTabFolder(udfDlg);
+                        if (udfTabFolder != null && widget == udfTabFolder) {
+                            Method getSelIdx = udfTabFolder.getClass().getMethod("getSelectionIndex");
+                            int idx = (Integer) getSelIdx.invoke(udfTabFolder);
+                            if (idx >= 0) {
+                                lastUdfTabIndex = idx;
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+                return;
+            } else if (eventType == SWT_KeyDown) {
                 if (widget != null) {
                     String clsName = widget.getClass().getName();
                     if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
@@ -1395,6 +1815,13 @@ public class FormGenAgent {
             } else if (eventType == SWT_MenuDetect) {
                 if (controlClass.isInstance(widget)) {
                     String clsName = widget.getClass().getName();
+                    if (clsName.contains("PdfViewer")) {
+                        try {
+                            lastMenuDetectX = eventObj.getClass().getField("x").getInt(eventObj);
+                            lastMenuDetectY = eventObj.getClass().getField("y").getInt(eventObj);
+                        } catch (Throwable ignored) {}
+                        return;
+                    }
                     // Intercept black code window (RainbowParenText), StyledText
                     if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
                         attachCodeEditorContextMenu(display, widget, eventObj);
@@ -1593,14 +2020,18 @@ public class FormGenAgent {
             // Remove previous Solera items so we have a clean refresh
             Method getItemsMethod = menu.getClass().getMethod("getItems");
             Object[] items = (Object[]) getItemsMethod.invoke(menu);
+            boolean isEmptyCanvasMenu = false;
             if (items != null) {
                 for (int i = items.length - 1; i >= 0; i--) {
                     Object it = items[i];
                     String itText = "";
                     try { itText = (String) it.getClass().getMethod("getText").invoke(it); } catch (Throwable ignored) {}
+                    if (itText != null && (itText.contains("Drop text field here") || itText.contains("Drop specific field here"))) {
+                        isEmptyCanvasMenu = true;
+                    }
                     Object tag = null;
                     try { tag = it.getClass().getMethod("getData", String.class).invoke(it, "SoleraItem"); } catch (Throwable ignored) {}
-                    if (Boolean.TRUE.equals(tag) || itText.contains("Solera") || itText.contains("Parse Field") || itText.contains("FormGen Utilities")) {
+                    if (Boolean.TRUE.equals(tag) || (itText != null && (itText.contains("Solera") || itText.contains("Parse Field") || itText.contains("Paste Code Block") || itText.contains("FormGen Utilities")))) {
                         it.getClass().getMethod("dispose").invoke(it);
                     }
                 }
@@ -1631,6 +2062,33 @@ public class FormGenAgent {
                     }
                 });
                 addListenerMethod.invoke(itemFieldFormula, SWT_Selection, listenerField);
+            } else if (isEmptyCanvasMenu && !hasSelectedCanvasFields()) {
+                final int[] dropPt = extractDropPointFromMenu(menu, display);
+                String activeCode = null;
+                String activeType = null;
+                synchronized (liveVariables) {
+                    activeCode = liveVariables.get("ActiveCodeSnippetText");
+                    activeType = liveVariables.get("ActiveCodeSnippetOutputType");
+                }
+                if (activeCode == null || activeCode.trim().isEmpty()) {
+                    activeCode = getClipboardText();
+                    activeType = inferExpressionOutputType(activeCode);
+                } else if (activeType == null || activeType.trim().isEmpty()) {
+                    activeType = inferExpressionOutputType(activeCode);
+                }
+
+                String typeLabel = "NUMERIC".equalsIgnoreCase(activeType) ? "Numeric" : "Text";
+                Object itemDropCode = itemCons.newInstance(menu, SWT_PUSH);
+                itemDropCode.getClass().getMethod("setText", String.class).invoke(itemDropCode, "📋 Paste Code Block as New " + typeLabel + " Field");
+                setDataMethod.invoke(itemDropCode, "SoleraItem", Boolean.TRUE);
+
+                Object listenerDropCode = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                    @Override
+                    public void run() {
+                        dropCodeBlockFieldAtPT(display, dropPt[0], dropPt[1]);
+                    }
+                });
+                addListenerMethod.invoke(itemDropCode, SWT_Selection, listenerDropCode);
             }
 
             // Separator
@@ -1685,6 +2143,418 @@ public class FormGenAgent {
         } catch (Throwable t) {
             log("Error injecting Solera menu items: " + t.getMessage());
         }
+    }
+
+    private static boolean hasSelectedCanvasFields() {
+        if (formGenInstance == null) return false;
+        try {
+            Field fvField = formGenInstance.getClass().getDeclaredField("formViewer");
+            fvField.setAccessible(true);
+            Object formViewer = fvField.get(formGenInstance);
+            if (formViewer == null) return false;
+
+            Field sfField = formViewer.getClass().getDeclaredField("selectedFields");
+            sfField.setAccessible(true);
+            Object selectedFields = sfField.get(formViewer);
+            if (selectedFields == null) return false;
+
+            Method sizeMethod = selectedFields.getClass().getMethod("size");
+            int size = (Integer) sizeMethod.invoke(selectedFields);
+            return size > 0;
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    private static int[] extractDropPointFromMenu(Object menu, Object display) {
+        // 1. Try extracting val$ptPT from "Drop text field here" MenuItem selection listener
+        try {
+            Method getItemsMethod = menu.getClass().getMethod("getItems");
+            Object[] items = (Object[]) getItemsMethod.invoke(menu);
+            if (items != null) {
+                for (Object it : items) {
+                    if (it == null || isDisposed(it)) continue;
+                    String txt = (String) it.getClass().getMethod("getText").invoke(it);
+                    if (txt != null && (txt.contains("Drop text field here") || txt.contains("Drop numeric field here"))) {
+                        Method getListenersMethod = it.getClass().getMethod("getListeners", int.class);
+                        Object[] listeners = (Object[]) getListenersMethod.invoke(it, SWT_Selection);
+                        if (listeners != null) {
+                            for (Object l : listeners) {
+                                Object targetListener = l;
+                                try {
+                                    Field elField = l.getClass().getDeclaredField("eventListener");
+                                    elField.setAccessible(true);
+                                    Object unwrapped = elField.get(l);
+                                    if (unwrapped != null) targetListener = unwrapped;
+                                } catch (Throwable ignored) {}
+
+                                for (Field f : targetListener.getClass().getDeclaredFields()) {
+                                    f.setAccessible(true);
+                                    Object val = f.get(targetListener);
+                                    if (val != null && "org.eclipse.swt.graphics.Point".equals(val.getClass().getName())) {
+                                        int px = val.getClass().getField("x").getInt(val);
+                                        int py = val.getClass().getField("y").getInt(val);
+                                        return new int[] { px, py };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        // 2. Fallback: convert lastMenuDetectX/Y (or current cursor location) via PdfViewer.windowPixelToFormPT
+        try {
+            if (formGenInstance != null && display != null) {
+                Field fvField = formGenInstance.getClass().getDeclaredField("formViewer");
+                fvField.setAccessible(true);
+                Object formViewer = fvField.get(formGenInstance);
+                if (formViewer != null) {
+                    int screenX = lastMenuDetectX;
+                    int screenY = lastMenuDetectY;
+                    if (screenX < 0 || screenY < 0) {
+                        Object cursorPt = display.getClass().getMethod("getCursorLocation").invoke(display);
+                        screenX = cursorPt.getClass().getField("x").getInt(cursorPt);
+                        screenY = cursorPt.getClass().getField("y").getInt(cursorPt);
+                    }
+                    Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
+                    Class<?> pointClass = Class.forName("org.eclipse.swt.graphics.Point");
+                    Object mappedPt = display.getClass().getMethod("map", controlClass, controlClass, int.class, int.class)
+                        .invoke(display, null, formViewer, screenX, screenY);
+                    Method toPtMethod = formViewer.getClass().getDeclaredMethod("windowPixelToFormPT", pointClass);
+                    toPtMethod.setAccessible(true);
+                    Object formPt = toPtMethod.invoke(formViewer, mappedPt);
+                    if (formPt != null) {
+                        int px = formPt.getClass().getField("x").getInt(formPt);
+                        int py = formPt.getClass().getField("y").getInt(formPt);
+                        return new int[] { px, py };
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        return new int[] { 720, 720 };
+    }
+
+    private static void dropCodeBlockFieldAtPT(final Object display, final int ptX, final int ptY) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                refreshLiveVariablesSync();
+                runOnDisplay(display, new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            if (formGenInstance == null) return;
+                            Field fvField = formGenInstance.getClass().getDeclaredField("formViewer");
+                            fvField.setAccessible(true);
+                            Object formViewer = fvField.get(formGenInstance);
+                            if (formViewer == null) return;
+
+                            String codeToPaste = null;
+                            String outputType = null;
+                            synchronized (liveVariables) {
+                                codeToPaste = liveVariables.get("ActiveCodeSnippetText");
+                                outputType = liveVariables.get("ActiveCodeSnippetOutputType");
+                            }
+                            if (codeToPaste == null || codeToPaste.trim().isEmpty()) {
+                                codeToPaste = getClipboardText();
+                                outputType = inferExpressionOutputType(codeToPaste);
+                            } else if (outputType == null || outputType.trim().isEmpty()) {
+                                outputType = inferExpressionOutputType(codeToPaste);
+                            }
+
+                            if (codeToPaste == null) {
+                                codeToPaste = "";
+                            }
+                            String expr = codeToPaste.trim();
+
+                            ClassLoader cl = formGenInstance.getClass().getClassLoader();
+                            Class<?> formatClass = Class.forName("com.automate.formgen.formfields.FieldDefaultFormat", true, cl);
+                            Object format = null;
+
+                            // If expr is a single deal field F<num>, check FormDatabaseCache first
+                            if (expr.matches("^[Ff]\\d+$")) {
+                                try {
+                                    int fieldNum = Integer.parseInt(expr.substring(1));
+                                    Class<?> cacheClass = Class.forName("com.automate.formgen.cache.FormDatabaseCache", true, cl);
+                                    Object cacheInst = cacheClass.getMethod("getInstance").invoke(null);
+                                    Object descriptor = cacheClass.getMethod("getDealFieldDescriptor", int.class).invoke(cacheInst, fieldNum);
+                                    if (descriptor != null) {
+                                        format = descriptor.getClass().getMethod("getDefaultFormat").invoke(descriptor);
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+
+                            if (format == null) {
+                                boolean isNumeric = "NUMERIC".equalsIgnoreCase(outputType)
+                                    || "NUMERIC".equalsIgnoreCase(inferExpressionOutputType(expr));
+                                if (isNumeric) {
+                                    Field stdNumField = formatClass.getField("standardNumeric");
+                                    format = stdNumField.get(null);
+                                } else {
+                                    Constructor<?> fmtCons = formatClass.getConstructor(int.class);
+                                    format = fmtCons.newInstance(30);
+                                }
+                            }
+
+                            Method dropWorker = formViewer.getClass().getMethod(
+                                "dropExprAtPTLocationWorker",
+                                String.class,
+                                formatClass,
+                                int.class,
+                                int.class,
+                                boolean.class
+                            );
+                            Object createdField = dropWorker.invoke(formViewer, expr, format, ptX, ptY, false);
+                            log("Dropped code block field at (" + ptX + ", " + ptY + ") as "
+                                + ("NUMERIC".equalsIgnoreCase(outputType) ? "NUMERIC" : "TEXT")
+                                + " with expr: " + expr + " -> " + createdField);
+                        } catch (Throwable t) {
+                            log("Error in dropCodeBlockFieldAtPT: " + t.getMessage());
+                        }
+                    }
+                });
+            }
+        }, "FormGenAgent-DropCodeBlock").start();
+    }
+
+    public static String inferExpressionOutputType(String rawExpr) {
+        if (rawExpr == null) return "TEXT";
+        String s = rawExpr.trim();
+        if (s.isEmpty()) return "TEXT";
+
+        while (s.startsWith("(") && s.endsWith(")") && isWrappedByOuterParens(s)) {
+            s = s.substring(1, s.length() - 1).trim();
+        }
+        if (s.isEmpty()) return "TEXT";
+
+        if ((s.startsWith("\"") && s.endsWith("\"")) || (s.startsWith("'") && s.endsWith("'"))) {
+            return "TEXT";
+        }
+        if (s.matches("^[+-]?(\\d+(\\.\\d+)?|\\.\\d+)$")) {
+            return "NUMERIC";
+        }
+
+        // Top-level binary operator scan outside parens/quotes
+        boolean hasTopLevelPlus = false;
+        boolean hasTopLevelArith = false;
+        List<String> topLevelPlusOperands = new ArrayList<String>();
+        int depth = 0;
+        boolean inQuotes = false;
+        char quoteChar = 0;
+        int lastSplit = 0;
+
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (inQuotes) {
+                if (c == quoteChar) inQuotes = false;
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                inQuotes = true;
+                quoteChar = c;
+                continue;
+            }
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { if (depth > 0) depth--; continue; }
+
+            if (depth == 0) {
+                if (c == '+') {
+                    String prev = s.substring(lastSplit, i).trim();
+                    if (!prev.isEmpty()) {
+                        hasTopLevelPlus = true;
+                        topLevelPlusOperands.add(prev);
+                        lastSplit = i + 1;
+                    }
+                } else if (c == '*' || c == '/' || c == '%') {
+                    hasTopLevelArith = true;
+                } else if (c == '-') {
+                    String prev = s.substring(lastSplit, i).trim();
+                    if (!prev.isEmpty()) {
+                        hasTopLevelArith = true;
+                    }
+                }
+            }
+        }
+        if (hasTopLevelPlus) {
+            topLevelPlusOperands.add(s.substring(lastSplit).trim());
+            boolean allNumeric = true;
+            for (String op : topLevelPlusOperands) {
+                if (!"NUMERIC".equals(inferExpressionOutputType(op))) {
+                    allNumeric = false;
+                    break;
+                }
+            }
+            return allNumeric ? "NUMERIC" : "TEXT";
+        }
+        if (hasTopLevelArith) {
+            return "NUMERIC";
+        }
+
+        // Function call Name(args...)
+        int openParen = s.indexOf('(');
+        if (openParen > 0 && s.endsWith(")")) {
+            String candidatePrefix = s.substring(0, openParen).trim();
+            String argsBody = s.substring(openParen);
+            if (isValidIdentifier(candidatePrefix) && isWrappedByOuterParens(argsBody)) {
+                String funcName = candidatePrefix.toUpperCase(Locale.ROOT);
+                String innerArgs = argsBody.substring(1, argsBody.length() - 1);
+                List<String> args = splitTopLevelArgs(innerArgs);
+
+                if ("NUM".equals(funcName) || "ABS".equals(funcName) || "ROUND".equals(funcName)
+                    || "TRUNC".equals(funcName) || "FLOOR".equals(funcName) || "CEILING".equals(funcName)
+                    || "CEIL".equals(funcName) || "MIN".equals(funcName) || "MAX".equals(funcName)
+                    || "SUM".equals(funcName) || "AVG".equals(funcName) || "LEN".equals(funcName)
+                    || "LENGTH".equals(funcName) || "FIND".equals(funcName) || "FINDR".equals(funcName)
+                    || "INDEXOF".equals(funcName) || "DAYS".equals(funcName) || "MONTHS".equals(funcName)
+                    || "YEARS".equals(funcName) || "DAY".equals(funcName) || "MONTH".equals(funcName)
+                    || "YEAR".equals(funcName) || "MOD".equals(funcName) || "POW".equals(funcName)
+                    || "SQRT".equals(funcName) || "INT".equals(funcName) || "VAL".equals(funcName)
+                    || "TONUM".equals(funcName) || "TONUMBER".equals(funcName)) {
+                    return "NUMERIC";
+                }
+                if ("TEXT".equals(funcName) || "STR".equals(funcName) || "STRING".equals(funcName)
+                    || "SUB".equals(funcName) || "SUBSTR".equals(funcName) || "SUBSTRING".equals(funcName)
+                    || "LEFT".equals(funcName) || "RIGHT".equals(funcName) || "MID".equals(funcName)
+                    || "TRIM".equals(funcName) || "LTRIM".equals(funcName) || "RTRIM".equals(funcName)
+                    || "UPPER".equals(funcName) || "LOWER".equals(funcName) || "PROPER".equals(funcName)
+                    || "PADL".equals(funcName) || "PADR".equals(funcName) || "LPAD".equals(funcName)
+                    || "RPAD".equals(funcName) || "REPLACE".equals(funcName) || "FORMAT".equals(funcName)
+                    || "DATE".equals(funcName) || "TODAY".equals(funcName) || "NOW".equals(funcName)
+                    || "CHR".equals(funcName) || "CONCAT".equals(funcName) || "TOTEXT".equals(funcName)) {
+                    return "TEXT";
+                }
+                if ("IF".equals(funcName) || "IIF".equals(funcName)) {
+                    String trueType = args.size() >= 2 ? inferExpressionOutputType(args.get(1)) : "TEXT";
+                    String falseType = args.size() >= 3 ? inferExpressionOutputType(args.get(2)) : trueType;
+                    return ("NUMERIC".equals(trueType) && "NUMERIC".equals(falseType)) ? "NUMERIC" : "TEXT";
+                }
+                if ("CASE".equals(funcName) || "CASELTE".equals(funcName) || "MATCHRANGE".equals(funcName) || "SWITCH".equals(funcName)) {
+                    if (args.size() < 3) return "TEXT";
+                    List<String> resultExprs = new ArrayList<String>();
+                    for (int i = 2; i < args.size(); i += 2) {
+                        resultExprs.add(args.get(i));
+                    }
+                    if (args.size() % 2 == 0) {
+                        resultExprs.add(args.get(args.size() - 1));
+                    }
+                    if (resultExprs.isEmpty()) return "TEXT";
+                    for (String r : resultExprs) {
+                        if (!"NUMERIC".equals(inferExpressionOutputType(r))) return "TEXT";
+                    }
+                    return "NUMERIC";
+                }
+                return "TEXT";
+            }
+        }
+
+        // Single deal field F<num> via FormDatabaseCache if available
+        if (s.matches("^[Ff]\\d+$") && formGenInstance != null) {
+            try {
+                int fieldNum = Integer.parseInt(s.substring(1));
+                ClassLoader cl = formGenInstance.getClass().getClassLoader();
+                Class<?> cacheClass = Class.forName("com.automate.formgen.cache.FormDatabaseCache", true, cl);
+                Object cacheInst = cacheClass.getMethod("getInstance").invoke(null);
+                Object descriptor = cacheClass.getMethod("getDealFieldDescriptor", int.class).invoke(cacheInst, fieldNum);
+                if (descriptor != null) {
+                    boolean isNum = (Boolean) descriptor.getClass().getMethod("isNumericField").invoke(descriptor);
+                    return isNum ? "NUMERIC" : "TEXT";
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // Prompt / variable reference in open form's Prompts
+        if (formGenInstance != null) {
+            try {
+                Method getOpenForm = formGenInstance.getClass().getDeclaredMethod("getOpenForm");
+                getOpenForm.setAccessible(true);
+                Object openForm = getOpenForm.invoke(formGenInstance);
+                if (openForm != null) {
+                    Object formData = openForm.getClass().getMethod("getFormData").invoke(openForm);
+                    if (formData != null) {
+                        Object prompts = formData.getClass().getMethod("getPrompts").invoke(formData);
+                        if (prompts != null) {
+                            Object promptData = prompts.getClass().getMethod("get", String.class).invoke(prompts, s.toUpperCase(Locale.ROOT));
+                            if (promptData != null) {
+                                Object respType = promptData.getClass().getMethod("getResponseType").invoke(promptData);
+                                if (respType != null) {
+                                    String rt = respType.toString().toUpperCase(Locale.ROOT);
+                                    if (rt.contains("NUM") || rt.contains("DEC") || rt.contains("AMT") || rt.contains("CURRENCY") || rt.contains("INT")) {
+                                        return "NUMERIC";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        return "TEXT";
+    }
+
+    private static boolean isWrappedByOuterParens(String s) {
+        if (s == null || s.length() < 2 || s.charAt(0) != '(' || s.charAt(s.length() - 1) != ')') return false;
+        int depth = 0;
+        boolean inQuotes = false;
+        char quoteChar = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (inQuotes) {
+                if (c == quoteChar) inQuotes = false;
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                inQuotes = true;
+                quoteChar = c;
+                continue;
+            }
+            if (c == '(') depth++;
+            else if (c == ')') {
+                depth--;
+                if (depth == 0 && i < s.length() - 1) return false;
+            }
+        }
+        return depth == 0;
+    }
+
+    private static boolean isValidIdentifier(String s) {
+        if (s == null || s.isEmpty()) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!(Character.isLetterOrDigit(c) || c == '_')) return false;
+        }
+        return true;
+    }
+
+    private static List<String> splitTopLevelArgs(String inner) {
+        List<String> result = new ArrayList<String>();
+        if (inner == null || inner.trim().isEmpty()) return result;
+        int depth = 0;
+        boolean inQuotes = false;
+        char quoteChar = 0;
+        int start = 0;
+        for (int i = 0; i < inner.length(); i++) {
+            char c = inner.charAt(i);
+            if (inQuotes) {
+                if (c == quoteChar) inQuotes = false;
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                inQuotes = true;
+                quoteChar = c;
+                continue;
+            }
+            if (c == '(') depth++;
+            else if (c == ')') { if (depth > 0) depth--; }
+            else if (c == ',' && depth == 0) {
+                result.add(inner.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        result.add(inner.substring(start).trim());
+        return result;
     }
 
     private static String getSelectedFieldFormula() {

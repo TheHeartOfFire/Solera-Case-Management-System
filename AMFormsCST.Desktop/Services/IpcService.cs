@@ -186,6 +186,7 @@ public class IpcService : IHostedService, IAsyncDisposable
         string activeTemplateName = selectedTemplate?.Template.Name ?? string.Empty;
         string activeTemplateText = GetFlowDocumentText(selectedTemplate?.Output);
         string activeCodeSnippetText = CodeSnippetsViewModel.GetActiveFormulaText();
+        string activeCodeSnippetOutputType = CodeSnippetsViewModel.InferFormulaOutputType(activeCodeSnippetText);
 
         return new IpcLiveVariables
         {
@@ -205,7 +206,8 @@ public class IpcService : IHostedService, IAsyncDisposable
             Notes = notesText,
             ActiveTemplateName = activeTemplateName,
             ActiveTemplateText = activeTemplateText,
-            ActiveCodeSnippetText = activeCodeSnippetText
+            ActiveCodeSnippetText = activeCodeSnippetText,
+            ActiveCodeSnippetOutputType = activeCodeSnippetOutputType
         };
     }
 
