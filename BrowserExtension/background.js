@@ -190,11 +190,118 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
 });
 
+async function fetchServerCodeFromSalesforce(tabUrl, accountId) {
+    if (!accountId || !tabUrl) return null;
+    try {
+        const urlObj = new URL(tabUrl);
+
+        let sid = "";
+        try {
+            if (chrome.cookies) {
+                const cookie = await chrome.cookies.get({ url: tabUrl, name: "sid" });
+                if (cookie && cookie.value) {
+                    sid = cookie.value;
+                } else {
+                    const allCookies = await chrome.cookies.getAll({ name: "sid" });
+                    const subDomain = urlObj.hostname.split('.')[0];
+                    const matchingCookie = allCookies.find(c => c.domain.includes(subDomain)) || allCookies[0];
+                    if (matchingCookie) {
+                        sid = matchingCookie.value;
+                    }
+                }
+            }
+        } catch (cookieErr) {
+            console.warn("Error reading sid cookie:", cookieErr);
+        }
+
+        if (!sid) {
+            console.warn("Could not find Salesforce 'sid' session cookie");
+            return null;
+        }
+
+        const candidateHosts = [urlObj.origin];
+        if (urlObj.hostname.includes(".lightning.force.com")) {
+            candidateHosts.push(`https://${urlObj.hostname.replace(".lightning.force.com", ".my.salesforce.com")}`);
+        } else if (urlObj.hostname.includes(".force.com")) {
+            candidateHosts.push(`https://${urlObj.hostname.split('.')[0]}.my.salesforce.com`);
+        }
+
+        for (const host of candidateHosts) {
+            // 1. Try SObject API endpoint (returns custom fields on Account)
+            try {
+                const sObjUrl = `${host}/services/data/v59.0/sobjects/Account/${accountId}`;
+                const resp = await fetch(sObjUrl, {
+                    headers: {
+                        "Authorization": `Bearer ${sid}`,
+                        "Accept": "application/json"
+                    }
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data && typeof data === "object") {
+                        for (const [k, v] of Object.entries(data)) {
+                            if (v && typeof v === "string" && /server.*code|automate.*server|server.*id/i.test(k)) {
+                                return v.trim();
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn(`SObject fetch failed on ${host}:`, err);
+            }
+
+            // 2. Try UI API endpoint
+            try {
+                const uiUrl = `${host}/services/data/v59.0/ui-api/records/${accountId}`;
+                const resp = await fetch(uiUrl, {
+                    headers: {
+                        "Authorization": `Bearer ${sid}`,
+                        "Accept": "application/json"
+                    }
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data && data.fields) {
+                        for (const [k, fieldObj] of Object.entries(data.fields)) {
+                            if (/server.*code|automate.*server|server.*id/i.test(k)) {
+                                const val = fieldObj?.displayValue || fieldObj?.value;
+                                if (val && typeof val === "string") return val.trim();
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn(`UI API fetch failed on ${host}:`, err);
+            }
+        }
+    } catch (ex) {
+        console.warn("Exception in fetchServerCodeFromSalesforce:", ex);
+    }
+    return null;
+}
+
 function extractAndParseFullCase(tabId, successMessage) {
     if (!tabId) return;
-    sendTabMessageWithAutoInject(tabId, { action: "EXTRACT_CASE_DATA" }, (res) => {
+    sendTabMessageWithAutoInject(tabId, { action: "EXTRACT_CASE_DATA" }, async (res) => {
         if (res && res.caseData) {
             const d = res.caseData;
+
+            // If server code is missing and we have accountId, query Salesforce API
+            if (!d.serverCode && d.accountId) {
+                try {
+                    const tab = await chrome.tabs.get(tabId);
+                    if (tab && tab.url) {
+                        const fetchedCode = await fetchServerCodeFromSalesforce(tab.url, d.accountId);
+                        if (fetchedCode) {
+                            d.serverCode = fetchedCode;
+                            console.log("Resolved Automate Server Code from Salesforce Account API:", fetchedCode);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Could not query Salesforce Account API:", e);
+                }
+            }
+
             sendIpcMessage({
                 target: "SoleraCMS",
                 action: "LoadCase",

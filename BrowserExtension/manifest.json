@@ -8,7 +8,8 @@
     "contextMenus",
     "nativeMessaging",
     "activeTab",
-    "scripting"
+    "scripting",
+    "cookies"
   ],
   "host_permissions": [
     "https://*.salesforce.com/*",

@@ -224,6 +224,46 @@ function findFieldByLabel(labelPatterns, preferredSubSelectors = []) {
     return "";
 }
 
+function findFieldInPopovers(labelPatterns) {
+    const popovers = document.querySelectorAll(
+        '.slds-popover, [role="dialog"], force-hoverable-popover, .forceHoverPanel, .cuf-compact-feed, .uiPanel, .panel-content'
+    );
+    for (const popover of popovers) {
+        if (!isElementVisible(popover)) continue;
+
+        const labelCandidates = popover.querySelectorAll(
+            'dt, .slds-item_label, .slds-text-title, .slds-form-element__label, .test-id__field-label, [class*="label"], p, span, div'
+        );
+        for (const el of labelCandidates) {
+            const txt = cleanFieldValue(el.innerText || el.textContent);
+            if (!txt) continue;
+            for (const pattern of labelPatterns) {
+                const matches = typeof pattern === "string"
+                    ? txt.toLowerCase() === pattern.toLowerCase()
+                    : pattern.test(txt);
+                if (matches) {
+                    let sibling = el.nextElementSibling;
+                    if (sibling) {
+                        const val = cleanFieldValue(sibling.innerText || sibling.textContent);
+                        if (val && !isLabelText(val, labelPatterns)) return val;
+                    }
+                    const parent = el.parentElement;
+                    if (parent) {
+                        const valEls = parent.querySelectorAll('dd, .slds-item_detail, .slds-text-body_regular, lightning-formatted-text, .uiOutputText');
+                        for (const valEl of valEls) {
+                            if (valEl !== el) {
+                                const val = cleanFieldValue(valEl.innerText || valEl.textContent);
+                                if (val && !isLabelText(val, labelPatterns)) return val;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return "";
+}
+
 function extractSalesforceCase() {
     const data = {
         caseNumber: "",
@@ -233,6 +273,7 @@ function extractSalesforceCase() {
         contactPhone: "",
         contactEmail: "",
         accountName: "",
+        accountId: "",
         serverCode: "",
         rawPageText: ""
     };
@@ -325,6 +366,32 @@ function extractSalesforceCase() {
         'a[data-refid="recordId"][href*="Account"]'
     ], ["Account Name", "Account", "Dealership"]);
 
+    // Extract Account ID (15 or 18 char Salesforce ID starting with 001)
+    const accountLinkSelectors = [
+        '[data-target-selection-name="sfdc:RecordField.Case.AccountId"] a',
+        'records-record-layout-item[field-label="Account Name"] a',
+        '[data-field-name="AccountId"] a',
+        'a[data-refid="recordId"][href*="Account"]',
+        'a[href*="/lightning/r/Account/"]',
+        'a[href*="/Account/"]'
+    ];
+    for (const sel of accountLinkSelectors) {
+        const links = document.querySelectorAll(sel);
+        for (const a of links) {
+            const idAttr = a.getAttribute('data-recordid') || a.getAttribute('data-refid');
+            if (idAttr && /^001[a-zA-Z0-9]{12,15}$/.test(idAttr)) {
+                data.accountId = idAttr;
+                break;
+            }
+            const hrefMatch = (a.href || "").match(/\/Account\/([a-zA-Z0-9]{15,18})/i);
+            if (hrefMatch) {
+                data.accountId = hrefMatch[1];
+                break;
+            }
+        }
+        if (data.accountId) break;
+    }
+
     // 8. Automate Server Code (from Case / Account record)
     data.serverCode = findFieldByLabel(
         [/automate\s*server/i, /auto\/mate\s*server/i, /server\s*code/i, /server\s*id/i, "Automate Server Code", "Auto/Mate Server Code", "Server Code", "Server ID", "AM Server Code", "Server"],
@@ -336,6 +403,14 @@ function extractSalesforceCase() {
         '[data-field-name*="Server_Code"] lightning-formatted-text',
         '[data-field-name*="Server"] lightning-formatted-text'
     ], [/server/i, "Server", "Server Code", "Server ID"]);
+
+    // If server code not found on main page, check any active compact layout popovers
+    if (!data.serverCode) {
+        data.serverCode = findFieldInPopovers([
+            /automate\s*server/i, /auto\/mate\s*server/i, /server\s*code/i, /server\s*id/i,
+            "Automate Server Code", "Auto/Mate Server Code", "Server Code", "Server ID"
+        ]);
+    }
 
     // Build structured text block compatible with DashboardViewModel.ParseCaseText
     // Note: Contact and Dealership records are NOT passed here so ParseCaseText parses
