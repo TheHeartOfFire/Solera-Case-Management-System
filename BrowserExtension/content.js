@@ -37,8 +37,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.action === "EXTRACT_CASE_DATA") {
-        const caseData = extractSalesforceCase();
-        sendResponse({ success: true, caseData: caseData });
+        extractSalesforceCaseAsync().then(caseData => {
+            sendResponse({ success: true, caseData: caseData });
+        }).catch(err => {
+            console.warn("extractSalesforceCaseAsync error:", err);
+            sendResponse({ success: true, caseData: extractSalesforceCase() });
+        });
         return true;
     }
 
@@ -225,15 +229,53 @@ function findFieldByLabel(labelPatterns, preferredSubSelectors = []) {
 }
 
 function findFieldInPopovers(labelPatterns) {
-    const popovers = document.querySelectorAll(
-        '.slds-popover, [role="dialog"], force-hoverable-popover, .forceHoverPanel, .cuf-compact-feed, .uiPanel, .panel-content'
-    );
+    const popoverSelectors = [
+        '.slds-popover',
+        '[role="dialog"]',
+        'force-hoverable-popover',
+        '.forceHoverPanel',
+        'records-hoverable-link',
+        'records-compact-layout-panel',
+        'force-record-compact-layout',
+        'records-record-layout-compact',
+        '.cuf-compact-feed',
+        '.uiPanel',
+        '.panel-content',
+        '.slds-popover__body'
+    ];
+    let popovers;
+    try {
+        popovers = document.querySelectorAll(popoverSelectors.join(', '));
+    } catch (e) {
+        popovers = document.querySelectorAll('.slds-popover, [role="dialog"], force-hoverable-popover, .forceHoverPanel');
+    }
+
     for (const popover of popovers) {
         try {
             const style = window.getComputedStyle(popover);
             if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
         } catch (e) {}
 
+        // 1. Check records-record-layout-item elements with field-label attribute inside popover
+        const layoutItems = popover.querySelectorAll("records-record-layout-item[field-label]");
+        for (const item of layoutItems) {
+            const attr = (item.getAttribute("field-label") || "").trim();
+            for (const pattern of labelPatterns) {
+                const matches = typeof pattern === "string"
+                    ? attr.toLowerCase() === pattern.toLowerCase()
+                    : pattern.test(attr);
+                if (matches) {
+                    const valContainer = item.querySelector(".test-id__field-value, .slds-form-element__control, [data-field-value]");
+                    if (valContainer) {
+                        const valEl = valContainer.querySelector("lightning-formatted-text, .uiOutputText, span");
+                        const val = cleanFieldValue(valEl ? (valEl.innerText || valEl.textContent) : (valContainer.innerText || valContainer.textContent));
+                        if (val && !isLabelText(val, labelPatterns)) return val;
+                    }
+                }
+            }
+        }
+
+        // 2. Check label candidates (dt, span, p, label, div)
         const labelCandidates = popover.querySelectorAll(
             'dt, .slds-item_label, .slds-text-title, .slds-form-element__label, .test-id__field-label, [class*="label"], p, span, div'
         );
@@ -245,16 +287,19 @@ function findFieldInPopovers(labelPatterns) {
                     ? txt.toLowerCase() === pattern.toLowerCase()
                     : pattern.test(txt);
                 if (matches) {
+                    // Check next sibling
                     let sibling = el.nextElementSibling;
                     if (sibling) {
-                        const val = cleanFieldValue(sibling.innerText || sibling.textContent);
+                        const sibValEl = sibling.querySelector("lightning-formatted-text, .uiOutputText, span") || sibling;
+                        const val = cleanFieldValue(sibValEl.innerText || sibValEl.textContent);
                         if (val && !isLabelText(val, labelPatterns)) return val;
                     }
+                    // Check parent container
                     const parent = el.parentElement;
                     if (parent) {
-                        const valEls = parent.querySelectorAll('dd, .slds-item_detail, .slds-text-body_regular, lightning-formatted-text, .uiOutputText');
+                        const valEls = parent.querySelectorAll('dd, .slds-item_detail, .slds-text-body_regular, lightning-formatted-text, .uiOutputText, span');
                         for (const valEl of valEls) {
-                            if (valEl !== el) {
+                            if (valEl !== el && !el.contains(valEl)) {
                                 const val = cleanFieldValue(valEl.innerText || valEl.textContent);
                                 if (val && !isLabelText(val, labelPatterns)) return val;
                             }
@@ -448,4 +493,191 @@ function extractSalesforceCase() {
 
     return data;
 }
+
+function findAccountLinkElement(accountId) {
+    if (accountId) {
+        const byId = document.querySelector(`a[data-recordid="${accountId}"], a[data-id="${accountId}"], a[href*="${accountId}"]`);
+        if (byId && isElementVisible(byId)) return byId;
+        if (byId) return byId;
+    }
+
+    const selectors = [
+        '[data-target-selection-name="sfdc:RecordField.Case.AccountId"] a',
+        'records-record-layout-item[field-label*="Account" i] a',
+        '[data-field-name="AccountId"] a',
+        'a[data-refid="recordId"][href*="Account"]',
+        'a[data-recordid^="001"]',
+        'a[href*="/001"]'
+    ];
+    for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el && isElementVisible(el)) return el;
+    }
+    for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el) return el;
+    }
+    return null;
+}
+
+function triggerHoverOnElement(el) {
+    if (!el) return;
+    const opts = { bubbles: true, cancelable: true, view: window };
+    el.dispatchEvent(new MouseEvent('mouseover', opts));
+    el.dispatchEvent(new MouseEvent('mouseenter', opts));
+    const parent = el.closest('records-hoverable-link, [data-target-selection-name], [data-field-name]');
+    if (parent && parent !== el) {
+        parent.dispatchEvent(new MouseEvent('mouseover', opts));
+        parent.dispatchEvent(new MouseEvent('mouseenter', opts));
+    }
+}
+
+function triggerUnhoverOnElement(el) {
+    if (!el) return;
+    const opts = { bubbles: true, cancelable: true, view: window };
+    el.dispatchEvent(new MouseEvent('mouseleave', opts));
+    el.dispatchEvent(new MouseEvent('mouseout', opts));
+    const parent = el.closest('records-hoverable-link, [data-target-selection-name], [data-field-name]');
+    if (parent && parent !== el) {
+        parent.dispatchEvent(new MouseEvent('mouseleave', opts));
+        parent.dispatchEvent(new MouseEvent('mouseout', opts));
+    }
+}
+
+async function fetchServerCodeViaHover(accountId) {
+    const accLink = findAccountLinkElement(accountId);
+    if (!accLink) return null;
+
+    const patterns = [
+        /automate\s*server/i, /auto\/mate\s*server/i, /server\s*code/i, /server\s*id/i,
+        /server__c/i, /dms.*server/i, /^server$/i, "Automate Server Code", "Auto/Mate Server Code",
+        "Server Code", "Server ID", "AM Server Code", "Server"
+    ];
+
+    try {
+        triggerHoverOnElement(accLink);
+
+        // Wait 250ms for Lightning popover to mount
+        await new Promise(r => setTimeout(r, 250));
+
+        let code = findFieldInPopovers(patterns);
+        if (!code) {
+            await new Promise(r => setTimeout(r, 200));
+            code = findFieldInPopovers(patterns);
+        }
+
+        triggerUnhoverOnElement(accLink);
+        return code || null;
+    } catch (e) {
+        triggerUnhoverOnElement(accLink);
+        return null;
+    }
+}
+
+function extractServerCodeFromJson(obj) {
+    if (!obj || typeof obj !== "object") return null;
+
+    // Check fields directly (Salesforce UI API record format)
+    if (obj.fields && typeof obj.fields === "object") {
+        for (const [k, f] of Object.entries(obj.fields)) {
+            if (/server.*code|automate.*server|server.*id|server__c|dms.*server|^server$|am.*server/i.test(k)) {
+                const val = f?.displayValue || f?.value;
+                if (val != null) {
+                    const str = String(val).trim();
+                    if (str && !isLabelText(str)) return str;
+                }
+            }
+        }
+    }
+
+    // Traverse recursively
+    for (const [k, v] of Object.entries(obj)) {
+        if (/server.*code|automate.*server|server.*id|server__c|dms.*server|^server$|am.*server/i.test(k)) {
+            if (v != null && (typeof v === "string" || typeof v === "number")) {
+                const str = String(v).trim();
+                if (str && !isLabelText(str)) return str;
+            } else if (v && typeof v === "object" && (v.displayValue != null || v.value != null)) {
+                const str = String(v.displayValue || v.value).trim();
+                if (str && !isLabelText(str)) return str;
+            }
+        }
+        if (v && typeof v === "object") {
+            const nested = extractServerCodeFromJson(v);
+            if (nested) return nested;
+        }
+    }
+    return null;
+}
+
+async function fetchServerCodeViaUiApi(accountId) {
+    if (!accountId) return null;
+    const endpoints = [
+        `/services/data/v59.0/ui-api/records/${accountId}?layoutTypes=Compact`,
+        `/services/data/v59.0/ui-api/record-ui/${accountId}`,
+        `/services/data/v59.0/ui-api/records/${accountId}?optionalFields=Account.Automate_Server_Code__c,Account.Server_ID__c,Account.Server_Code__c,Account.Server__c,Account.DMS_Server__c,Account.System_ID__c`
+    ];
+
+    for (const ep of endpoints) {
+        try {
+            const resp = await fetch(ep, {
+                method: "GET",
+                credentials: "include",
+                headers: { "Accept": "application/json" }
+            });
+            if (resp.ok) {
+                const json = await resp.json();
+                const code = extractServerCodeFromJson(json);
+                if (code) return code;
+            }
+        } catch (e) {}
+    }
+    return null;
+}
+
+function extractServerCodeFromText(text) {
+    if (!text) return "";
+    const m = text.match(/(?:automate\s*server\s*code|auto\/mate\s*server\s*code|server\s*code|server\s*id|automate\s*server)[\s:]+([A-Za-z0-9_-]{2,15})/i);
+    if (m && m[1]) {
+        const val = m[1].trim();
+        if (!isLabelText(val)) return val;
+    }
+    return "";
+}
+
+async function extractSalesforceCaseAsync() {
+    const data = extractSalesforceCase();
+    if (data.serverCode && !isLabelText(data.serverCode)) {
+        return data;
+    }
+
+    // Step 1: Check document text regex
+    const textCode = extractServerCodeFromText(document.body ? document.body.innerText : "");
+    if (textCode) {
+        data.serverCode = textCode;
+        return data;
+    }
+
+    if (data.accountId) {
+        // Step 2: Synthetic hover popover lookup
+        try {
+            const hoverCode = await fetchServerCodeViaHover(data.accountId);
+            if (hoverCode && !isLabelText(hoverCode)) {
+                data.serverCode = hoverCode;
+                return data;
+            }
+        } catch (e) {}
+
+        // Step 3: Same-origin UI API fetch
+        try {
+            const uiApiCode = await fetchServerCodeViaUiApi(data.accountId);
+            if (uiApiCode && !isLabelText(uiApiCode)) {
+                data.serverCode = uiApiCode;
+                return data;
+            }
+        } catch (e) {}
+    }
+
+    return data;
+}
+
 

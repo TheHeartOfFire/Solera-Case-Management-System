@@ -2258,7 +2258,7 @@ public class FormGenAgent {
 
             // 2. Parse in Code Snippets
             Object itemParse = itemCons.newInstance(menu, SWT_PUSH);
-            itemParse.getClass().getMethod("setText", String.class).invoke(itemParse, "🔬 Parse in Code Snippets");
+            itemParse.getClass().getMethod("setText", String.class).invoke(itemParse, "Parse in Code Snippets");
             Object listenerParse = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
                 @Override
                 public void run() {
@@ -2274,9 +2274,9 @@ public class FormGenAgent {
             });
             addListenerMethod.invoke(itemParse, SWT_Selection, listenerParse);
 
-            // 3. Paste from Code Snippets / SCMT Active Formula
+            // 3. Paste from Code Snippets
             Object itemPasteFormula = itemCons.newInstance(menu, SWT_PUSH);
-            itemPasteFormula.getClass().getMethod("setText", String.class).invoke(itemPasteFormula, "📋 Paste from Code Snippets / Formula");
+            itemPasteFormula.getClass().getMethod("setText", String.class).invoke(itemPasteFormula, "Paste Code Snippet");
             Object listenerPasteFormula = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
                 @Override
                 public void run() {
@@ -2985,7 +2985,7 @@ public class FormGenAgent {
 
             if (!hasItems) {
                 Object emptyItem = itemCons.newInstance(pasteSubMenu, SWT_PUSH);
-                emptyItem.getClass().getMethod("setText", String.class).invoke(emptyItem, "No active SCMT variables");
+                emptyItem.getClass().getMethod("setText", String.class).invoke(emptyItem, "No case info available");
                 emptyItem.getClass().getMethod("setEnabled", boolean.class).invoke(emptyItem, false);
             }
         } catch (Throwable t) {
@@ -3182,9 +3182,9 @@ public class FormGenAgent {
             Object btnFill = btnCons.newInstance(buttonComposite, SWT_PUSH);
             btnFill.getClass().getMethod("setData", String.class, Object.class).invoke(btnFill, "SoleraInjectedButton", Boolean.TRUE);
 
-            btnFill.getClass().getMethod("setText", String.class).invoke(btnFill, "⚡ Fill from Solera CMS");
+            btnFill.getClass().getMethod("setText", String.class).invoke(btnFill, "Fill from Solera");
             try {
-                btnFill.getClass().getMethod("setToolTipText", String.class).invoke(btnFill, "Auto-fill Authorized By, Dealer Code, Companies, and Comments from active SCMT case");
+                btnFill.getClass().getMethod("setToolTipText", String.class).invoke(btnFill, "Auto-fill form details from current Solera case");
             } catch (Throwable ignored) {}
 
             Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
@@ -3280,7 +3280,7 @@ public class FormGenAgent {
             Object buttonComposite = getParentMethod.invoke(btnOk);
             if (buttonComposite == null) return;
 
-            if (findChildButton(buttonComposite, "Regenerate UUID") != null) return;
+            if (findChildButton(buttonComposite, "Create New Form Copy") != null || findChildButton(buttonComposite, "Regenerate UUID") != null) return;
 
             // Expand numColumns of GridLayout
             try {
@@ -3297,9 +3297,9 @@ public class FormGenAgent {
             Object btnRegen = btnCons.newInstance(buttonComposite, SWT_PUSH);
             btnRegen.getClass().getMethod("setData", String.class, Object.class).invoke(btnRegen, "SoleraInjectedButton", Boolean.TRUE);
 
-            btnRegen.getClass().getMethod("setText", String.class).invoke(btnRegen, "🔄 Regenerate UUID (Clone)");
+            btnRegen.getClass().getMethod("setText", String.class).invoke(btnRegen, "Create New Form Copy");
             try {
-                btnRegen.getClass().getMethod("setToolTipText", String.class).invoke(btnRegen, "Assigns a fresh UUID so this form can be published as an independent form clone");
+                btnRegen.getClass().getMethod("setToolTipText", String.class).invoke(btnRegen, "Assigns a new form identifier so this form can be saved as a separate copy");
             } catch (Throwable ignored) {}
 
             Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
@@ -3404,9 +3404,9 @@ public class FormGenAgent {
             Object btnOpenUtils = btnCons.newInstance(compButtons, SWT_PUSH);
             btnOpenUtils.getClass().getMethod("setData", String.class, Object.class).invoke(btnOpenUtils, "SoleraInjectedButton", Boolean.TRUE);
 
-            btnOpenUtils.getClass().getMethod("setText", String.class).invoke(btnOpenUtils, "🛠 Send to FormGen Utilities");
+            btnOpenUtils.getClass().getMethod("setText", String.class).invoke(btnOpenUtils, "Open in FormGen Utilities");
             try {
-                btnOpenUtils.getClass().getMethod("setToolTipText", String.class).invoke(btnOpenUtils, "Opens the active form in SCMT FormGen Utilities to duplicate prompts, parse fields, and align layouts");
+                btnOpenUtils.getClass().getMethod("setToolTipText", String.class).invoke(btnOpenUtils, "Opens the active form in Solera FormGen Utilities");
             } catch (Throwable ignored) {}
 
             Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {

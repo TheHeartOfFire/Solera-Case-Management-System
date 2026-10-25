@@ -27,8 +27,14 @@ if ($adoptiumJar) {
 # Look for swt jar (optional since code uses pure reflection)
 $swtJar = "$env:APPDATA\NewFormGen\swt-4.10-win.jar"
 if (-not (Test-Path $swtJar)) {
-    $found = Get-ChildItem -Path "$env:USERPROFILE" -Filter "swt-*.jar" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($found) { $swtJar = $found.FullName }
+    $candidates = @(
+        "$env:LOCALAPPDATA\NewFormGen\swt-4.10-win.jar",
+        "$env:USERPROFILE\.m2\repository\org\eclipse\platform\org.eclipse.swt.win32.win32.x86_64\*\*.jar"
+    )
+    foreach ($c in $candidates) {
+        $found = Get-Item $c -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) { $swtJar = $found.FullName; break }
+    }
 }
 
 Write-Host "Compiling FormGenAgent with $javac (--release 8)..."

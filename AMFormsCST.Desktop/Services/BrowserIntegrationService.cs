@@ -164,10 +164,10 @@ public class BrowserIntegrationService : IBrowserIntegrationService
             {
                 var choice = System.Windows.MessageBox.Show(
                     $"{browserDisplayName} is currently open.\n\n" +
-                    $"Chromium browsers only apply '--load-extension' when starting a new browser session.\n\n" +
-                    $"• Click 'Yes' to restart {browserDisplayName} and load the Solera CMS extension automatically (your open tabs will restore).\n" +
-                    $"• Click 'No' to keep {browserDisplayName} open — we will open the setup tab in {browserDisplayName} and open the extension folder (path already copied to your clipboard).",
-                    $"Install Solera CMS Extension in {browserDisplayName}",
+                    $"To automatically enable the Solera extension, {browserDisplayName} needs to restart.\n\n" +
+                    $"• Click 'Yes' to restart {browserDisplayName} (your open tabs will be restored).\n" +
+                    $"• Click 'No' to keep {browserDisplayName} open and view quick setup steps.",
+                    $"Enable Solera Extension in {browserDisplayName}",
                     System.Windows.MessageBoxButton.YesNoCancel,
                     System.Windows.MessageBoxImage.Question);
 
@@ -361,17 +361,17 @@ public class BrowserIntegrationService : IBrowserIntegrationService
 </head>
 <body>
   <div class=""card"">
-    <div class=""badge"">✓ Native Messaging Bridge Registered</div>
-    <h1>Solera CMS Extension for {browserName}</h1>
-    <p>If {browserName} was launched fresh, the extension is already active! If {browserName} was already running or blocks command-line extensions, complete setup in 10 seconds:</p>
+    <div class=""badge"">✓ Ready to Connect</div>
+    <h1>Solera Extension for {browserName}</h1>
+    <p>Follow these two quick steps to finish enabling the Solera extension in {browserName}:</p>
     <div class=""step"">
-      <strong>Step 1:</strong> Open <code>{extensionsUrl}</code> in {browserName} and enable <strong>Developer mode</strong> (top-right toggle).<br/>
-      <button class=""btn"" onclick=""navigator.clipboard.writeText('{extensionsUrl}'); this.textContent='Copied {extensionsUrl}!';"">Copy {extensionsUrl}</button>
+      <strong>Step 1:</strong> In {browserName}, open <code>{extensionsUrl}</code> and turn on <strong>Developer mode</strong> (toggle switch in the top-right corner).<br/>
+      <button class=""btn"" onclick=""navigator.clipboard.writeText('{extensionsUrl}'); this.textContent='Copied extensions URL!';"">Copy Extensions Page Address</button>
     </div>
     <div class=""step"">
-      <strong>Step 2:</strong> Click <strong>Load unpacked</strong> and paste (<code>Ctrl+V</code>) the extension folder path below (already copied to your clipboard):<br/><br/>
+      <strong>Step 2:</strong> Click <strong>Load unpacked</strong> and paste (<code>Ctrl+V</code>) the folder path below (already copied to your clipboard):<br/><br/>
       <code>{extDir}</code><br/>
-      <button class=""btn"" onclick=""navigator.clipboard.writeText('{escapedDir}'); this.textContent='Copied Folder Path!';"">Copy Extension Folder Path</button>
+      <button class=""btn"" onclick=""navigator.clipboard.writeText('{escapedDir}'); this.textContent='Copied Folder Path!';"">Copy Folder Path</button>
     </div>
   </div>
 </body>

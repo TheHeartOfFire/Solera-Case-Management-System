@@ -1,4 +1,4 @@
-// Solera CMS & Citadel Assistant - Background Service Worker
+// Solera Case Management Extension - Background Service Worker
 // Communicates with native host com.solera.cms.bridge
 
 const HOST_NAME = "com.solera.cms.bridge";
@@ -175,140 +175,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
 });
 
-async function fetchServerCodeFromSalesforce(tabUrl, accountId) {
-    if (!accountId || !tabUrl) return null;
-    try {
-        const urlObj = new URL(tabUrl);
-        const subDomain = urlObj.hostname.split('.')[0];
-
-        let sid = "";
-        try {
-            if (chrome.cookies) {
-                const candidateCookieUrls = [
-                    `https://${subDomain}.my.salesforce.com`,
-                    tabUrl,
-                    urlObj.origin,
-                    `https://${urlObj.hostname.replace(".lightning.force.com", ".my.salesforce.com")}`
-                ];
-                for (const curl of candidateCookieUrls) {
-                    try {
-                        const cookie = await chrome.cookies.get({ url: curl, name: "sid" });
-                        if (cookie && cookie.value) {
-                            sid = cookie.value;
-                            break;
-                        }
-                    } catch (e) {}
-                }
-
-                if (!sid) {
-                    const allCookies = await chrome.cookies.getAll({ name: "sid" });
-                    const match = allCookies.find(c => c.domain.includes(subDomain)) || allCookies[0];
-                    if (match && match.value) {
-                        sid = match.value;
-                    }
-                }
-            }
-        } catch (cookieErr) {
-            console.warn("Could not read sid cookie:", cookieErr);
-        }
-
-        if (!sid) {
-            console.warn("No active Salesforce session cookie ('sid') found for Account lookup.");
-            return null;
-        }
-
-        const candidateHosts = [];
-        if (urlObj.hostname.includes(".lightning.force.com")) {
-            candidateHosts.push(`https://${urlObj.hostname.replace(".lightning.force.com", ".my.salesforce.com")}`);
-        }
-        candidateHosts.push(`https://${subDomain}.my.salesforce.com`);
-        candidateHosts.push(urlObj.origin);
-
-        for (const host of candidateHosts) {
-            // A. Standard SObject endpoint (queries all fields on Account)
-            try {
-                const sObjUrl = `${host}/services/data/v59.0/sobjects/Account/${accountId}`;
-                const resp = await fetch(sObjUrl, {
-                    headers: {
-                        "Authorization": `Bearer ${sid}`,
-                        "Accept": "application/json"
-                    }
-                });
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data && typeof data === "object") {
-                        for (const [k, v] of Object.entries(data)) {
-                            if (v != null && /server.*code|automate.*server|server.*id/i.test(k)) {
-                                const valStr = String(v).trim();
-                                if (valStr) {
-                                    console.log(`Resolved Automate Server Code '${valStr}' from Account field '${k}' on ${host}`);
-                                    return valStr;
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn(`SObject fetch failed on ${host}:`, err);
-            }
-
-            // B. UI API endpoint (Compact Layout / Page Layout fields)
-            try {
-                const uiUrl = `${host}/services/data/v59.0/ui-api/records/${accountId}`;
-                const resp = await fetch(uiUrl, {
-                    headers: {
-                        "Authorization": `Bearer ${sid}`,
-                        "Accept": "application/json"
-                    }
-                });
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data && data.fields) {
-                        for (const [k, fieldObj] of Object.entries(data.fields)) {
-                            if (/server.*code|automate.*server|server.*id/i.test(k)) {
-                                const val = fieldObj?.displayValue || fieldObj?.value;
-                                if (val != null) {
-                                    const valStr = String(val).trim();
-                                    if (valStr) {
-                                        console.log(`Resolved Automate Server Code '${valStr}' via UI API on ${host}`);
-                                        return valStr;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn(`UI API fetch failed on ${host}:`, err);
-            }
-        }
-    } catch (ex) {
-        console.warn("Exception in fetchServerCodeFromSalesforce:", ex);
-    }
-    return null;
-}
-
 function extractAndParseFullCase(tabId, successMessage) {
     if (!tabId) return;
-    sendTabMessageWithAutoInject(tabId, { action: "EXTRACT_CASE_DATA" }, async (res) => {
+    sendTabMessageWithAutoInject(tabId, { action: "EXTRACT_CASE_DATA" }, (res) => {
         if (res && res.caseData) {
             const d = res.caseData;
-
-            // If server code is missing and we have accountId, query Salesforce API
-            if (!d.serverCode && d.accountId) {
-                try {
-                    const tab = await chrome.tabs.get(tabId);
-                    if (tab && tab.url) {
-                        const fetchedCode = await fetchServerCodeFromSalesforce(tab.url, d.accountId);
-                        if (fetchedCode) {
-                            d.serverCode = fetchedCode;
-                        }
-                    }
-                } catch (e) {
-                    console.warn("Could not query Salesforce Account API:", e);
-                }
-            }
-
             sendIpcMessage({
                 target: "SoleraCMS",
                 action: "LoadCase",
