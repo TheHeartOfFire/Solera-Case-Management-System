@@ -277,9 +277,9 @@ public static class FormGenLauncherHelper
             if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535)
                 return false;
 
-            using var client = new TcpClient();
+            using var client = new TcpClient { ReceiveTimeout = IpcIoTimeoutMs, SendTimeout = IpcIoTimeoutMs };
             var connectTask = client.ConnectAsync("127.0.0.1", port);
-            if (!connectTask.Wait(300))
+            if (!connectTask.Wait(IpcConnectTimeoutMs))
             {
                 client.Close();
                 return false;

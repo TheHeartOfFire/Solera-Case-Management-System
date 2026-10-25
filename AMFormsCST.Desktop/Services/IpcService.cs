@@ -352,53 +352,109 @@ public class IpcService : IHostedService, IAsyncDisposable
 
     private IpcResponse LoadCase(IpcMessage message)
     {
-        var newNote = new NoteModel(" ", _logger);
+        NoteModel newNote;
+        if (!string.IsNullOrWhiteSpace(message.RawData))
+        {
+            newNote = _dashboardViewModel.ParseCaseText(message.RawData);
+        }
+        else
+        {
+            newNote = new NoteModel(" ", _logger);
+        }
 
         if (message.Payload.TryGetValue("caseNumber", out var caseNumber) && !string.IsNullOrWhiteSpace(caseNumber))
         {
-            newNote.CaseNumber = caseNumber;
+            newNote.CaseNumber = caseNumber.Trim();
         }
 
-        if (message.Payload.TryGetValue("notes", out var notes) && !string.IsNullOrWhiteSpace(notes))
+        message.Payload.TryGetValue("subject", out var subject);
+        if (!message.Payload.TryGetValue("notes", out var notes) || string.IsNullOrWhiteSpace(notes))
         {
-            var doc = new FlowDocument(new Paragraph(new Run(notes)));
+            message.Payload.TryGetValue("description", out notes);
+        }
+
+        if (string.IsNullOrWhiteSpace(message.RawData) &&
+            (!string.IsNullOrWhiteSpace(subject) || !string.IsNullOrWhiteSpace(notes)))
+        {
+            var combinedText = $"{subject}{Environment.NewLine}{notes}".Trim();
+            var doc = new FlowDocument(new Paragraph(new Run(combinedText)));
             newNote.NotesXaml = XamlWriter.Save(doc);
         }
 
-        message.Payload.TryGetValue("dealerName", out var dealerName);
-        message.Payload.TryGetValue("serverCode", out var serverCode);
-
-        if (!string.IsNullOrWhiteSpace(dealerName) || !string.IsNullOrWhiteSpace(serverCode))
+        if (!message.Payload.TryGetValue("dealerName", out var dealerName) || string.IsNullOrWhiteSpace(dealerName))
         {
-            var dealer = new Dealer(_logger)
-            {
-                Name = dealerName ?? string.Empty,
-                ServerCode = serverCode ?? string.Empty
-            };
+            message.Payload.TryGetValue("dealership", out dealerName);
+        }
+        message.Payload.TryGetValue("serverCode", out var serverCode);
+        message.Payload.TryGetValue("companyNumber", out var companyNumber);
 
-            if (message.Payload.TryGetValue("companyNumber", out var companyNumber) && !string.IsNullOrWhiteSpace(companyNumber))
+        if (!string.IsNullOrWhiteSpace(dealerName) || !string.IsNullOrWhiteSpace(serverCode) || !string.IsNullOrWhiteSpace(companyNumber))
+        {
+            var dealer = newNote.Dealers.FirstOrDefault();
+            if (dealer == null)
             {
-                dealer.Companies.Add(new Company(_logger) { CompanyCode = companyNumber });
+                dealer = new Dealer(_logger);
+                newNote.Dealers.Add(dealer);
             }
 
-            newNote.Dealers.Add(dealer);
+            if (!string.IsNullOrWhiteSpace(dealerName) && string.IsNullOrWhiteSpace(dealer.Name))
+            {
+                dealer.Name = dealerName.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(serverCode) && string.IsNullOrWhiteSpace(dealer.ServerCode))
+            {
+                dealer.ServerCode = serverCode.Trim();
+            }
+
+            var company = dealer.Companies.FirstOrDefault();
+            if (company == null)
+            {
+                company = new Company(_logger);
+                dealer.Companies.Add(company);
+            }
+
+            if (!string.IsNullOrWhiteSpace(dealerName) && string.IsNullOrWhiteSpace(company.Name))
+            {
+                company.Name = dealerName.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(companyNumber) && string.IsNullOrWhiteSpace(company.CompanyCode))
+            {
+                company.CompanyCode = companyNumber.Trim();
+            }
+
             dealer.Select();
         }
 
-        if (message.Payload.TryGetValue("contactName", out var contactName) && !string.IsNullOrWhiteSpace(contactName))
+        message.Payload.TryGetValue("contactName", out var contactName);
+        message.Payload.TryGetValue("contactEmail", out var contactEmail);
+        message.Payload.TryGetValue("contactPhone", out var contactPhone);
+
+        if (!string.IsNullOrWhiteSpace(contactName) || !string.IsNullOrWhiteSpace(contactEmail) || !string.IsNullOrWhiteSpace(contactPhone))
         {
-            var contact = new Contact(" ", _logger)
+            var contact = newNote.Contacts.FirstOrDefault();
+            if (contact == null)
             {
-                Name = contactName,
-                Email = message.Payload.GetValueOrDefault("contactEmail", string.Empty),
-                Phone = message.Payload.GetValueOrDefault("contactPhone", string.Empty)
-            };
-            newNote.Contacts.Add(contact);
+                contact = new Contact(" ", _logger);
+                newNote.Contacts.Add(contact);
+            }
+
+            if (!string.IsNullOrWhiteSpace(contactName) && string.IsNullOrWhiteSpace(contact.Name))
+            {
+                contact.Name = contactName.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(contactEmail) && string.IsNullOrWhiteSpace(contact.Email))
+            {
+                contact.Email = contactEmail.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(contactPhone) && string.IsNullOrWhiteSpace(contact.Phone))
+            {
+                contact.Phone = contactPhone.Trim();
+            }
+
             contact.Select();
         }
 
-        _dashboardViewModel.Notes.Add(newNote);
-        newNote.Select();
+        _dashboardViewModel.LoadCaseFromNote(newNote);
 
         var loadedVars = GetLiveVariables();
         _ = Task.Run(() => FormGenLauncherHelper.SyncStateToAgent(loadedVars, Environment.ProcessPath, _logger));

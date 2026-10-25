@@ -275,8 +275,8 @@ public class FormGenLauncherHelperTests
     [Fact]
     public void RestoreVanillaBatch_AlsoRemovesDeployedJarFile()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "FormGenUnpatch_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
+        var tempPortFile = UsePrivatePortFile();
+        var tempDir = Path.GetDirectoryName(tempPortFile)!;
         var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
         var tempJar = Path.Combine(tempDir, "FormGenAgent.jar");
 
@@ -295,6 +295,25 @@ public class FormGenLauncherHelperTests
         finally
         {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void BrowserIntegrationService_EnsureManifestUpdated_NeverWritesTestHostExe()
+    {
+        var resolvedExe = BrowserIntegrationService.ResolveDesktopExecutablePath();
+        if (resolvedExe != null)
+        {
+            Assert.EndsWith("AMFormsCST.Desktop.exe", resolvedExe, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("testhost", resolvedExe, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var svc = new BrowserIntegrationService();
+        var manifestPath = svc.EnsureManifestUpdated();
+        if (!string.IsNullOrWhiteSpace(manifestPath) && File.Exists(manifestPath))
+        {
+            var json = File.ReadAllText(manifestPath);
+            Assert.DoesNotContain("testhost.exe", json, StringComparison.OrdinalIgnoreCase);
         }
     }
 

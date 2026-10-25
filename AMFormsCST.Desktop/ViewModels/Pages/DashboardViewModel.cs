@@ -850,41 +850,53 @@ public partial class DashboardViewModel : ViewModel
     private void LoadCase()
     {
         var note = ParseCaseText(Clipboard.GetText());
+        LoadCaseFromNote(note);
+        _logger?.LogInfo("LoadCase command executed.");
+    }
+
+    public NoteModel? LoadCaseFromNote(NoteModel note)
+    {
         ApplyParsedNote(note);
-        Notes.LastOrDefault(n => n.IsBlank == false)?.Select();
+        var selected = Notes.LastOrDefault(n => n.IsBlank == false) ?? Notes.FirstOrDefault();
+        selected?.Select();
 
         if (_supportTool is not null &&
             _supportTool.Notebook.Notes.SelectedItem?.Id != SelectedNote?.CoreType?.Id)
             _supportTool.Notebook.Notes.SelectedItem = SelectedNote?.CoreType;
 
         if (_supportTool is not null && _supportTool.Notebook.Notes.SelectedItem is not null &&
+            SelectedNote?.SelectedDealer is not null &&
             _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem?.Id != SelectedNote.SelectedDealer.CoreType?.Id)
             _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem = SelectedNote.SelectedDealer.CoreType;
 
         if (_supportTool is not null &&
             _supportTool.Notebook.Notes.SelectedItem is not null &&
             _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem is not null &&
+            SelectedNote?.SelectedDealer?.SelectedCompany is not null &&
             _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem!.Companies.SelectedItem?.Id != SelectedNote.SelectedDealer.SelectedCompany.CoreType?.Id)
             _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem!.Companies.SelectedItem = SelectedNote.SelectedDealer.SelectedCompany.CoreType;
 
         if (_supportTool is not null &&
             _supportTool.Notebook.Notes.SelectedItem is not null &&
+            SelectedNote?.SelectedContact is not null &&
             _supportTool.Notebook.Notes.SelectedItem.Contacts.SelectedItem?.Id != SelectedNote.SelectedContact.CoreType?.Id)
             _supportTool.Notebook.Notes.SelectedItem.Contacts.SelectedItem = SelectedNote.SelectedContact.CoreType;
 
         if (_supportTool is not null &&
             _supportTool.Notebook.Notes.SelectedItem is not null &&
+            SelectedNote?.SelectedForm is not null &&
             _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem?.Id != SelectedNote.SelectedForm.CoreType?.Id)
             _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem = SelectedNote.SelectedForm.CoreType;
 
         if (_supportTool is not null &&
             _supportTool.Notebook.Notes.SelectedItem is not null &&
             _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem is not null &&
+            SelectedNote?.SelectedForm?.SelectedTestDeal is not null &&
             _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem!.TestDeals.SelectedItem?.Id != SelectedNote.SelectedForm.SelectedTestDeal.CoreType?.Id)
             _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem!.TestDeals.SelectedItem = SelectedNote.SelectedForm.SelectedTestDeal.CoreType;
 
         UpdateTemplatesVM();
-        _logger?.LogInfo("LoadCase command executed.");
+        return SelectedNote;
     }
 
     // Add to your DashboardViewModel
@@ -904,22 +916,33 @@ public partial class DashboardViewModel : ViewModel
 
     public NoteModel ParseCaseText(string caseText)
     {
-        var note = new NoteModel(_supportTool.Settings.UserSettings.ExtSeparator, _logger);
-        var textLines = caseText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        var extSep = _supportTool?.Settings?.UserSettings?.ExtSeparator ?? " ";
+        var note = new NoteModel(extSep, _logger);
+        var textLines = (caseText ?? string.Empty).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
         try
         {
             var lines = textLines.ToList();
 
             string GetValueAfter(string key)
             {
-                var index = lines.FindIndex(l => l.Trim().Equals(key, StringComparison.OrdinalIgnoreCase));
-                return index != -1 && index + 1 < lines.Count ? lines[index + 1].Trim() : string.Empty;
+                var index = lines.FindIndex(l =>
+                    l.Trim().Equals(key, StringComparison.OrdinalIgnoreCase) ||
+                    l.Trim().Equals(key + ":", StringComparison.OrdinalIgnoreCase));
+                if (index != -1 && index + 1 < lines.Count)
+                    return lines[index + 1].Trim();
+
+                var inline = lines.FirstOrDefault(l => l.Trim().StartsWith(key + ":", StringComparison.OrdinalIgnoreCase));
+                if (inline != null)
+                    return string.Join(":", inline.Split(':').Skip(1)).Trim();
+
+                return string.Empty;
             }
 
             string GetValueFromKeyValue(string key, List<string> section)
             {
-                var line = section.FirstOrDefault(l => l.Trim().StartsWith(key, StringComparison.OrdinalIgnoreCase));
-                return line?.Split(':').Skip(1).FirstOrDefault()?.Trim() ?? string.Empty;
+                var line = section.FirstOrDefault(l => l.Trim().StartsWith(key, StringComparison.OrdinalIgnoreCase))
+                        ?? lines.FirstOrDefault(l => l.Trim().StartsWith(key, StringComparison.OrdinalIgnoreCase));
+                return line != null ? string.Join(":", line.Split(':').Skip(1)).Trim() : string.Empty;
             }
 
             var submittedValuesIdx = lines.FindIndex(l => l.Trim().Equals("Submitted Values:", StringComparison.OrdinalIgnoreCase));
@@ -936,25 +959,40 @@ public partial class DashboardViewModel : ViewModel
             note.CaseNumber = GetValueAfter("Case Number");
             var subject = GetValueAfter("Subject");
             var description = GetValueAfter("Description:");
-            
+
             // Handle multi-line description if separated by blank line or next key
-            var descriptionIdx = lines.FindIndex(l => l.Trim().Equals("Description", StringComparison.OrdinalIgnoreCase));
-            var separatorIdx = lines.FindIndex(descriptionIdx + 1, l => 
-                l.Trim().StartsWith("Severity:", StringComparison.OrdinalIgnoreCase) || 
+            var descriptionIdx = lines.FindIndex(l =>
+                l.Trim().Equals("Description", StringComparison.OrdinalIgnoreCase) ||
+                l.Trim().Equals("Description:", StringComparison.OrdinalIgnoreCase));
+            var searchStartIdx = descriptionIdx != -1 ? descriptionIdx + 1 : 0;
+            var separatorIdx = lines.FindIndex(searchStartIdx, l =>
+                l.Trim().StartsWith("Severity:", StringComparison.OrdinalIgnoreCase) ||
                 l.Trim().StartsWith("====================") ||
-                l.Trim().StartsWith("Submitted Values:", StringComparison.OrdinalIgnoreCase));
+                l.Trim().StartsWith("Submitted Values:", StringComparison.OrdinalIgnoreCase) ||
+                l.Trim().StartsWith("Server-Provided Values:", StringComparison.OrdinalIgnoreCase));
             if (separatorIdx == -1) separatorIdx = lines.Count;
-            
-            description = (descriptionIdx != -1 && descriptionIdx + 1 < lines.Count) 
-                ? string.Join(Environment.NewLine, lines.Skip(descriptionIdx + 1).Take(separatorIdx - descriptionIdx - 1)).Trim()
-                : string.Empty;
+
+            if (descriptionIdx != -1 && descriptionIdx + 1 < lines.Count)
+            {
+                description = string.Join(Environment.NewLine, lines.Skip(descriptionIdx + 1).Take(separatorIdx - descriptionIdx - 1)).Trim();
+            }
+            else if (string.IsNullOrWhiteSpace(subject) && string.IsNullOrWhiteSpace(note.CaseNumber) && separatorIdx > 0)
+            {
+                // Fallback when user selects directly inside the Description text box without header labels
+                description = string.Join(Environment.NewLine, lines.Take(separatorIdx)).Trim();
+            }
 
             var doc = new FlowDocument();
             doc.Blocks.Add(new Paragraph(new Run($"{subject}{Environment.NewLine}{description}".Trim())));
             note.NotesXaml = XamlWriter.Save(doc);
 
             var contact = note.Contacts[0];
-            contact.Name = GetValueAfter("Contact Name");
+            var parsedContactName = GetValueAfter("Contact Name");
+            if (string.IsNullOrWhiteSpace(parsedContactName))
+            {
+                parsedContactName = GetValueFromKeyValue("Name:", submittedValues);
+            }
+            contact.Name = parsedContactName;
             contact.Email = GetValueFromKeyValue("Email:", submittedValues);
 
             var phoneRaw = GetValueFromKeyValue("Phone:", submittedValues);
@@ -973,8 +1011,6 @@ public partial class DashboardViewModel : ViewModel
             dealer.Name = GetValueFromKeyValue("Company Name:", submittedValues);
             dealer.ServerCode = GetValueFromKeyValue("Server ID:", serverValues);
 
-
-
             var company = dealer.Companies[0];
             company.Name = GetValueFromKeyValue("Company Name:", submittedValues);
             company.CompanyCode = GetValueFromKeyValue("Company Number:", submittedValues);
@@ -992,34 +1028,42 @@ public partial class DashboardViewModel : ViewModel
     private void ApplyParsedNote(NoteModel newNote)
     {
         var recipient = Notes.LastOrDefault(n => n.IsBlank);
-        if (recipient is null) return;
+        if (recipient is null)
+        {
+            Notes.Add(newNote);
+            return;
+        }
 
         recipient.CaseNumber = newNote.CaseNumber;
         recipient.NotesXaml = newNote.NotesXaml;
 
-        var recipientContact = recipient.Contacts.FirstOrDefault(c => c.IsBlank);
+        var recipientContact = recipient.Contacts.FirstOrDefault(c => c.IsBlank) ?? recipient.Contacts.FirstOrDefault();
         var sourceContact = newNote.Contacts.FirstOrDefault();
         if (recipientContact is not null && sourceContact is not null)
         {
             recipientContact.Name = sourceContact.Name;
             recipientContact.Email = sourceContact.Email;
             recipientContact.Phone = sourceContact.Phone;
+            recipientContact.PhoneExtension = sourceContact.PhoneExtension;
+            recipientContact.Select();
         }
 
-        var recipientDealer = recipient.Dealers.FirstOrDefault(d => d.IsBlank);
+        var recipientDealer = recipient.Dealers.FirstOrDefault(d => d.IsBlank) ?? recipient.Dealers.FirstOrDefault();
         var sourceDealer = newNote.Dealers.FirstOrDefault();
         if (recipientDealer is not null && sourceDealer is not null)
         {
             recipientDealer.Name = sourceDealer.Name;
             recipientDealer.ServerCode = sourceDealer.ServerCode;
 
-            var recipientCompany = recipientDealer.Companies.FirstOrDefault(c => c.IsBlank);
+            var recipientCompany = recipientDealer.Companies.FirstOrDefault(c => c.IsBlank) ?? recipientDealer.Companies.FirstOrDefault();
             var sourceCompany = sourceDealer.Companies.FirstOrDefault();
             if (recipientCompany is not null && sourceCompany is not null)
             {
                 recipientCompany.Name = sourceCompany.Name;
                 recipientCompany.CompanyCode = sourceCompany.CompanyCode;
+                recipientCompany.Select();
             }
+            recipientDealer.Select();
         }
     }
 }

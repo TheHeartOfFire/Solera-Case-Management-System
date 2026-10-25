@@ -49,8 +49,43 @@ public static class NativeMessagingBridge
 
             message ??= new IpcMessage { Action = IpcActions.Ping };
 
-            var response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 5000);
+            var response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 1500);
+            if (!response.Success && string.Equals(message.Target, "SoleraCMS", StringComparison.OrdinalIgnoreCase))
+            {
+                if (TryLaunchDesktopApp())
+                {
+                    for (int attempt = 0; attempt < 12; attempt++)
+                    {
+                        await Task.Delay(500);
+                        response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 1500);
+                        if (response.Success)
+                            break;
+                    }
+                }
+            }
             await WriteResponseAsync(stdout, response);
+        }
+    }
+
+    private static bool TryLaunchDesktopApp()
+    {
+        try
+        {
+            var exePath = BrowserIntegrationService.ResolveDesktopExecutablePath();
+            if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+                return false;
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exePath,
+                WorkingDirectory = Path.GetDirectoryName(exePath),
+                UseShellExecute = true
+            });
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

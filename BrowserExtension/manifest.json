@@ -18,6 +18,9 @@
   "background": {
     "service_worker": "background.js"
   },
+  "action": {
+    "default_title": "Solera CMS & Project Citadel Assistant"
+  },
   "content_scripts": [
     {
       "matches": [

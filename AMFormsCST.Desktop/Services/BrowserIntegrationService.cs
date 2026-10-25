@@ -382,7 +382,7 @@ public class BrowserIntegrationService : IBrowserIntegrationService
         return htmlPath;
     }
 
-    private string? EnsureManifestUpdated()
+    public string? EnsureManifestUpdated()
     {
         var extDir = GetExtensionDirectory();
         if (string.IsNullOrWhiteSpace(extDir)) return null;
@@ -390,13 +390,15 @@ public class BrowserIntegrationService : IBrowserIntegrationService
         var manifestPath = Path.Combine(extDir, "com.solera.cms.bridge.json");
         if (!File.Exists(manifestPath)) return null;
 
-        var appExePath = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(appExePath))
-        {
-            appExePath = Process.GetCurrentProcess().MainModule?.FileName;
-        }
-
+        var appExePath = ResolveDesktopExecutablePath();
         if (string.IsNullOrWhiteSpace(appExePath)) return manifestPath;
+
+        // Never overwrite the git repository template manifest directly if localAppData copy failed
+        var localAppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AMFormsCST", "BrowserExtension");
+        if (!manifestPath.StartsWith(localAppDataDir, StringComparison.OrdinalIgnoreCase))
+        {
+            return manifestPath;
+        }
 
         try
         {
@@ -422,6 +424,34 @@ public class BrowserIntegrationService : IBrowserIntegrationService
         }
 
         return manifestPath;
+    }
+
+    public static string? ResolveDesktopExecutablePath()
+    {
+        var processPath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(processPath))
+        {
+            try { processPath = Process.GetCurrentProcess().MainModule?.FileName; } catch { }
+        }
+
+        if (!string.IsNullOrWhiteSpace(processPath) &&
+            processPath.EndsWith("AMFormsCST.Desktop.exe", StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(processPath))
+        {
+            return processPath;
+        }
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var candidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "AMFormsCST.Desktop.exe"),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "AMFormsCST.Desktop", "bin", "Debug", "net9.0-windows", "AMFormsCST.Desktop.exe")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "AMFormsCST.Desktop", "bin", "Release", "net9.0-windows", "AMFormsCST.Desktop.exe")),
+            Path.Combine(localAppData, "AMFormsCST", "current", "AMFormsCST.Desktop.exe"),
+            Path.Combine(localAppData, "SoleraCaseManagement", "current", "AMFormsCST.Desktop.exe")
+        };
+
+        return candidates.FirstOrDefault(File.Exists);
     }
 
     public static string? GetExtensionDirectory()

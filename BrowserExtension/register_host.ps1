@@ -4,13 +4,17 @@ param(
 
 # PowerShell script to register Solera CMS Native Messaging Host for Chrome, Edge, and Opera GX
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$manifestPath = Join-Path $scriptDir "com.solera.cms.bridge.json"
+$localExtDir = Join-Path $env:LocalAppData "AMFormsCST\BrowserExtension"
+New-Item -ItemType Directory -Path $localExtDir -Force | Out-Null
+Copy-Item -Path (Join-Path $scriptDir "*") -Destination $localExtDir -Force
+$manifestPath = Join-Path $localExtDir "com.solera.cms.bridge.json"
 
 # Find AMFormsCST.Desktop.exe path
 $exeCandidates = @(
     (Join-Path (Split-Path -Parent $scriptDir) "AMFormsCST.Desktop\bin\Debug\net9.0-windows\AMFormsCST.Desktop.exe"),
     (Join-Path (Split-Path -Parent $scriptDir) "AMFormsCST.Desktop\bin\Release\net9.0-windows\AMFormsCST.Desktop.exe"),
-    (Join-Path $env:LocalAppData "AMFormsCST\current\AMFormsCST.Desktop.exe")
+    (Join-Path $env:LocalAppData "AMFormsCST\current\AMFormsCST.Desktop.exe"),
+    (Join-Path $env:LocalAppData "SoleraCaseManagement\current\AMFormsCST.Desktop.exe")
 )
 
 $targetExe = $null
@@ -26,7 +30,7 @@ if (-not $targetExe) {
     $targetExe = "AMFormsCST.Desktop.exe"
 }
 
-# Update manifest json path and allowed_origins
+# Update manifest json path and allowed_origins in LocalAppData
 $jsonContent = Get-Content $manifestPath -Raw | ConvertFrom-Json
 $jsonContent.path = $targetExe
 

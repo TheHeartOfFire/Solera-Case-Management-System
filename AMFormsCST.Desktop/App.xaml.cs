@@ -355,6 +355,12 @@ public partial class App : Application
             {
                 contextMenuService.RegisterContextMenu(supportTool.Settings.UserSettings.FormGenExecutablePath);
             }
+
+            var browserIntegrationService = GetRequiredService<IBrowserIntegrationService>();
+            if (browserIntegrationService.IsRegistered())
+            {
+                browserIntegrationService.RegisterNativeMessagingHost();
+            }
         }
         catch { }
 

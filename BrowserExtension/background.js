@@ -7,6 +7,10 @@ chrome.runtime.onInstalled.addListener(() => {
     setupContextMenus();
 });
 
+chrome.runtime.onStartup.addListener(() => {
+    setupContextMenus();
+});
+
 function setupContextMenus() {
     chrome.contextMenus.removeAll(() => {
         // --- 1. Selection Context (Send to Solera / Citadel) ---
@@ -117,6 +121,7 @@ function setupContextMenus() {
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
     const selection = (info.selectionText || "").trim();
+    const tabId = tab && tab.id ? tab.id : null;
 
     switch (info.menuItemId) {
         case "send_parse_case":
@@ -124,7 +129,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "LoadCase",
                 rawData: selection
-            });
+            }, null, tabId, "✓ Case parsed into Solera CMS");
             break;
 
         case "send_set_casenumber":
@@ -132,7 +137,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "casenumber", value: selection }
-            });
+            }, null, tabId, "✓ Case # updated in Solera CMS");
             break;
 
         case "send_set_serverid":
@@ -140,7 +145,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "serverid", value: selection }
-            });
+            }, null, tabId, "✓ Server ID updated in Solera CMS");
             break;
 
         case "send_set_dealership":
@@ -148,7 +153,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "dealership", value: selection }
-            });
+            }, null, tabId, "✓ Dealership updated in Solera CMS");
             break;
 
         case "send_set_contact":
@@ -156,7 +161,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "contactname", value: selection }
-            });
+            }, null, tabId, "✓ Contact Name updated in Solera CMS");
             break;
 
         case "send_parse_codeblock":
@@ -164,7 +169,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "ParseCodeBlock",
                 payload: { code: selection }
-            });
+            }, null, tabId, "✓ Opened in Solera Code Snippets");
             break;
 
         case "send_citadel_capture":
@@ -172,7 +177,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "Citadel",
                 action: "BrainDump",
                 payload: { note: selection, url: tab ? tab.url : "" }
-            });
+            }, null, tabId, "✓ Captured to Citadel");
             break;
 
         case "paste_server_id":
@@ -184,21 +189,25 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             break;
 
         case "solera_parse_full_case":
-            if (tab && tab.id) {
-                chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CASE_DATA" }, (res) => {
+            if (tabId) {
+                sendTabMessageWithAutoInject(tabId, { action: "EXTRACT_CASE_DATA" }, (res) => {
                     if (res && res.caseData) {
                         const d = res.caseData;
                         sendIpcMessage({
                             target: "SoleraCMS",
                             action: "LoadCase",
                             payload: {
-                                caseNumber: d.caseNumber,
-                                dealership: d.accountName,
-                                contactName: d.contactName,
-                                subject: d.subject
+                                caseNumber: d.caseNumber || "",
+                                dealerName: d.accountName || "",
+                                dealership: d.accountName || "",
+                                contactName: d.contactName || "",
+                                subject: d.subject || "",
+                                notes: d.description || ""
                             },
-                            rawData: d.rawPageText || d.description
-                        });
+                            rawData: d.rawPageText || d.description || ""
+                        }, null, tabId, "✓ Full Case parsed into Solera CMS");
+                    } else {
+                        notifyTabToast(tabId, "⚠ Could not read page content for case extraction.", true);
                     }
                 });
             }
@@ -240,27 +249,94 @@ function handlePasteFromSolera(menuItemId, tab) {
         }
 
         if (textToInsert) {
-            chrome.tabs.sendMessage(tab.id, {
+            sendTabMessageWithAutoInject(tab.id, {
                 action: "INSERT_TEXT",
                 text: textToInsert
             });
+        } else {
+            notifyTabToast(tab.id, "⚠ Selected field is currently empty on Solera Dashboard.", true);
+        }
+    }, tab.id);
+}
+
+function sendTabMessageWithAutoInject(tabId, message, callback) {
+    if (!tabId) return;
+    chrome.tabs.sendMessage(tabId, message, (res) => {
+        const err = chrome.runtime.lastError;
+        if (!err) {
+            if (callback) callback(res);
+            return;
+        }
+        // Content script not injected yet (e.g., tab was already open before extension load or non-Salesforce tab)
+        if (chrome.scripting) {
+            chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                files: ["content.js"]
+            }, () => {
+                if (chrome.runtime.lastError) {
+                    console.warn("Could not inject content.js:", chrome.runtime.lastError.message);
+                    if (callback) callback(null);
+                    return;
+                }
+                chrome.tabs.sendMessage(tabId, message, (retryRes) => {
+                    const retryErr = chrome.runtime.lastError;
+                    if (callback) callback(retryErr ? null : retryRes);
+                });
+            });
+        } else if (callback) {
+            callback(null);
         }
     });
 }
 
-function sendIpcMessage(message, callback) {
+function notifyTabToast(tabId, text, isError) {
+    if (!tabId) return;
+    sendTabMessageWithAutoInject(tabId, {
+        action: "SHOW_TOAST",
+        text: text,
+        isError: !!isError
+    });
+}
+
+function setBadgeStatus(text, color, clearAfterMs) {
+    try {
+        if (!chrome.action) return;
+        chrome.action.setBadgeBackgroundColor({ color: color });
+        chrome.action.setBadgeText({ text: text });
+        if (clearAfterMs) {
+            setTimeout(() => {
+                try { chrome.action.setBadgeText({ text: "" }); } catch (e) {}
+            }, clearAfterMs);
+        }
+    } catch (e) {}
+}
+
+function sendIpcMessage(message, callback, tabId, successToast) {
     try {
         chrome.runtime.sendNativeMessage(HOST_NAME, message, (response) => {
             const err = chrome.runtime.lastError;
             if (err) {
                 console.warn("Native Messaging error:", err.message);
+                setBadgeStatus("ERR", "#dc2626", 6000);
+                notifyTabToast(tabId, "⚠ Solera CMS Bridge Error: " + err.message + " (Click 'Register Bridge' in Solera Settings)", true);
                 if (callback) callback({ success: false, message: err.message });
                 return;
+            }
+            if (response && response.success === false) {
+                setBadgeStatus("ERR", "#dc2626", 5000);
+                notifyTabToast(tabId, "⚠ Solera CMS: " + (response.message || "Operation failed"), true);
+            } else {
+                setBadgeStatus("✓", "#16a34a", 2500);
+                if (successToast) {
+                    notifyTabToast(tabId, successToast, false);
+                }
             }
             if (callback) callback(response);
         });
     } catch (ex) {
         console.error("Exception in sendNativeMessage:", ex);
+        setBadgeStatus("ERR", "#dc2626", 6000);
+        notifyTabToast(tabId, "⚠ Solera CMS Bridge Exception: " + ex.toString(), true);
         if (callback) callback({ success: false, message: ex.toString() });
     }
 }
