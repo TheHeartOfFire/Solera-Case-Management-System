@@ -1004,7 +1004,7 @@ public class FormGenAgent {
             activateMainShell();
 
             if (showToast && isFeatureEnabled("FormGenAlreadyOpenToast")) {
-                showToastNotification("File already open, focus switched to the form you attempted to open.");
+                showToastNotification("This form is already open.");
             }
             return true;
         } catch (Throwable t) {
@@ -2422,7 +2422,7 @@ public class FormGenAgent {
             final String fieldFormula = getSelectedFieldFormula();
             if (fieldFormula != null && !fieldFormula.trim().isEmpty() && contextMenusEnabled) {
                 Object itemFieldFormula = itemCons.newInstance(menu, SWT_PUSH);
-                itemFieldFormula.getClass().getMethod("setText", String.class).invoke(itemFieldFormula, "🔬 Parse Field Formula in Code Snippets");
+                itemFieldFormula.getClass().getMethod("setText", String.class).invoke(itemFieldFormula, "Open Formula in Code Snippets");
                 setDataMethod.invoke(itemFieldFormula, "SoleraItem", Boolean.TRUE);
 
                 Object listenerField = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
@@ -2449,7 +2449,7 @@ public class FormGenAgent {
 
                 String typeLabel = "NUMERIC".equalsIgnoreCase(activeType) ? "Numeric" : "Text";
                 Object itemDropCode = itemCons.newInstance(menu, SWT_PUSH);
-                itemDropCode.getClass().getMethod("setText", String.class).invoke(itemDropCode, "📋 Paste Code Block as New " + typeLabel + " Field");
+                itemDropCode.getClass().getMethod("setText", String.class).invoke(itemDropCode, "Paste as " + typeLabel + " Field");
                 setDataMethod.invoke(itemDropCode, "SoleraItem", Boolean.TRUE);
 
                 Object listenerDropCode = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
@@ -2466,17 +2466,17 @@ public class FormGenAgent {
                 Object sep = itemCons.newInstance(menu, SWT_SEPARATOR);
                 setDataMethod.invoke(sep, "SoleraItem", Boolean.TRUE);
 
-                // Cascade Item: ⚡ Solera Tools
+                // Cascade Item: Solera Tools
                 Object soleraCascade = itemCons.newInstance(menu, SWT_CASCADE);
-                soleraCascade.getClass().getMethod("setText", String.class).invoke(soleraCascade, "⚡ Solera Tools");
+                soleraCascade.getClass().getMethod("setText", String.class).invoke(soleraCascade, "Solera Tools");
                 setDataMethod.invoke(soleraCascade, "SoleraItem", Boolean.TRUE);
 
                 Object soleraSubMenu = subMenuCons.newInstance(soleraCascade);
                 soleraCascade.getClass().getMethod("setMenu", menuClass).invoke(soleraCascade, soleraSubMenu);
 
-                // Sub-item 1: 🛠 Open in FormGen Utilities
+                // Sub-item 1: Open in FormGen Utilities
                 Object itemOpenUtils = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
-                itemOpenUtils.getClass().getMethod("setText", String.class).invoke(itemOpenUtils, "🛠 Open in FormGen Utilities");
+                itemOpenUtils.getClass().getMethod("setText", String.class).invoke(itemOpenUtils, "Open in FormGen Utilities");
                 Object listenerOpenUtils = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
                     @Override
                     public void run() {
@@ -2485,9 +2485,9 @@ public class FormGenAgent {
                 });
                 addListenerMethod.invoke(itemOpenUtils, SWT_Selection, listenerOpenUtils);
 
-                // Sub-item 2: 🔬 Parse Selection in Code Snippets
+                // Sub-item 2: Send Selection to Code Snippets
                 Object itemParseCode = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
-                itemParseCode.getClass().getMethod("setText", String.class).invoke(itemParseCode, "🔬 Parse Selection in Code Snippets");
+                itemParseCode.getClass().getMethod("setText", String.class).invoke(itemParseCode, "Send Selection to Code Snippets");
                 Object listenerParseCode = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
                     @Override
                     public void run() {
@@ -2500,9 +2500,9 @@ public class FormGenAgent {
                 // Separator inside Solera Tools
                 itemCons.newInstance(soleraSubMenu, SWT_SEPARATOR);
 
-                // Sub-item 3: 📋 Quick Paste Variable ▶
+                // Sub-item 3: Insert Case Info
                 Object pasteCascade = itemCons.newInstance(soleraSubMenu, SWT_CASCADE);
-                pasteCascade.getClass().getMethod("setText", String.class).invoke(pasteCascade, "📋 Quick Paste Variable");
+                pasteCascade.getClass().getMethod("setText", String.class).invoke(pasteCascade, "Insert Case Info");
                 Object pasteSubMenu = subMenuCons.newInstance(pasteCascade);
                 pasteCascade.getClass().getMethod("setMenu", menuClass).invoke(pasteCascade, pasteSubMenu);
 
@@ -2958,13 +2958,13 @@ public class FormGenAgent {
             synchronized (liveVariables) {
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Server ID", liveVariables.get("ServerId"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Dealership", liveVariables.get("DealershipName"));
-                hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Case #", liveVariables.get("CaseNumber"));
+                hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Case Number", liveVariables.get("CaseNumber"));
 
                 String companyStr = liveVariables.get("NotableCompanyNumbers");
                 if (companyStr == null || companyStr.trim().isEmpty()) {
                     companyStr = liveVariables.get("PrimaryCompanyNumber");
                 }
-                hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Company #", companyStr);
+                hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Company Number", companyStr);
 
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Contact Name", liveVariables.get("ContactName"));
                 hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Contact Phone", liveVariables.get("ContactPhone"));

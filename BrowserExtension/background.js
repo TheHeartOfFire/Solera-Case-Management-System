@@ -13,24 +13,24 @@ chrome.runtime.onStartup.addListener(() => {
 
 function setupContextMenus() {
     chrome.contextMenus.removeAll(() => {
-        // --- 1. Selection Context (Send to Solera / Citadel) ---
+        // --- 1. Selection Context (Send to Solera) ---
         chrome.contextMenus.create({
             id: "solera_send_parent",
-            title: "Send to Solera Dashboard",
+            title: "Send to Solera",
             contexts: ["selection"]
         });
 
         chrome.contextMenus.create({
             id: "send_parse_case",
             parentId: "solera_send_parent",
-            title: "Parse as New Case",
+            title: "Import as New Case",
             contexts: ["selection"]
         });
 
         chrome.contextMenus.create({
             id: "send_set_casenumber",
             parentId: "solera_send_parent",
-            title: "Set Case #",
+            title: "Set Case Number",
             contexts: ["selection"]
         });
 
@@ -57,21 +57,14 @@ function setupContextMenus() {
 
         chrome.contextMenus.create({
             id: "send_parse_codeblock",
-            title: "🔬 Parse as FormGen Code Block",
-            contexts: ["selection"]
-        });
-
-        chrome.contextMenus.create({
-            id: "send_citadel_capture",
-            parentId: "solera_send_parent",
-            title: "Citadel: Quick Capture Selection",
+            title: "Send to Code Snippets",
             contexts: ["selection"]
         });
 
         // --- 2. Editable Context (Paste from Solera) ---
         chrome.contextMenus.create({
             id: "solera_paste_parent",
-            title: "Paste from Solera Dashboard",
+            title: "Paste from Solera",
             contexts: ["editable"]
         });
 
@@ -92,7 +85,7 @@ function setupContextMenus() {
         chrome.contextMenus.create({
             id: "paste_case_number",
             parentId: "solera_paste_parent",
-            title: "Case #",
+            title: "Case Number",
             contexts: ["editable"]
         });
 
@@ -106,14 +99,14 @@ function setupContextMenus() {
         chrome.contextMenus.create({
             id: "paste_template",
             parentId: "solera_paste_parent",
-            title: "Active Template Text",
+            title: "Active Template",
             contexts: ["editable"]
         });
 
-        // --- 3. Page Context (Parse Full Case) ---
+        // --- 3. Page Context (Import Case) ---
         chrome.contextMenus.create({
             id: "solera_parse_full_case",
-            title: "Solera CMS: Parse Full Case Notes",
+            title: "Import Case to Solera",
             contexts: ["page"]
         });
     });
@@ -125,7 +118,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
     switch (info.menuItemId) {
         case "send_parse_case":
-            extractAndParseFullCase(tabId, "✓ Case parsed into Solera CMS");
+            extractAndParseFullCase(tabId, "✓ Case imported into Solera");
             break;
 
         case "send_set_casenumber":
@@ -133,7 +126,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "casenumber", value: selection }
-            }, null, tabId, "✓ Case # updated in Solera CMS");
+            }, null, tabId, "✓ Case number updated in Solera");
             break;
 
         case "send_set_serverid":
@@ -141,7 +134,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "serverid", value: selection }
-            }, null, tabId, "✓ Server ID updated in Solera CMS");
+            }, null, tabId, "✓ Server ID updated in Solera");
             break;
 
         case "send_set_dealership":
@@ -149,7 +142,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "dealership", value: selection }
-            }, null, tabId, "✓ Dealership updated in Solera CMS");
+            }, null, tabId, "✓ Dealership updated in Solera");
             break;
 
         case "send_set_contact":
@@ -157,7 +150,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "contactname", value: selection }
-            }, null, tabId, "✓ Contact Name updated in Solera CMS");
+            }, null, tabId, "✓ Contact updated in Solera");
             break;
 
         case "send_parse_codeblock":
@@ -165,15 +158,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "ParseCodeBlock",
                 payload: { code: selection }
-            }, null, tabId, "✓ Opened in Solera Code Snippets");
-            break;
-
-        case "send_citadel_capture":
-            sendIpcMessage({
-                target: "Citadel",
-                action: "BrainDump",
-                payload: { note: selection, url: tab ? tab.url : "" }
-            }, null, tabId, "✓ Captured to Citadel");
+            }, null, tabId, "✓ Sent to Code Snippets");
             break;
 
         case "paste_server_id":
@@ -185,7 +170,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             break;
 
         case "solera_parse_full_case":
-            extractAndParseFullCase(tabId, "✓ Full Case parsed into Solera CMS");
+            extractAndParseFullCase(tabId, "✓ Case imported into Solera");
             break;
     }
 });
@@ -194,40 +179,53 @@ async function fetchServerCodeFromSalesforce(tabUrl, accountId) {
     if (!accountId || !tabUrl) return null;
     try {
         const urlObj = new URL(tabUrl);
+        const subDomain = urlObj.hostname.split('.')[0];
 
         let sid = "";
         try {
             if (chrome.cookies) {
-                const cookie = await chrome.cookies.get({ url: tabUrl, name: "sid" });
-                if (cookie && cookie.value) {
-                    sid = cookie.value;
-                } else {
+                const candidateCookieUrls = [
+                    `https://${subDomain}.my.salesforce.com`,
+                    tabUrl,
+                    urlObj.origin,
+                    `https://${urlObj.hostname.replace(".lightning.force.com", ".my.salesforce.com")}`
+                ];
+                for (const curl of candidateCookieUrls) {
+                    try {
+                        const cookie = await chrome.cookies.get({ url: curl, name: "sid" });
+                        if (cookie && cookie.value) {
+                            sid = cookie.value;
+                            break;
+                        }
+                    } catch (e) {}
+                }
+
+                if (!sid) {
                     const allCookies = await chrome.cookies.getAll({ name: "sid" });
-                    const subDomain = urlObj.hostname.split('.')[0];
-                    const matchingCookie = allCookies.find(c => c.domain.includes(subDomain)) || allCookies[0];
-                    if (matchingCookie) {
-                        sid = matchingCookie.value;
+                    const match = allCookies.find(c => c.domain.includes(subDomain)) || allCookies[0];
+                    if (match && match.value) {
+                        sid = match.value;
                     }
                 }
             }
         } catch (cookieErr) {
-            console.warn("Error reading sid cookie:", cookieErr);
+            console.warn("Could not read sid cookie:", cookieErr);
         }
 
         if (!sid) {
-            console.warn("Could not find Salesforce 'sid' session cookie");
+            console.warn("No active Salesforce session cookie ('sid') found for Account lookup.");
             return null;
         }
 
-        const candidateHosts = [urlObj.origin];
+        const candidateHosts = [];
         if (urlObj.hostname.includes(".lightning.force.com")) {
             candidateHosts.push(`https://${urlObj.hostname.replace(".lightning.force.com", ".my.salesforce.com")}`);
-        } else if (urlObj.hostname.includes(".force.com")) {
-            candidateHosts.push(`https://${urlObj.hostname.split('.')[0]}.my.salesforce.com`);
         }
+        candidateHosts.push(`https://${subDomain}.my.salesforce.com`);
+        candidateHosts.push(urlObj.origin);
 
         for (const host of candidateHosts) {
-            // 1. Try SObject API endpoint (returns custom fields on Account)
+            // A. Standard SObject endpoint (queries all fields on Account)
             try {
                 const sObjUrl = `${host}/services/data/v59.0/sobjects/Account/${accountId}`;
                 const resp = await fetch(sObjUrl, {
@@ -240,8 +238,12 @@ async function fetchServerCodeFromSalesforce(tabUrl, accountId) {
                     const data = await resp.json();
                     if (data && typeof data === "object") {
                         for (const [k, v] of Object.entries(data)) {
-                            if (v && typeof v === "string" && /server.*code|automate.*server|server.*id/i.test(k)) {
-                                return v.trim();
+                            if (v != null && /server.*code|automate.*server|server.*id/i.test(k)) {
+                                const valStr = String(v).trim();
+                                if (valStr) {
+                                    console.log(`Resolved Automate Server Code '${valStr}' from Account field '${k}' on ${host}`);
+                                    return valStr;
+                                }
                             }
                         }
                     }
@@ -250,7 +252,7 @@ async function fetchServerCodeFromSalesforce(tabUrl, accountId) {
                 console.warn(`SObject fetch failed on ${host}:`, err);
             }
 
-            // 2. Try UI API endpoint
+            // B. UI API endpoint (Compact Layout / Page Layout fields)
             try {
                 const uiUrl = `${host}/services/data/v59.0/ui-api/records/${accountId}`;
                 const resp = await fetch(uiUrl, {
@@ -265,7 +267,13 @@ async function fetchServerCodeFromSalesforce(tabUrl, accountId) {
                         for (const [k, fieldObj] of Object.entries(data.fields)) {
                             if (/server.*code|automate.*server|server.*id/i.test(k)) {
                                 const val = fieldObj?.displayValue || fieldObj?.value;
-                                if (val && typeof val === "string") return val.trim();
+                                if (val != null) {
+                                    const valStr = String(val).trim();
+                                    if (valStr) {
+                                        console.log(`Resolved Automate Server Code '${valStr}' via UI API on ${host}`);
+                                        return valStr;
+                                    }
+                                }
                             }
                         }
                     }
@@ -294,7 +302,6 @@ function extractAndParseFullCase(tabId, successMessage) {
                         const fetchedCode = await fetchServerCodeFromSalesforce(tab.url, d.accountId);
                         if (fetchedCode) {
                             d.serverCode = fetchedCode;
-                            console.log("Resolved Automate Server Code from Salesforce Account API:", fetchedCode);
                         }
                     }
                 } catch (e) {
@@ -317,7 +324,7 @@ function extractAndParseFullCase(tabId, successMessage) {
                     notes: d.description || ""
                 },
                 rawData: d.rawPageText || d.description || ""
-            }, null, tabId, successMessage || "✓ Full Case parsed into Solera CMS");
+            }, null, tabId, successMessage || "✓ Case imported into Solera");
         } else {
             notifyTabToast(tabId, "⚠ Could not read page content for case extraction.", true);
         }
@@ -363,7 +370,7 @@ function handlePasteFromSolera(menuItemId, tab) {
                 text: textToInsert
             });
         } else {
-            notifyTabToast(tab.id, "⚠ Selected field is currently empty on Solera Dashboard.", true);
+            notifyTabToast(tab.id, "⚠ This field is currently empty in Solera.", true);
         }
     }, tab.id);
 }
@@ -425,15 +432,15 @@ function sendIpcMessage(message, callback, tabId, successToast) {
         chrome.runtime.sendNativeMessage(HOST_NAME, message, (response) => {
             const err = chrome.runtime.lastError;
             if (err) {
-                console.warn("Native Messaging error:", err.message);
+                console.warn("Communication error:", err.message);
                 setBadgeStatus("ERR", "#dc2626", 6000);
-                notifyTabToast(tabId, "⚠ Solera CMS Bridge Error: " + err.message + " (Click 'Register Bridge' in Solera Settings)", true);
+                notifyTabToast(tabId, "⚠ Solera Case Management is not running. Please open the Solera app.", true);
                 if (callback) callback({ success: false, message: err.message });
                 return;
             }
             if (response && response.success === false) {
                 setBadgeStatus("ERR", "#dc2626", 5000);
-                notifyTabToast(tabId, "⚠ Solera CMS: " + (response.message || "Operation failed"), true);
+                notifyTabToast(tabId, "⚠ Solera: " + (response.message || "Operation failed"), true);
             } else {
                 setBadgeStatus("✓", "#16a34a", 2500);
                 if (successToast) {
@@ -445,7 +452,7 @@ function sendIpcMessage(message, callback, tabId, successToast) {
     } catch (ex) {
         console.error("Exception in sendNativeMessage:", ex);
         setBadgeStatus("ERR", "#dc2626", 6000);
-        notifyTabToast(tabId, "⚠ Solera CMS Bridge Exception: " + ex.toString(), true);
+        notifyTabToast(tabId, "⚠ Unable to communicate with Solera Case Management.", true);
         if (callback) callback({ success: false, message: ex.toString() });
     }
 }

@@ -1,6 +1,6 @@
 {
     "name": "com.solera.cms.bridge",
-    "description": "Solera CMS & Citadel Native Messaging Bridge",
+    "description": "Solera CMS Native Messaging Bridge",
     "path": "AMFormsCST.Desktop.exe",
     "type": "stdio",
     "allowed_origins": [

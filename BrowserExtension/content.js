@@ -1,4 +1,4 @@
-// Solera CMS & Citadel Assistant - Content Script
+// Solera Case Management - Content Script
 // Handles DOM scraping for Salesforce Lightning/Classic and text insertion.
 
 let lastActiveElement = null;
@@ -229,7 +229,10 @@ function findFieldInPopovers(labelPatterns) {
         '.slds-popover, [role="dialog"], force-hoverable-popover, .forceHoverPanel, .cuf-compact-feed, .uiPanel, .panel-content'
     );
     for (const popover of popovers) {
-        if (!isElementVisible(popover)) continue;
+        try {
+            const style = window.getComputedStyle(popover);
+            if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
+        } catch (e) {}
 
         const labelCandidates = popover.querySelectorAll(
             'dt, .slds-item_label, .slds-text-title, .slds-form-element__label, .test-id__field-label, [class*="label"], p, span, div'
@@ -366,30 +369,39 @@ function extractSalesforceCase() {
         'a[data-refid="recordId"][href*="Account"]'
     ], ["Account Name", "Account", "Dealership"]);
 
-    // Extract Account ID (15 or 18 char Salesforce ID starting with 001)
+    // Robust Account ID extraction (15 or 18 char Salesforce ID starting with 001)
     const accountLinkSelectors = [
-        '[data-target-selection-name="sfdc:RecordField.Case.AccountId"] a',
-        'records-record-layout-item[field-label="Account Name"] a',
-        '[data-field-name="AccountId"] a',
-        'a[data-refid="recordId"][href*="Account"]',
-        'a[href*="/lightning/r/Account/"]',
-        'a[href*="/Account/"]'
+        '[data-target-selection-name*="AccountId"] a',
+        'records-record-layout-item[field-label*="Account" i] a',
+        '[data-field-name*="AccountId" i] a',
+        'a[href*="/Account/"]',
+        'a[href*="/001"]',
+        'a[data-recordid^="001"]',
+        'a[data-refid="recordId"]'
     ];
     for (const sel of accountLinkSelectors) {
         const links = document.querySelectorAll(sel);
         for (const a of links) {
-            const idAttr = a.getAttribute('data-recordid') || a.getAttribute('data-refid');
+            const idAttr = a.getAttribute('data-recordid') || a.getAttribute('data-id');
             if (idAttr && /^001[a-zA-Z0-9]{12,15}$/.test(idAttr)) {
                 data.accountId = idAttr;
                 break;
             }
-            const hrefMatch = (a.href || "").match(/\/Account\/([a-zA-Z0-9]{15,18})/i);
+            const href = a.getAttribute('href') || a.href || '';
+            const hrefMatch = href.match(/[\/=](001[a-zA-Z0-9]{12,15})(?:[\/\?&#]|$)/);
             if (hrefMatch) {
                 data.accountId = hrefMatch[1];
                 break;
             }
         }
         if (data.accountId) break;
+    }
+
+    if (!data.accountId) {
+        const el001 = document.querySelector('[data-recordid^="001"]');
+        if (el001) {
+            data.accountId = el001.getAttribute('data-recordid');
+        }
     }
 
     // 8. Automate Server Code (from Case / Account record)
