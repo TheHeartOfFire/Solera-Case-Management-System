@@ -19,6 +19,21 @@ public partial class CodeSnippetsViewModel : ViewModel
     private readonly ILogService? _logger;
     private readonly ICodeBlocks _codeBlocks;
 
+    public static CodeSnippetsViewModel? ActiveInstance { get; internal set; }
+
+    public string GetFormulaTextForPaste()
+    {
+        if (!string.IsNullOrWhiteSpace(ActiveOutputCode))
+            return ActiveOutputCode;
+        if (IsPasteAssistantVisible && !string.IsNullOrWhiteSpace(PasteEditorText))
+            return PasteEditorText;
+        if (!string.IsNullOrWhiteSpace(SelectedCodeSnippet?.Output))
+            return SelectedCodeSnippet.Output;
+        return string.Empty;
+    }
+
+    public static string GetActiveFormulaText() => ActiveInstance?.GetFormulaTextForPaste() ?? string.Empty;
+
     [ObservableProperty]
     private ObservableCollection<CodeSnippetItemViewModel> _codeSnippets = [];
 
@@ -256,6 +271,7 @@ public partial class CodeSnippetsViewModel : ViewModel
 
     public FormgenParseResult PasteFormulaText(string? rawText)
     {
+        ActiveInstance = this;
         var result = FormgenCodeParser.Parse(rawText);
 
         if (result.Status == FormgenParseStatus.Valid && result.CondensedBlock != null)
@@ -297,6 +313,7 @@ public partial class CodeSnippetsViewModel : ViewModel
     partial void OnPasteEditorTextChanged(string value)
     {
         if (_isUpdatingPasteTextInternally) return;
+        ActiveInstance = this;
 
         var liveResult = FormgenCodeParser.Parse(value);
         PasteParseStatus = liveResult.Status;
@@ -352,6 +369,7 @@ public partial class CodeSnippetsViewModel : ViewModel
     {
         _logger = logger;
         _codeBlocks = supportTool.CodeBlocks ?? throw new ArgumentNullException(nameof(_codeBlocks));
+        ActiveInstance = this;
 
         InitializeCollections();
     }
@@ -951,6 +969,7 @@ public partial class CodeSnippetsViewModel : ViewModel
 
     public void RefreshActiveOutput()
     {
+        ActiveInstance = this;
         var target = ActiveRootNode ?? Nodes.OfType<INodeViewModel>().FirstOrDefault();
         ActiveOutputCode = target?.GetCode() ?? string.Empty;
 

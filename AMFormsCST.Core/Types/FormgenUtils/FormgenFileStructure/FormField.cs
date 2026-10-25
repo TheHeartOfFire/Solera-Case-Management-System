@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Xml;
 
@@ -48,6 +48,9 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
             var option = node.ChildNodes[1]?.ChildNodes[2]?.InnerText;
             if (option != null)
                 FormattingOption = GetFormatOption(option);
+
+            if (Settings is not null)
+                Settings.PropertyChanged += (s, e) => OnPropertyChanged();
         }
 
         public static FormatOption GetFormatOption(string option) => option switch
@@ -98,8 +101,8 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
         public bool Equals(FormField? other) => 
             other is not null &&
             Settings?.Equals(other.Settings) == true &&
-            Expression?.Equals(other.Expression) == true &&
-            SampleData?.Equals(other.SampleData) == true &&
+            (Expression ?? string.Empty).Equals(other.Expression ?? string.Empty, StringComparison.Ordinal) &&
+            (SampleData ?? string.Empty).Equals(other.SampleData ?? string.Empty, StringComparison.Ordinal) &&
             FormattingOption == other.FormattingOption;
 
         public override bool Equals(object? obj) => Equals(obj as FormField);

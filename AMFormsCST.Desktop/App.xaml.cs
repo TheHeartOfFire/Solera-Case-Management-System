@@ -104,6 +104,11 @@ public partial class App : Application
                 _ = services.AddSingleton<FormGenHookService>();
                 _ = services.AddHostedService(sp => sp.GetRequiredService<FormGenHookService>());
 
+#if DEBUG
+                _ = services.AddSingleton<RemoteDebugBridgeService>();
+                _ = services.AddHostedService(sp => sp.GetRequiredService<RemoteDebugBridgeService>());
+#endif
+
                 _ = services.AddSingleton<IWindow, MainWindow>();
                 _ = services.AddSingleton<MainWindowViewModel>();
                 _ = services.AddSingleton<INavigationService, NavigationService>();
@@ -122,6 +127,8 @@ public partial class App : Application
                 _ = services.AddSingleton<TemplatesViewModel>();
                 _ = services.AddSingleton<FormgenUtilitiesPage>();
                 _ = services.AddSingleton<FormgenUtilitiesViewModel>();
+                _ = services.AddSingleton<CodeSnippetsPage>();
+                _ = services.AddSingleton<CodeSnippetsViewModel>();
                 _ = services.AddSingleton<SettingsPage>();
                 _ = services.AddSingleton<SettingsViewModel>();
                 _ = services.AddSingleton<LinksPage>();
@@ -330,6 +337,13 @@ public partial class App : Application
         try
         {
             var supportTool = GetRequiredService<ISupportTool>();
+            var logger = GetRequiredService<ILogService>();
+            var batPath = FormGenLauncherHelper.ResolveFormGenBatchPath(supportTool.Settings.UserSettings.FormGenExecutablePath);
+            if (!string.IsNullOrWhiteSpace(batPath))
+            {
+                FormGenLauncherHelper.EnsureAgentDeployedAndPatched(batPath, logger);
+            }
+
             var contextMenuService = GetRequiredService<IWindowsExplorerContextMenuService>();
             if (supportTool.Settings.UserSettings.EnableExplorerContextMenu)
             {

@@ -150,16 +150,6 @@ public class FormGenHookService : IHostedService, IDisposable
                         return (IntPtr)1; // Suppress native RMB event
                     }
                 }
-                else
-                {
-                    // Layer 2: Companion Anchor flyout alongside native FormGen menu
-                    // When FormGenAgent is active, native SWT context menu items are injected directly inside FormGen.
-                    // We only display the external companion window as a fallback if the agent is not active.
-                    if (!FormGenLauncherHelper.IsAgentActive() && IsFormGenWindowAt(hookStruct.pt, out IntPtr rootHwnd))
-                    {
-                        _dispatcher.BeginInvoke(() => ShowQuickPaste(hookStruct.pt, rootHwnd, offsetForCompanion: true));
-                    }
-                }
             }
             catch (Exception ex)
             {

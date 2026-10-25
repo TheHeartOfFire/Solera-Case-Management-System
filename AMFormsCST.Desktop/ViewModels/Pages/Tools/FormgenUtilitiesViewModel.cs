@@ -19,6 +19,8 @@ namespace AMFormsCST.Desktop.ViewModels.Pages.Tools;
 
 public partial class FormgenUtilitiesViewModel : ViewModel
 {
+    public static FormgenUtilitiesViewModel? ActiveInstance { get; private set; }
+
     private readonly ILogService? _logger;
 
     [ObservableProperty]
@@ -30,6 +32,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         get => _selectedNode;
         set
         {
+            ActiveInstance = this;
             if (SetProperty(ref _selectedNode, value))
             {
                 UpdateSelectedNodeProperties();
@@ -47,9 +50,11 @@ public partial class FormgenUtilitiesViewModel : ViewModel
     private string? _filePath;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChanged))]
     private string _formTitle = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChanged))]
     private string _uuid = string.Empty;
 
     [ObservableProperty]
@@ -61,7 +66,21 @@ public partial class FormgenUtilitiesViewModel : ViewModel
     [ObservableProperty]
     private bool _isBusy;
 
-    public bool HasChanged => _supportTool?.FormgenUtils.HasChanged == true || _backupLoaded;
+    public bool HasChanged
+    {
+        get
+        {
+            if (_backupLoaded) return true;
+            if (_supportTool?.FormgenUtils.HasChanged == true) return true;
+            var parsed = _supportTool?.FormgenUtils.ParsedFormgenFile;
+            if (parsed is null || !IsFileLoaded) return false;
+
+            var originalTitle = parsed.Title ?? (FilePath is not null ? _fileSystem.GetFileNameWithoutExtension(FilePath) : string.Empty) ?? string.Empty;
+            if (!string.Equals(originalTitle, FormTitle ?? string.Empty, StringComparison.Ordinal)) return true;
+            if (!string.Equals(parsed.Settings?.UUID ?? string.Empty, Uuid ?? string.Empty, StringComparison.Ordinal)) return true;
+            return false;
+        }
+    }
 
     public bool IsFileLoaded => !string.IsNullOrEmpty(FilePath);
     private bool _backupLoaded = false;
@@ -145,6 +164,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
     public FormgenUtilitiesViewModel(ISupportTool supportTool, IDialogService dialogService, IFileSystem fileSystem, ILogService? logger = null)
     {
+        ActiveInstance = this;
         _supportTool = supportTool ?? throw new ArgumentNullException(nameof(supportTool));
         _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
         _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
@@ -168,31 +188,64 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         }
     }
 
-    [RelayCommand]
-    private void SaveFormgenFile()
-    {
-        if (!IsFileLoaded || _supportTool?.FormgenUtils.ParsedFormgenFile is null || !HasChanged) return;
+    private const string SaveIdleText = "Save";
+    private const string SaveSavingText = "Saving...";
+    private const string SaveSavedText = "Saved ✓";
+    private static readonly TimeSpan SaveSavedDisplayTime = TimeSpan.FromMilliseconds(1500);
 
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SaveFormgenFileCommand))]
+    private bool _isSaving;
+
+    [ObservableProperty]
+    private string _saveButtonText = SaveIdleText;
+
+    private bool CanSaveFormgenFile() => !IsSaving;
+
+    private void SaveCurrentFileCore()
+    {
+        if (!IsFileLoaded || string.IsNullOrWhiteSpace(FilePath) || _supportTool?.FormgenUtils.ParsedFormgenFile is null)
+            return;
+
+        var originalTitle = _supportTool.FormgenUtils.ParsedFormgenFile.Title ?? _fileSystem.GetFileNameWithoutExtension(FilePath);
+        bool titleHasChanged = !string.Equals(originalTitle, FormTitle, StringComparison.Ordinal);
+
+        _supportTool.FormgenUtils.ParsedFormgenFile.Title = FormTitle;
+        _supportTool.FormgenUtils.ParsedFormgenFile.Settings.UUID = Uuid;
+
+        _supportTool.FormgenUtils.SaveFile(FilePath);
+
+        if (titleHasChanged)
+        {
+            _supportTool.FormgenUtils.RenameFile(FormTitle, ShouldRenameImage);
+            var directory = _fileSystem.GetDirectoryName(FilePath);
+            FilePath = _fileSystem.CombinePath(directory!, FormTitle + ".formgen");
+        }
+
+        _backupLoaded = false;
+        if (TreeViewNodes.Count > 0)
+        {
+            TreeViewNodes[0].RefreshHeader();
+        }
+        SelectedNode?.RefreshHeader();
+        OnPropertyChanged(nameof(HasChanged));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSaveFormgenFile))]
+    private async Task SaveFormgenFile()
+    {
+        if (!IsFileLoaded || _supportTool?.FormgenUtils.ParsedFormgenFile is null || IsSaving) return;
+
+        IsSaving = true;
+        SaveButtonText = SaveSavingText;
         IsBusy = true;
         try
         {
-            var originalTitle = _supportTool.FormgenUtils.ParsedFormgenFile.Title ?? _fileSystem.GetFileNameWithoutExtension(FilePath!);
-            bool titleHasChanged = !string.Equals(originalTitle, FormTitle, StringComparison.Ordinal);
-
-            _supportTool.FormgenUtils.ParsedFormgenFile.Title = FormTitle;
-            _supportTool.FormgenUtils.ParsedFormgenFile.Settings.UUID = Uuid;
-
-            _supportTool.FormgenUtils.SaveFile(FilePath!);
-
-            if (titleHasChanged)
-            {
-                _supportTool.FormgenUtils.RenameFile(FormTitle, ShouldRenameImage);
-                var directory = _fileSystem.GetDirectoryName(FilePath!);
-                FilePath = _fileSystem.CombinePath(directory!, FormTitle + ".formgen");
-            }
-
-            _dialogService.ShowMessageBox("File saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            SaveCurrentFileCore();
             _logger?.LogInfo($"Formgen file saved: {FilePath}");
+            IsBusy = false;
+            SaveButtonText = SaveSavedText;
+            await Task.Delay(SaveSavedDisplayTime);
         }
         catch (Exception ex)
         {
@@ -201,12 +254,10 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         }
         finally
         {
+            SaveButtonText = SaveIdleText;
+            IsSaving = false;
             IsBusy = false;
-            if (IsFileLoaded)
-            {
-                _backupLoaded = false;
-                LoadFileContent();
-            }
+            OnPropertyChanged(nameof(HasChanged));
         }
     }
 
@@ -237,25 +288,10 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         bool? success = null;
         try
         {
-            if (HasChanged && _supportTool?.FormgenUtils.ParsedFormgenFile is not null)
+            if (_supportTool?.FormgenUtils.ParsedFormgenFile is not null)
             {
-                var originalTitle = _supportTool.FormgenUtils.ParsedFormgenFile.Title ?? _fileSystem.GetFileNameWithoutExtension(FilePath);
-                bool titleHasChanged = !string.Equals(originalTitle, FormTitle, StringComparison.Ordinal);
-
-                _supportTool.FormgenUtils.ParsedFormgenFile.Title = FormTitle;
-                _supportTool.FormgenUtils.ParsedFormgenFile.Settings.UUID = Uuid;
-
-                _supportTool.FormgenUtils.SaveFile(FilePath);
-
-                if (titleHasChanged)
-                {
-                    _supportTool.FormgenUtils.RenameFile(FormTitle, ShouldRenameImage);
-                    var directory = _fileSystem.GetDirectoryName(FilePath);
-                    FilePath = _fileSystem.CombinePath(directory!, FormTitle + ".formgen");
-                }
-
-                _backupLoaded = false;
-                _logger?.LogInfo($"Auto-saved Formgen file before pushing to FormGen: {FilePath}");
+                SaveCurrentFileCore();
+                _logger?.LogInfo($"Saved Formgen file and created backup before pushing to FormGen: {FilePath}");
             }
 
             var formgenBatPath = _supportTool?.Settings?.UserSettings?.FormGenExecutablePath;
@@ -285,6 +321,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             PushButtonText = PushIdleText;
             IsPushing = false;
             IsBusy = false;
+            OnPropertyChanged(nameof(HasChanged));
         }
     }
 
@@ -456,6 +493,15 @@ public partial class FormgenUtilitiesViewModel : ViewModel
                     displayProps.Add(new DisplayProperty(props.PromptData.Settings, p, false, _logger));
                 }
             }
+        }
+
+        foreach (var dp in displayProps)
+        {
+            dp.PropertyChanged += (_, _) =>
+            {
+                SelectedNode?.RefreshHeader();
+                OnPropertyChanged(nameof(HasChanged));
+            };
         }
 
         SelectedNodeProperties = new ObservableCollection<DisplayProperty>(displayProps);

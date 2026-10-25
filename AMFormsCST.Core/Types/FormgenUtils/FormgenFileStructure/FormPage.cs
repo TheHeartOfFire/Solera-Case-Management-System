@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Xml;
 
@@ -20,13 +20,15 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
         public FormPage(XmlNode node)
         {
             if (node.Attributes != null) Settings = new FormPageSettings(node.Attributes);
+            if (Settings is not null) Settings.PropertyChanged += (s, e) => OnPropertyChanged();
 
             if (node.FirstChild == null) return;
             foreach (XmlNode child in node.FirstChild)
             {
-                Fields.Add(new FormField(child));
+                var field = new FormField(child);
+                field.PropertyChanged += (s, e) => OnPropertyChanged();
+                Fields.Add(field);
             }
-            if (Settings is not null) Settings.PropertyChanged += (s, e) => OnPropertyChanged();
         }
 
         public void GenerateXml(XmlWriter xml)

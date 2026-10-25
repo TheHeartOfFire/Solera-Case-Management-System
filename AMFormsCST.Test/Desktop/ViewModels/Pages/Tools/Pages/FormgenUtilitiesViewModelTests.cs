@@ -146,7 +146,127 @@ public class FormgenUtilitiesViewModelTests
         // Act
         viewModel.PushToFormGenCommand.Execute(null);
 
-        // Assert that SaveFile was called because HasChanged was true
+        // Assert that SaveFile was called
         _mockFormgenUtils.Verify(fu => fu.SaveFile(It.IsAny<string>(), It.IsAny<DotFormgen?>()), Times.Once);
+    }
+
+    [Fact]
+    public void PushToFormGenCommand_WhenFileLoadedAndHasChangedFalse_StillSavesAndBacksUpBeforePush()
+    {
+        var viewModel = new FormgenUtilitiesViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object);
+        var fakeFilePath = "C:\\temp\\test.formgen";
+        var fakeFormgenFile = new DotFormgen
+        {
+            Title = "Test Form Title",
+            Settings = { UUID = "1234-uuid" }
+        };
+
+        _mockDialogService.Setup(ds => ds.ShowOpenFileDialog(It.IsAny<string>())).Returns(fakeFilePath);
+        _mockFormgenUtils.Setup(fu => fu.OpenFile(fakeFilePath));
+        _mockFormgenUtils.Setup(fu => fu.ParsedFormgenFile).Returns(fakeFormgenFile);
+        _mockFormgenUtils.Setup(fu => fu.HasChanged).Returns(false);
+        _mockFileSystem.Setup(fs => fs.FileExists(It.IsAny<string>())).Returns(true);
+        _mockFileSystem.Setup(fs => fs.GetDirectoryName(It.IsAny<string>())).Returns("C:\\temp");
+        _mockFileSystem.Setup(fs => fs.GetFileNameWithoutExtension(It.IsAny<string>())).Returns("test");
+        _mockFileSystem.Setup(fs => fs.CombinePath(It.IsAny<string>(), It.IsAny<string>())).Returns((string p1, string p2) => p1 + "\\" + p2);
+
+        viewModel.OpenFormgenFileCommand.Execute(null);
+        Assert.True(viewModel.IsFileLoaded);
+
+        // Act
+        viewModel.PushToFormGenCommand.Execute(null);
+
+        // Assert that SaveFile was unconditionally called even when HasChanged was false
+        _mockFormgenUtils.Verify(fu => fu.SaveFile(fakeFilePath, It.IsAny<DotFormgen?>()), Times.Once);
+    }
+
+    [Fact]
+    public void EditingPromptVariableViaDisplayProperty_RaisesHasChangedAndRefreshesTreeNodeHeader()
+    {
+        var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<formDef version=""4"" publishedUUID=""1234-uuid"" legacyImport=""false"" totalPages=""1"" defaultPoints=""10"" missingSourceJpeg=""false"" duplex=""false"" maxAccessoryLines=""0"" prePrintedLaserForm=""false"">
+  <title>Test Form Title</title>
+  <formPrintType>Pdf</formPrintType>
+  <codeLines order=""0"" type=""PROMPT"" destVariable=""F0"">
+    <promptData type=""Text"" promptIsExpression=""false"" required=""false"" leftSize=""10"" rightSize=""0"" choicesDelimiter=""0"" allowNegatives=""false"" forceUpperCase=""false"" makeBuyerVars=""false"" includeNoneAsOption=""false"">
+      <promptMessage>Original Prompt</promptMessage>
+    </promptData>
+  </codeLines>
+</formDef>";
+        var fakeFilePath = "C:\\temp\\test.formgen";
+        _mockFileSystem.Setup(fs => fs.ReadAllText(fakeFilePath)).Returns(xml);
+        _mockFileSystem.Setup(fs => fs.FileExists(It.IsAny<string>())).Returns(true);
+        _mockFileSystem.Setup(fs => fs.GetDirectoryName(It.IsAny<string>())).Returns("C:\\temp");
+        _mockFileSystem.Setup(fs => fs.GetFileNameWithoutExtension(It.IsAny<string>())).Returns("test");
+        _mockFileSystem.Setup(fs => fs.CombinePath(It.IsAny<string>(), It.IsAny<string>())).Returns((string p1, string p2) => p1 + "\\" + p2);
+
+        var realFormgenUtils = new AMFormsCST.Core.Utils.FormgenUtils(
+            _mockFileSystem.Object,
+            new AMFormsCST.Core.Utils.FormgenUtilsProperties());
+        _mockSupportTool.Setup(st => st.FormgenUtils).Returns(realFormgenUtils);
+
+        var viewModel = new FormgenUtilitiesViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object);
+        viewModel.LoadFormgenFile(fakeFilePath);
+
+        Assert.False(viewModel.HasChanged);
+
+        // Locate the Prompt CodeLine node in TreeViewNodes
+        var rootNode = viewModel.TreeViewNodes[0];
+        var codeLinesGroup = rootNode.Children.First(c => c.Header == "Code Lines");
+        var promptsGroup = codeLinesGroup.Children.First(c => c.Header == "PROMPT");
+        var promptNode = promptsGroup.Children.First();
+
+        Assert.Equal("F0", promptNode.Header);
+
+        // Select the prompt node so SelectedNodeProperties is populated
+        viewModel.SelectedNode = promptNode;
+        Assert.NotNull(viewModel.SelectedNodeProperties);
+
+        bool hasChangedNotified = false;
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(FormgenUtilitiesViewModel.HasChanged))
+                hasChangedNotified = true;
+        };
+
+        // Edit the prompt's Variable (name) via DisplayProperty
+        var variableProp = viewModel.SelectedNodeProperties!.First(p => p.Name == "Variable");
+        variableProp.Value = "F99";
+
+        Assert.True(hasChangedNotified);
+        Assert.True(viewModel.HasChanged);
+        Assert.Equal("F99", promptNode.Header);
+    }
+
+    [Fact]
+    public async Task SaveFormgenFileCommand_SavesWithoutModalSuccessMessageBox()
+    {
+        var viewModel = new FormgenUtilitiesViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object);
+        var fakeFilePath = "C:\\temp\\test.formgen";
+        var fakeFormgenFile = new DotFormgen
+        {
+            Title = "Test Form Title",
+            Settings = { UUID = "1234-uuid" }
+        };
+
+        _mockDialogService.Setup(ds => ds.ShowOpenFileDialog(It.IsAny<string>())).Returns(fakeFilePath);
+        _mockFormgenUtils.Setup(fu => fu.OpenFile(fakeFilePath));
+        _mockFormgenUtils.Setup(fu => fu.ParsedFormgenFile).Returns(fakeFormgenFile);
+        _mockFileSystem.Setup(fs => fs.FileExists(It.IsAny<string>())).Returns(true);
+        _mockFileSystem.Setup(fs => fs.GetDirectoryName(It.IsAny<string>())).Returns("C:\\temp");
+        _mockFileSystem.Setup(fs => fs.GetFileNameWithoutExtension(It.IsAny<string>())).Returns("test");
+        _mockFileSystem.Setup(fs => fs.CombinePath(It.IsAny<string>(), It.IsAny<string>())).Returns((string p1, string p2) => p1 + "\\" + p2);
+
+        viewModel.OpenFormgenFileCommand.Execute(null);
+        Assert.Equal("Save", viewModel.SaveButtonText);
+
+        await viewModel.SaveFormgenFileCommand.ExecuteAsync(null);
+
+        _mockFormgenUtils.Verify(fu => fu.SaveFile(fakeFilePath, It.IsAny<DotFormgen?>()), Times.Once);
+        _mockDialogService.Verify(
+            ds => ds.ShowMessageBox(It.IsAny<string>(), "Success", It.IsAny<System.Windows.MessageBoxButton>(), It.IsAny<System.Windows.MessageBoxImage>()),
+            Times.Never);
+        Assert.Equal("Save", viewModel.SaveButtonText);
+        Assert.False(viewModel.IsSaving);
     }
 }

@@ -638,6 +638,17 @@ public class FormGenAgent {
                             log("Error restoring page after reload: " + t.getMessage());
                         }
 
+                        // Re-bind FormGen's dialogs (code/prompts, field properties), toolbar and page control to the
+                        // freshly loaded form. The earlier onTabSelected ran against the pre-reload form definition,
+                        // which left them showing stale data until the next push re-selected the tab.
+                        try {
+                            Method onTabSel2 = formGenInstance.getClass().getDeclaredMethod("onTabSelected", Class.forName("org.eclipse.swt.custom.CTabItem"));
+                            onTabSel2.setAccessible(true);
+                            onTabSel2.invoke(formGenInstance, matchingTab);
+                        } catch (Throwable t) {
+                            log("Error re-selecting tab after reload: " + t.getMessage());
+                        }
+
                         // Refresh titles and return focus
                         try {
                             Method m = formGenInstance.getClass().getMethod("setCurrentTabTitle");
@@ -648,6 +659,9 @@ public class FormGenAgent {
                             m.setAccessible(true);
                             m.invoke(formGenInstance);
                         } catch (Throwable ignored) {}
+
+                        refreshOpenFormDialogs(display, matchingViewer, file);
+
                         try {
                             Method m = formGenInstance.getClass().getMethod("returnFocusToForm");
                             m.invoke(formGenInstance);
@@ -679,6 +693,9 @@ public class FormGenAgent {
                                 m.setAccessible(true);
                                 m.invoke(formGenInstance);
                             } catch (Throwable ignored) {}
+
+                            refreshOpenFormDialogs(display, newViewer, file);
+
                             try {
                                 Method m = formGenInstance.getClass().getMethod("returnFocusToForm");
                                 m.invoke(formGenInstance);
@@ -699,6 +716,107 @@ public class FormGenAgent {
                 }
             }
         });
+    }
+
+    private static void refreshOpenFormDialogs(Object display, Object viewer, File file) {
+        if (display == null || isDisposed(display) || viewer == null) return;
+        try {
+            Method getFormDefMethod = viewer.getClass().getMethod("getFormDef");
+            Object newFormDef = getFormDefMethod.invoke(viewer);
+            if (newFormDef == null) return;
+
+            // 1. Explicitly refresh UdfDlg (dlgCode) if visible
+            if (formGenInstance != null) {
+                try {
+                    Field dlgCodeField = formGenInstance.getClass().getDeclaredField("dlgCode");
+                    dlgCodeField.setAccessible(true);
+                    Object dlgCode = dlgCodeField.get(formGenInstance);
+                    if (dlgCode != null && !isDisposed(dlgCode)) {
+                        Method isVisMethod = dlgCode.getClass().getMethod("isVisible");
+                        if (Boolean.TRUE.equals(isVisMethod.invoke(dlgCode))) {
+                            boolean editAllowed = true;
+                            try {
+                                Method eaMethod = formGenInstance.getClass().getDeclaredMethod("editAllowed");
+                                eaMethod.setAccessible(true);
+                                editAllowed = Boolean.TRUE.equals(eaMethod.invoke(formGenInstance));
+                            } catch (Throwable ignored) {}
+                            Method loadCodeMethod = dlgCode.getClass().getMethod("loadCode", boolean.class, newFormDef.getClass());
+                            loadCodeMethod.invoke(dlgCode, editAllowed, newFormDef);
+                            log("Refreshed open UdfDlg with updated FormDef.");
+                        }
+                    }
+                } catch (Throwable t) {
+                    log("Error refreshing UdfDlg: " + t.getMessage());
+                }
+            }
+
+            // 2. Refresh any open FormPropertiesDlg shells
+            Method getShellsMethod = display.getClass().getMethod("getShells");
+            Object[] shells = (Object[]) getShellsMethod.invoke(display);
+            if (shells == null) return;
+
+            for (Object s : shells) {
+                if (s == null || isDisposed(s)) continue;
+                try {
+                    Boolean vis = (Boolean) s.getClass().getMethod("isVisible").invoke(s);
+                    if (!Boolean.TRUE.equals(vis)) continue;
+
+                    String title = (String) s.getClass().getMethod("getText").invoke(s);
+                    if (title != null && title.contains("Form Properties")) {
+                        Object formPropsDlg = null;
+                        try {
+                            formPropsDlg = s.getClass().getMethod("getData", String.class).invoke(s, "SoleraFormPropsDlg");
+                        } catch (Throwable ignored) {}
+                        if (formPropsDlg == null) {
+                            formPropsDlg = extractTargetObject(s, "com.automate.formgen.dialogs.FormPropertiesDlg", 0);
+                        }
+                        if (formPropsDlg != null) {
+                            Field fdField = formPropsDlg.getClass().getDeclaredField("formdef");
+                            fdField.setAccessible(true);
+                            fdField.set(formPropsDlg, newFormDef);
+
+                            // Clear listStates and listOEMs before calling loadData to prevent duplicate list items
+                            try {
+                                Field lsField = formPropsDlg.getClass().getDeclaredField("listStates");
+                                lsField.setAccessible(true);
+                                Object listStates = lsField.get(formPropsDlg);
+                                if (listStates != null) {
+                                    listStates.getClass().getMethod("removeAll").invoke(listStates);
+                                }
+                            } catch (Throwable ignored) {}
+
+                            try {
+                                Field loField = formPropsDlg.getClass().getDeclaredField("listOEMs");
+                                loField.setAccessible(true);
+                                Object listOEMs = loField.get(formPropsDlg);
+                                if (listOEMs != null) {
+                                    listOEMs.getClass().getMethod("removeAll").invoke(listOEMs);
+                                }
+                            } catch (Throwable ignored) {}
+
+                            String fileName = file != null ? file.getName() : "";
+                            try {
+                                Field fnField = formPropsDlg.getClass().getDeclaredField("lblFileName");
+                                fnField.setAccessible(true);
+                                Object lblFn = fnField.get(formPropsDlg);
+                                if (lblFn != null && !isDisposed(lblFn) && (fileName == null || fileName.isEmpty())) {
+                                    fileName = (String) lblFn.getClass().getMethod("getText").invoke(lblFn);
+                                }
+                            } catch (Throwable ignored) {}
+
+                            Method loadDataMethod = formPropsDlg.getClass().getDeclaredMethod("loadData", String.class);
+                            loadDataMethod.setAccessible(true);
+                            loadDataMethod.invoke(formPropsDlg, fileName != null ? fileName : "");
+                            log("Refreshed open FormPropertiesDlg with updated FormDef.");
+                        }
+                    }
+                } catch (Throwable dlgErr) {
+                    log("Error refreshing FormPropertiesDlg shell: " + dlgErr.getMessage());
+                }
+            }
+        } catch (Throwable t) {
+            log("Error in refreshOpenFormDialogs: " + t.getMessage());
+        }
     }
 
     public static String getFormDefUuid(Object formDef) {
@@ -844,7 +962,6 @@ public class FormGenAgent {
                     OutputStream out = socket.getOutputStream();
                     out.write((st + "\n").getBytes("UTF-8"));
                     out.flush();
-                    activateMainShell();
                 } else if (line.startsWith("OPEN:")) {
                     String target = line.substring(5).trim();
                     openFile(target);
@@ -895,7 +1012,7 @@ public class FormGenAgent {
 
     private static void activateMainShell() {
         if (mainShell == null || isDisposed(mainShell)) return;
-        Object display = getDisplay();
+        final Object display = getDisplay();
         if (display != null && !isDisposed(display)) {
             runOnDisplay(display, new Runnable() {
                 @Override
@@ -904,6 +1021,22 @@ public class FormGenAgent {
                         mainShell.getClass().getMethod("setMinimized", boolean.class).invoke(mainShell, false);
                         mainShell.getClass().getMethod("setActive").invoke(mainShell);
                         mainShell.getClass().getMethod("forceActive").invoke(mainShell);
+
+                        // If any secondary dialog shell (e.g. Form Properties, UDF/Prompts, Form Search, Publish)
+                        // is currently open and visible, keep it above mainShell so it isn't sent to the background.
+                        Method getShellsMethod = display.getClass().getMethod("getShells");
+                        Object[] shells = (Object[]) getShellsMethod.invoke(display);
+                        if (shells != null) {
+                            for (Object s : shells) {
+                                if (s != null && s != mainShell && !isDisposed(s)) {
+                                    Boolean vis = (Boolean) s.getClass().getMethod("isVisible").invoke(s);
+                                    if (Boolean.TRUE.equals(vis)) {
+                                        s.getClass().getMethod("setActive").invoke(s);
+                                        s.getClass().getMethod("forceActive").invoke(s);
+                                    }
+                                }
+                            }
+                        }
                     } catch (Throwable ignored) {}
                 }
             });
@@ -1364,10 +1497,11 @@ public class FormGenAgent {
             Object listenerPasteFormula = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
                 @Override
                 public void run() {
+                    refreshLiveVariablesSync();
                     runOnDisplay(display, new Runnable() {
                         @Override
                         public void run() {
-                            String codeToPaste = liveVariables.get("ActiveTemplateText");
+                            String codeToPaste = liveVariables.get("ActiveCodeSnippetText");
                             if (codeToPaste == null || codeToPaste.trim().isEmpty()) {
                                 codeToPaste = getClipboardText();
                             }
@@ -1599,6 +1733,11 @@ public class FormGenAgent {
                     String tmplName = liveVariables.get("ActiveTemplateName");
                     String label = (tmplName != null && !tmplName.trim().isEmpty()) ? "Template: " + tmplName : "Active Template";
                     hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, label, tmplText);
+                }
+
+                String snippetText = liveVariables.get("ActiveCodeSnippetText");
+                if (snippetText != null && !snippetText.trim().isEmpty()) {
+                    hasItems |= addVariableMenuItem(display, pasteSubMenu, itemCons, addListenerMethod, "Code Snippet", snippetText);
                 }
             }
 
@@ -1914,6 +2053,9 @@ public class FormGenAgent {
             buttonComposite.getClass().getMethod("layout", boolean.class, boolean.class).invoke(buttonComposite, true, true);
             shell.getClass().getMethod("layout", boolean.class, boolean.class).invoke(shell, true, true);
 
+            if (formPropsDlg != null) {
+                shell.getClass().getMethod("setData", String.class, Object.class).invoke(shell, "SoleraFormPropsDlg", formPropsDlg);
+            }
             shell.getClass().getMethod("setData", String.class, Object.class).invoke(shell, "SoleraEnhanced", Boolean.TRUE);
             log("FormPropertiesDlg successfully enhanced.");
         } catch (Throwable t) {

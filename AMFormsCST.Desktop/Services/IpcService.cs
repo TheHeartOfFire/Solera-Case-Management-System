@@ -185,6 +185,7 @@ public class IpcService : IHostedService, IAsyncDisposable
         var selectedTemplate = activeTemplatesVm?.SelectedTemplate ?? _templatesViewModel.SelectedTemplate;
         string activeTemplateName = selectedTemplate?.Template.Name ?? string.Empty;
         string activeTemplateText = GetFlowDocumentText(selectedTemplate?.Output);
+        string activeCodeSnippetText = CodeSnippetsViewModel.GetActiveFormulaText();
 
         return new IpcLiveVariables
         {
@@ -203,7 +204,8 @@ public class IpcService : IHostedService, IAsyncDisposable
             DealNumber = selectedTestDeal?.DealNumber ?? string.Empty,
             Notes = notesText,
             ActiveTemplateName = activeTemplateName,
-            ActiveTemplateText = activeTemplateText
+            ActiveTemplateText = activeTemplateText,
+            ActiveCodeSnippetText = activeCodeSnippetText
         };
     }
 

@@ -77,6 +77,7 @@ public class FormgenUtils : IFormgenUtils
             CreateBackup();
             // Snapshot, not alias: HasChanged compares against this copy, so it must not be the live object.
             _backupCopy = ParsedFormgenFile?.Clone();
+            OnFormgenFileChanged();
         }
         catch (Exception ex)
         {

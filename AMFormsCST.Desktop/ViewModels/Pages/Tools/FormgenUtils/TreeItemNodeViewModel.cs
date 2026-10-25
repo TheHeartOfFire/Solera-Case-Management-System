@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure;
+using AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure;
 using AMFormsCST.Desktop.Models.FormgenUtilities.Grouping;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
@@ -29,32 +29,7 @@ public partial class TreeItemNodeViewModel : ObservableObject
         _parentViewModel = parentViewModel;
         _logger = logger;
 
-        var clHeader = "Code";
-
-        if (data is CodeLine line)
-        {
-            clHeader = line.Settings?.Variable;
-            if (line.PromptData?.Settings?.Type is PromptDataSettings.PromptType.Label)
-            {
-                clHeader = $"<----- {line.PromptData?.Message} ----->";
-            }
-            if (line.PromptData?.Settings?.Type is PromptDataSettings.PromptType.Separator)
-            {
-                clHeader = "<----- Separator ----->";
-            }
-        }
-
-        Header = data switch
-        {
-            DotFormgen f => f.Title ?? "Formgen File",
-            CodeLineCollection => "Code Lines",
-            PageGroup => "Pages",
-            CodeLineGroup g => g.Type.ToString(),
-            FormPage p => $"Page {p.Settings?.PageNumber ?? 0}",
-            FormField f => f.Expression ?? "Field",
-            CodeLine c => clHeader,
-            _ => "Unknown"
-        };
+        Header = ComputeHeader(data);
 
         _logger?.LogDebug($"TreeItemNodeViewModel created: Header='{Header}', DataType='{data.GetType().Name}'");
 
@@ -93,6 +68,41 @@ public partial class TreeItemNodeViewModel : ObservableObject
                 }
                 break;
         }
+    }
+
+    public void RefreshHeader()
+    {
+        Header = ComputeHeader(Data);
+    }
+
+    private static string? ComputeHeader(object data)
+    {
+        var clHeader = "Code";
+
+        if (data is CodeLine line)
+        {
+            clHeader = line.Settings?.Variable;
+            if (line.PromptData?.Settings?.Type is PromptDataSettings.PromptType.Label)
+            {
+                clHeader = $"<----- {line.PromptData?.Message} ----->";
+            }
+            if (line.PromptData?.Settings?.Type is PromptDataSettings.PromptType.Separator)
+            {
+                clHeader = "<----- Separator ----->";
+            }
+        }
+
+        return data switch
+        {
+            DotFormgen f => f.Title ?? "Formgen File",
+            CodeLineCollection => "Code Lines",
+            PageGroup => "Pages",
+            CodeLineGroup g => g.Type.ToString(),
+            FormPage p => $"Page {p.Settings?.PageNumber ?? 0}",
+            FormField f => f.Expression ?? "Field",
+            CodeLine => clHeader,
+            _ => "Unknown"
+        };
     }
 
     partial void OnIsSelectedChanged(bool value)

@@ -451,12 +451,23 @@ public static class FormGenLauncherHelper
                 using var stream = assembly.GetManifestResourceStream(resourceName);
                 if (stream != null)
                 {
-                    if (File.Exists(destPath) && new FileInfo(destPath).Length == stream.Length)
-                        return;
+                    using var ms = new MemoryStream();
+                    stream.CopyTo(ms);
+                    var newBytes = ms.ToArray();
 
-                    using var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write);
-                    stream.CopyTo(fs);
-                    logger?.LogInfo($"Extracted FormGenAgent.jar to '{destPath}'.");
+                    if (File.Exists(destPath))
+                    {
+                        try
+                        {
+                            var existingBytes = File.ReadAllBytes(destPath);
+                            if (existingBytes.AsSpan().SequenceEqual(newBytes))
+                                return;
+                        }
+                        catch { }
+                    }
+
+                    File.WriteAllBytes(destPath, newBytes);
+                    logger?.LogInfo($"Extracted updated FormGenAgent.jar ({newBytes.Length} bytes) to '{destPath}'.");
                     return;
                 }
             }
@@ -464,16 +475,25 @@ public static class FormGenLauncherHelper
             var localTool = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Tools\FormGenAgent\FormGenAgent.jar");
             if (File.Exists(localTool))
             {
-                if (File.Exists(destPath) && new FileInfo(destPath).Length == new FileInfo(localTool).Length)
-                    return;
+                var newBytes = File.ReadAllBytes(localTool);
+                if (File.Exists(destPath))
+                {
+                    try
+                    {
+                        var existingBytes = File.ReadAllBytes(destPath);
+                        if (existingBytes.AsSpan().SequenceEqual(newBytes))
+                            return;
+                    }
+                    catch { }
+                }
 
-                File.Copy(localTool, destPath, true);
-                logger?.LogInfo($"Copied FormGenAgent.jar from Tools to '{destPath}'.");
+                File.WriteAllBytes(destPath, newBytes);
+                logger?.LogInfo($"Copied updated FormGenAgent.jar from Tools to '{destPath}'.");
             }
         }
         catch (Exception ex)
         {
-            logger?.LogWarning($"Could not extract FormGenAgent.jar: {ex.Message}");
+            logger?.LogWarning($"Could not extract FormGenAgent.jar (FormGen may currently have it locked; restart FormGen to apply agent updates): {ex.Message}");
         }
     }
 }

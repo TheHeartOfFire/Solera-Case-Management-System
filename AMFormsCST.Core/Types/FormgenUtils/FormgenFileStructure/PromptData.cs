@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Xml;
 
@@ -54,8 +54,7 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
         public bool Equals(PromptData? other) => 
             other is not null &&
             Settings?.Equals(other.Settings) == true &&
-            ((Message is null && other.Message is null) ||
-                (Message is not null && Message.Equals(other.Message))) &&
+            (Message ?? string.Empty).Equals(other.Message ?? string.Empty, StringComparison.Ordinal) &&
             Choices.Count == other.Choices.Count &&
             Choices.SequenceEqual(other.Choices);
 
