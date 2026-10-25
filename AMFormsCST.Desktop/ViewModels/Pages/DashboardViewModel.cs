@@ -992,10 +992,34 @@ public partial class DashboardViewModel : ViewModel
             {
                 parsedContactName = GetValueFromKeyValue("Name:", submittedValues);
             }
+            if (string.IsNullOrWhiteSpace(parsedContactName))
+            {
+                parsedContactName = GetValueFromKeyValue("Contact Name:", lines);
+            }
+            if (string.IsNullOrWhiteSpace(parsedContactName))
+            {
+                parsedContactName = GetValueFromKeyValue("Name:", lines);
+            }
             contact.Name = parsedContactName;
             contact.Email = GetValueFromKeyValue("Email:", submittedValues);
+            if (string.IsNullOrWhiteSpace(contact.Email))
+            {
+                contact.Email = GetValueFromKeyValue("Contact Email:", lines);
+                if (string.IsNullOrWhiteSpace(contact.Email))
+                {
+                    contact.Email = GetValueFromKeyValue("Email:", lines);
+                }
+            }
 
             var phoneRaw = GetValueFromKeyValue("Phone:", submittedValues);
+            if (string.IsNullOrWhiteSpace(phoneRaw))
+            {
+                phoneRaw = GetValueFromKeyValue("Contact Phone:", lines);
+                if (string.IsNullOrWhiteSpace(phoneRaw))
+                {
+                    phoneRaw = GetValueFromKeyValue("Phone:", lines);
+                }
+            }
             var phoneMatch = Regex.Match(phoneRaw, @"^(\S+)\s*(?:ext\.?|x)?\s*(\d+)?$");
             if (phoneMatch.Success)
             {
@@ -1009,11 +1033,31 @@ public partial class DashboardViewModel : ViewModel
 
             var dealer = note.Dealers[0];
             dealer.Name = GetValueFromKeyValue("Company Name:", submittedValues);
+            if (string.IsNullOrWhiteSpace(dealer.Name))
+            {
+                dealer.Name = GetValueFromKeyValue("Company Name:", lines);
+                if (string.IsNullOrWhiteSpace(dealer.Name))
+                {
+                    dealer.Name = GetValueFromKeyValue("Dealership:", lines);
+                }
+            }
             dealer.ServerCode = GetValueFromKeyValue("Server ID:", serverValues);
+            if (string.IsNullOrWhiteSpace(dealer.ServerCode))
+            {
+                dealer.ServerCode = GetValueFromKeyValue("Server ID:", lines);
+                if (string.IsNullOrWhiteSpace(dealer.ServerCode))
+                {
+                    dealer.ServerCode = GetValueFromKeyValue("Server Code:", lines);
+                }
+            }
 
             var company = dealer.Companies[0];
-            company.Name = GetValueFromKeyValue("Company Name:", submittedValues);
+            company.Name = dealer.Name;
             company.CompanyCode = GetValueFromKeyValue("Company Number:", submittedValues);
+            if (string.IsNullOrWhiteSpace(company.CompanyCode))
+            {
+                company.CompanyCode = GetValueFromKeyValue("Company Number:", lines);
+            }
 
             _logger?.LogInfo("Case text parsed into NoteModel.");
         }

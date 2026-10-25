@@ -125,11 +125,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
     switch (info.menuItemId) {
         case "send_parse_case":
-            sendIpcMessage({
-                target: "SoleraCMS",
-                action: "LoadCase",
-                rawData: selection
-            }, null, tabId, "✓ Case parsed into Solera CMS");
+            extractAndParseFullCase(tabId, "✓ Case parsed into Solera CMS");
             break;
 
         case "send_set_casenumber":
@@ -189,31 +185,37 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             break;
 
         case "solera_parse_full_case":
-            if (tabId) {
-                sendTabMessageWithAutoInject(tabId, { action: "EXTRACT_CASE_DATA" }, (res) => {
-                    if (res && res.caseData) {
-                        const d = res.caseData;
-                        sendIpcMessage({
-                            target: "SoleraCMS",
-                            action: "LoadCase",
-                            payload: {
-                                caseNumber: d.caseNumber || "",
-                                dealerName: d.accountName || "",
-                                dealership: d.accountName || "",
-                                contactName: d.contactName || "",
-                                subject: d.subject || "",
-                                notes: d.description || ""
-                            },
-                            rawData: d.rawPageText || d.description || ""
-                        }, null, tabId, "✓ Full Case parsed into Solera CMS");
-                    } else {
-                        notifyTabToast(tabId, "⚠ Could not read page content for case extraction.", true);
-                    }
-                });
-            }
+            extractAndParseFullCase(tabId, "✓ Full Case parsed into Solera CMS");
             break;
     }
 });
+
+function extractAndParseFullCase(tabId, successMessage) {
+    if (!tabId) return;
+    sendTabMessageWithAutoInject(tabId, { action: "EXTRACT_CASE_DATA" }, (res) => {
+        if (res && res.caseData) {
+            const d = res.caseData;
+            sendIpcMessage({
+                target: "SoleraCMS",
+                action: "LoadCase",
+                payload: {
+                    caseNumber: d.caseNumber || "",
+                    dealerName: d.accountName || "",
+                    dealership: d.accountName || "",
+                    serverCode: d.serverCode || "",
+                    contactName: d.contactName || "",
+                    contactEmail: d.contactEmail || "",
+                    contactPhone: d.contactPhone || "",
+                    subject: d.subject || "",
+                    notes: d.description || ""
+                },
+                rawData: d.rawPageText || d.description || ""
+            }, null, tabId, successMessage || "✓ Full Case parsed into Solera CMS");
+        } else {
+            notifyTabToast(tabId, "⚠ Could not read page content for case extraction.", true);
+        }
+    });
+}
 
 function handlePasteFromSolera(menuItemId, tab) {
     if (!tab || !tab.id) return;

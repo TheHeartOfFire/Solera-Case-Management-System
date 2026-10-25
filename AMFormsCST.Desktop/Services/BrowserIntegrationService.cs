@@ -460,8 +460,8 @@ public class BrowserIntegrationService : IBrowserIntegrationService
 
         var sourceCandidates = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "BrowserExtension"),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "BrowserExtension")),
+            Path.Combine(AppContext.BaseDirectory, "BrowserExtension"),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "BrowserExtension"))
         };
 

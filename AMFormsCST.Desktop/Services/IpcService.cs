@@ -448,7 +448,19 @@ public class IpcService : IHostedService, IAsyncDisposable
             }
             if (!string.IsNullOrWhiteSpace(contactPhone) && string.IsNullOrWhiteSpace(contact.Phone))
             {
-                contact.Phone = contactPhone.Trim();
+                var phoneMatch = System.Text.RegularExpressions.Regex.Match(contactPhone.Trim(), @"^(\S+)\s*(?:ext\.?|x)?\s*(\d+)?$");
+                if (phoneMatch.Success)
+                {
+                    contact.Phone = phoneMatch.Groups[1].Value;
+                    if (string.IsNullOrWhiteSpace(contact.PhoneExtension) && phoneMatch.Groups.Count > 2)
+                    {
+                        contact.PhoneExtension = phoneMatch.Groups[2].Value;
+                    }
+                }
+                else
+                {
+                    contact.Phone = contactPhone.Trim();
+                }
             }
 
             contact.Select();
