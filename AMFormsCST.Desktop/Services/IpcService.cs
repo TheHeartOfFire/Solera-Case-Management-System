@@ -362,15 +362,22 @@ public class IpcService : IHostedService, IAsyncDisposable
             newNote = new NoteModel(" ", _logger);
         }
 
-        if (message.Payload.TryGetValue("caseNumber", out var caseNumber) && !string.IsNullOrWhiteSpace(caseNumber))
+        if (DashboardViewModel.IsMatchingLabel(newNote.CaseNumber, "Case Number", "Case #", "CaseNumber"))
+        {
+            newNote.CaseNumber = string.Empty;
+        }
+
+        if (message.Payload.TryGetValue("caseNumber", out var caseNumber) && !string.IsNullOrWhiteSpace(caseNumber) && !DashboardViewModel.IsMatchingLabel(caseNumber, "Case Number", "Case #", "CaseNumber"))
         {
             newNote.CaseNumber = caseNumber.Trim();
         }
 
         message.Payload.TryGetValue("subject", out var subject);
-        if (!message.Payload.TryGetValue("notes", out var notes) || string.IsNullOrWhiteSpace(notes))
+        if (DashboardViewModel.IsMatchingLabel(subject, "Subject")) subject = null;
+        if (!message.Payload.TryGetValue("notes", out var notes) || string.IsNullOrWhiteSpace(notes) || DashboardViewModel.IsMatchingLabel(notes, "Description", "Notes"))
         {
             message.Payload.TryGetValue("description", out notes);
+            if (DashboardViewModel.IsMatchingLabel(notes, "Description", "Notes")) notes = null;
         }
 
         if (string.IsNullOrWhiteSpace(message.RawData) &&
@@ -381,12 +388,28 @@ public class IpcService : IHostedService, IAsyncDisposable
             newNote.NotesXaml = XamlWriter.Save(doc);
         }
 
-        if (!message.Payload.TryGetValue("dealerName", out var dealerName) || string.IsNullOrWhiteSpace(dealerName))
+        if (!message.Payload.TryGetValue("dealerName", out var dealerName) || string.IsNullOrWhiteSpace(dealerName) || DashboardViewModel.IsMatchingLabel(dealerName, "Account Name", "Company Name", "Account"))
         {
             message.Payload.TryGetValue("dealership", out dealerName);
+            if (DashboardViewModel.IsMatchingLabel(dealerName, "Account Name", "Company Name", "Account")) dealerName = null;
         }
         message.Payload.TryGetValue("serverCode", out var serverCode);
+        if (DashboardViewModel.IsMatchingLabel(serverCode, "Server ID", "Server Code", "Server", "Automate Server Code")) serverCode = null;
         message.Payload.TryGetValue("companyNumber", out var companyNumber);
+        if (DashboardViewModel.IsMatchingLabel(companyNumber, "Company Number", "Company Code")) companyNumber = null;
+
+        var existingDealer = newNote.Dealers.FirstOrDefault();
+        if (existingDealer != null)
+        {
+            if (DashboardViewModel.IsMatchingLabel(existingDealer.Name, "Account Name", "Company Name")) existingDealer.Name = string.Empty;
+            if (DashboardViewModel.IsMatchingLabel(existingDealer.ServerCode, "Server ID", "Server Code", "Server", "Automate Server Code")) existingDealer.ServerCode = string.Empty;
+            var existingComp = existingDealer.Companies.FirstOrDefault();
+            if (existingComp != null)
+            {
+                if (DashboardViewModel.IsMatchingLabel(existingComp.Name, "Account Name", "Company Name")) existingComp.Name = string.Empty;
+                if (DashboardViewModel.IsMatchingLabel(existingComp.CompanyCode, "Company Number", "Company Code")) existingComp.CompanyCode = string.Empty;
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(dealerName) || !string.IsNullOrWhiteSpace(serverCode) || !string.IsNullOrWhiteSpace(companyNumber))
         {
@@ -426,8 +449,20 @@ public class IpcService : IHostedService, IAsyncDisposable
         }
 
         message.Payload.TryGetValue("contactName", out var contactName);
+        if (DashboardViewModel.IsMatchingLabel(contactName, "Contact Name", "Contact", "Name")) contactName = null;
         message.Payload.TryGetValue("contactEmail", out var contactEmail);
+        if (DashboardViewModel.IsMatchingLabel(contactEmail, "Contact Email", "Email")) contactEmail = null;
         message.Payload.TryGetValue("contactPhone", out var contactPhone);
+        if (DashboardViewModel.IsMatchingLabel(contactPhone, "Contact Phone", "Phone", "Mobile")) contactPhone = null;
+
+        var existingContact = newNote.Contacts.FirstOrDefault();
+        if (existingContact != null)
+        {
+            if (DashboardViewModel.IsMatchingLabel(existingContact.Name, "Contact Name", "Contact", "Name")) existingContact.Name = string.Empty;
+            if (DashboardViewModel.IsMatchingLabel(existingContact.Email, "Contact Email", "Email")) existingContact.Email = string.Empty;
+            if (DashboardViewModel.IsMatchingLabel(existingContact.Phone, "Contact Phone", "Phone", "Mobile")) existingContact.Phone = string.Empty;
+            if (DashboardViewModel.IsMatchingLabel(existingContact.PhoneExtension, "Ext", "Extension")) existingContact.PhoneExtension = string.Empty;
+        }
 
         if (!string.IsNullOrWhiteSpace(contactName) || !string.IsNullOrWhiteSpace(contactEmail) || !string.IsNullOrWhiteSpace(contactPhone))
         {

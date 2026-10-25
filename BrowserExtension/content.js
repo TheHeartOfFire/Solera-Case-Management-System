@@ -112,7 +112,33 @@ function isElementVisible(el) {
     return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
 }
 
-function queryFirstVisibleText(selectors) {
+function cleanFieldValue(text) {
+    if (!text) return "";
+    let clean = text.trim();
+    clean = clean.replace(/^Edit\s+/i, "");
+    clean = clean.replace(/\s+Help$/i, "");
+    return clean.trim();
+}
+
+function isLabelText(text, patterns = []) {
+    if (!text) return true;
+    const lower = text.trim().toLowerCase();
+    const commonLabels = [
+        "case number", "case", "subject", "description", "contact name", "contact", 
+        "account name", "account", "dealership", "dealer", "phone", "contact phone", 
+        "mobile", "contact mobile", "business phone", "email", "contact email", 
+        "server code", "server id", "automate server code", "auto/mate server code", 
+        "am server code", "server"
+    ];
+    if (commonLabels.includes(lower)) return true;
+    for (const p of patterns) {
+        if (typeof p === "string" && lower === p.toLowerCase()) return true;
+        if (p instanceof RegExp && p.test(lower) && lower.length < 35) return true;
+    }
+    return false;
+}
+
+function queryFirstVisibleText(selectors, invalidPatterns = []) {
     let fallbackText = "";
     for (const sel of selectors) {
         let elements;
@@ -122,8 +148,10 @@ function queryFirstVisibleText(selectors) {
             continue;
         }
         for (const el of elements) {
-            const text = (el.innerText || el.textContent || "").trim();
-            if (!text) continue;
+            // Guard: Never pick up label elements or buttons
+            if (el.closest('.test-id__field-label, .slds-form-element__label, label, button, .slds-button')) continue;
+            const text = cleanFieldValue(el.innerText || el.textContent);
+            if (!text || isLabelText(text, invalidPatterns)) continue;
             if (isElementVisible(el)) {
                 return text;
             }
@@ -133,14 +161,6 @@ function queryFirstVisibleText(selectors) {
         }
     }
     return fallbackText;
-}
-
-function cleanFieldValue(text) {
-    if (!text) return "";
-    let clean = text.trim();
-    clean = clean.replace(/^Edit\s+/i, "");
-    clean = clean.replace(/\s+Help$/i, "");
-    return clean.trim();
 }
 
 function findFieldByLabel(labelPatterns, preferredSubSelectors = []) {
@@ -154,24 +174,20 @@ function findFieldByLabel(labelPatterns, preferredSubSelectors = []) {
                 ? attr.toLowerCase() === pattern.toLowerCase()
                 : pattern.test(attr);
             if (matches) {
-                for (const subSel of preferredSubSelectors) {
-                    const subEl = item.querySelector(subSel);
-                    if (subEl && isElementVisible(subEl)) {
-                        const val = cleanFieldValue(subEl.innerText || subEl.textContent);
-                        if (val) return val;
+                // Look strictly inside the value container (.test-id__field-value or .slds-form-element__control)
+                const valContainer = item.querySelector(".test-id__field-value, .slds-form-element__control, [data-field-value]");
+                if (valContainer && isElementVisible(valContainer)) {
+                    for (const subSel of preferredSubSelectors) {
+                        const subEl = valContainer.querySelector(subSel);
+                        if (subEl && isElementVisible(subEl)) {
+                            const val = cleanFieldValue(subEl.innerText || subEl.textContent);
+                            if (val && !isLabelText(val, labelPatterns)) return val;
+                        }
                     }
+                    const valEl = valContainer.querySelector("lightning-formatted-phone, lightning-formatted-email, lightning-formatted-text, .uiOutputText, .uiOutputTextArea, .slds-rich-text-editor__output, a:not(.slds-button)");
+                    const val = cleanFieldValue(valEl ? (valEl.innerText || valEl.textContent) : (valContainer.innerText || valContainer.textContent));
+                    if (val && !isLabelText(val, labelPatterns)) return val;
                 }
-                const defaultEl = item.querySelector("lightning-formatted-phone, lightning-formatted-email, lightning-formatted-text, .uiOutputText, .uiOutputTextArea, a, span:not(.slds-form-element__label)");
-                if (defaultEl && isElementVisible(defaultEl)) {
-                    const val = cleanFieldValue(defaultEl.innerText || defaultEl.textContent);
-                    if (val) return val;
-                }
-                const raw = cleanFieldValue(item.innerText || item.textContent);
-                if (raw && raw.toLowerCase().startsWith(attr.toLowerCase())) {
-                    const stripped = cleanFieldValue(raw.substring(attr.length));
-                    if (stripped) return stripped;
-                }
-                if (raw) return raw;
             }
         }
     }
@@ -180,7 +196,7 @@ function findFieldByLabel(labelPatterns, preferredSubSelectors = []) {
     const formElements = document.querySelectorAll(".slds-form-element");
     for (const fe of formElements) {
         if (!isElementVisible(fe)) continue;
-        const labelEl = fe.querySelector(".slds-form-element__label, label");
+        const labelEl = fe.querySelector(".slds-form-element__label, .test-id__field-label, label");
         if (!labelEl) continue;
         const labelText = (labelEl.innerText || labelEl.textContent || "").trim();
         for (const pattern of labelPatterns) {
@@ -188,18 +204,18 @@ function findFieldByLabel(labelPatterns, preferredSubSelectors = []) {
                 ? labelText.toLowerCase() === pattern.toLowerCase()
                 : pattern.test(labelText);
             if (matches) {
-                const control = fe.querySelector(".slds-form-element__control");
+                const control = fe.querySelector(".slds-form-element__control, .test-id__field-value");
                 if (control && isElementVisible(control)) {
                     for (const subSel of preferredSubSelectors) {
                         const subEl = control.querySelector(subSel);
                         if (subEl && isElementVisible(subEl)) {
                             const val = cleanFieldValue(subEl.innerText || subEl.textContent);
-                            if (val) return val;
+                            if (val && !isLabelText(val, labelPatterns)) return val;
                         }
                     }
-                    const valEl = control.querySelector("lightning-formatted-phone, lightning-formatted-email, lightning-formatted-text, .uiOutputText, .uiOutputTextArea, a, span");
+                    const valEl = control.querySelector("lightning-formatted-phone, lightning-formatted-email, lightning-formatted-text, .uiOutputText, .uiOutputTextArea, .slds-rich-text-editor__output, a:not(.slds-button)");
                     const val = cleanFieldValue(valEl ? (valEl.innerText || valEl.textContent) : (control.innerText || control.textContent));
-                    if (val) return val;
+                    if (val && !isLabelText(val, labelPatterns)) return val;
                 }
             }
         }
@@ -224,16 +240,14 @@ function extractSalesforceCase() {
     // 1. Case Number
     data.caseNumber = findFieldByLabel(["Case Number"]) || queryFirstVisibleText([
         '[data-target-selection-name="sfdc:RecordField.Case.CaseNumber"] lightning-formatted-text',
-        'records-record-layout-item[field-label="Case Number"] lightning-formatted-text',
+        'records-record-layout-item[field-label="Case Number"] .test-id__field-value lightning-formatted-text',
+        'records-record-layout-item[field-label="Case Number"] .slds-form-element__control lightning-formatted-text',
         '[data-field-name="CaseNumber"] lightning-formatted-text',
         '[data-field-name="CaseNumber"] .uiOutputText',
-        '.slds-page-header__title lightning-formatted-text',
-        '.slds-page-header__title .uiOutputText',
-        '.caseNumber',
-        'span.test-id__field-value[data-aura-rendered-by*="CaseNumber"]'
-    ]);
+        '.slds-page-header__title lightning-formatted-text'
+    ], ["Case Number"]);
 
-    if (!data.caseNumber && document.title) {
+    if ((!data.caseNumber || isLabelText(data.caseNumber)) && document.title) {
         const titleMatch = document.title.match(/^(\d{5,10})\s*\|/);
         if (titleMatch) {
             data.caseNumber = titleMatch[1];
@@ -243,31 +257,29 @@ function extractSalesforceCase() {
     // 2. Subject
     data.subject = findFieldByLabel(["Subject"]) || queryFirstVisibleText([
         '[data-target-selection-name="sfdc:RecordField.Case.Subject"] lightning-formatted-text',
-        'records-record-layout-item[field-label="Subject"] lightning-formatted-text',
+        'records-record-layout-item[field-label="Subject"] .test-id__field-value lightning-formatted-text',
+        'records-record-layout-item[field-label="Subject"] .slds-form-element__control lightning-formatted-text',
         '[data-field-name="Subject"] lightning-formatted-text',
-        '[data-field-name="Subject"] .uiOutputText',
-        'span.test-id__field-value[data-aura-rendered-by*="Subject"]'
-    ]);
+        '[data-field-name="Subject"] .uiOutputText'
+    ], ["Subject"]);
 
     // 3. Description / Notes
     data.description = findFieldByLabel(["Description"]) || queryFirstVisibleText([
         '[data-target-selection-name="sfdc:RecordField.Case.Description"] lightning-formatted-text',
-        'records-record-layout-item[field-label="Description"] lightning-formatted-text',
+        'records-record-layout-item[field-label="Description"] .test-id__field-value lightning-formatted-text',
+        'records-record-layout-item[field-label="Description"] .test-id__field-value .uiOutputTextArea',
+        'records-record-layout-item[field-label="Description"] .slds-rich-text-editor__output',
         '[data-field-name="Description"] lightning-formatted-text',
-        '[data-field-name="Description"] .uiOutputTextArea',
-        '.slds-rich-text-editor__output',
-        'span.test-id__field-value[data-aura-rendered-by*="Description"]'
-    ]);
+        '[data-field-name="Description"] .uiOutputTextArea'
+    ], ["Description"]);
 
     // 4. Contact Name (Case Contact Record)
     data.contactName = findFieldByLabel(["Contact Name", "Contact"], ["a[data-refid='recordId']", "a"]) || queryFirstVisibleText([
         '[data-target-selection-name="sfdc:RecordField.Case.ContactId"] a',
-        'records-record-layout-item[field-label="Contact Name"] a',
-        'records-record-layout-item[field-label="Contact Name"] lightning-formatted-text',
+        'records-record-layout-item[field-label="Contact Name"] .test-id__field-value a',
         '[data-field-name="ContactId"] a',
-        '[data-field-name="ContactId"] lightning-formatted-text',
         'a[data-refid="recordId"][href*="Contact"]'
-    ]);
+    ], ["Contact Name", "Contact"]);
 
     // 5. Contact Phone (Case Contact Record Phone)
     let phoneVal = findFieldByLabel(
@@ -276,16 +288,16 @@ function extractSalesforceCase() {
     ) || queryFirstVisibleText([
         '[data-target-selection-name*="Contact.Phone"] a',
         '[data-target-selection-name*="ContactPhone"] a',
+        'records-record-layout-item[field-label*="Phone"] .test-id__field-value a[href^="tel:"]',
+        'records-record-layout-item[field-label*="Phone"] .test-id__field-value lightning-formatted-phone',
         '[data-field-name="ContactPhone"] a',
         '[data-field-name="ContactPhone"] lightning-formatted-phone',
-        '[data-field-name="ContactPhone"]',
-        'lightning-formatted-phone a',
         'a[href^="tel:"]'
-    ]);
+    ], ["Contact Phone", "Phone", "Mobile"]);
     if (phoneVal) {
         phoneVal = phoneVal.replace(/^tel:/i, "").trim();
     }
-    data.contactPhone = phoneVal;
+    data.contactPhone = isLabelText(phoneVal) ? "" : phoneVal;
 
     // 6. Contact Email (Case Contact Record Email)
     let emailVal = findFieldByLabel(
@@ -294,26 +306,24 @@ function extractSalesforceCase() {
     ) || queryFirstVisibleText([
         '[data-target-selection-name*="Contact.Email"] a',
         '[data-target-selection-name*="ContactEmail"] a',
+        'records-record-layout-item[field-label*="Email"] .test-id__field-value a[href^="mailto:"]',
+        'records-record-layout-item[field-label*="Email"] .test-id__field-value lightning-formatted-email',
         '[data-field-name="ContactEmail"] a',
         '[data-field-name="ContactEmail"] lightning-formatted-email',
-        '[data-field-name="ContactEmail"]',
-        'lightning-formatted-email a',
         'a[href^="mailto:"]'
-    ]);
+    ], ["Contact Email", "Email"]);
     if (emailVal) {
         emailVal = emailVal.replace(/^mailto:/i, "").trim();
     }
-    data.contactEmail = emailVal;
+    data.contactEmail = isLabelText(emailVal) ? "" : emailVal;
 
     // 7. Account / Dealership Name (Case Account Record)
     data.accountName = findFieldByLabel(["Account Name", "Account", "Dealership", "Dealership Name"], ["a[data-refid='recordId']", "a"]) || queryFirstVisibleText([
         '[data-target-selection-name="sfdc:RecordField.Case.AccountId"] a',
-        'records-record-layout-item[field-label="Account Name"] a',
-        'records-record-layout-item[field-label="Account Name"] lightning-formatted-text',
+        'records-record-layout-item[field-label="Account Name"] .test-id__field-value a',
         '[data-field-name="AccountId"] a',
-        '[data-field-name="AccountId"] lightning-formatted-text',
         'a[data-refid="recordId"][href*="Account"]'
-    ]);
+    ], ["Account Name", "Account", "Dealership"]);
 
     // 8. Automate Server Code (from Case / Account record)
     data.serverCode = findFieldByLabel(
@@ -322,22 +332,22 @@ function extractSalesforceCase() {
     ) || queryFirstVisibleText([
         '[data-target-selection-name*="Server_Code"] lightning-formatted-text',
         '[data-target-selection-name*="Server"] lightning-formatted-text',
+        'records-record-layout-item[field-label*="Server" i] .test-id__field-value lightning-formatted-text',
         '[data-field-name*="Server_Code"] lightning-formatted-text',
-        '[data-field-name*="Server"] lightning-formatted-text',
-        '[data-field-name*="Server"] .uiOutputText'
-    ]);
+        '[data-field-name*="Server"] lightning-formatted-text'
+    ], [/server/i, "Server", "Server Code", "Server ID"]);
 
     // Build structured text block compatible with DashboardViewModel.ParseCaseText
     // Note: Contact and Dealership records are NOT passed here so ParseCaseText parses
     // any description fields first; IpcService uses contact/account record values as fallbacks.
     const structuredLines = [];
-    if (data.caseNumber) {
+    if (data.caseNumber && !isLabelText(data.caseNumber)) {
         structuredLines.push("Case Number", data.caseNumber);
     }
-    if (data.subject) {
+    if (data.subject && !isLabelText(data.subject)) {
         structuredLines.push("Subject", data.subject);
     }
-    if (data.description) {
+    if (data.description && !isLabelText(data.description)) {
         structuredLines.push("Description", data.description);
     }
 

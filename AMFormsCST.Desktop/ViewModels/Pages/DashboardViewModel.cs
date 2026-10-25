@@ -914,6 +914,20 @@ public partial class DashboardViewModel : ViewModel
         UpdateTemplatesVM();
     }
 
+    public static bool IsMatchingLabel(string? text, params string[] labels)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var t = text.Trim().TrimEnd(':');
+        foreach (var label in labels)
+        {
+            if (t.Equals(label, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public NoteModel ParseCaseText(string caseText)
     {
         var extSep = _supportTool?.Settings?.UserSettings?.ExtSeparator ?? " ";
@@ -1058,6 +1072,16 @@ public partial class DashboardViewModel : ViewModel
             {
                 company.CompanyCode = GetValueFromKeyValue("Company Number:", lines);
             }
+
+            if (IsMatchingLabel(note.CaseNumber, "Case Number", "Case #", "CaseNumber")) note.CaseNumber = string.Empty;
+            if (IsMatchingLabel(contact.Name, "Contact Name", "Contact", "Name")) contact.Name = string.Empty;
+            if (IsMatchingLabel(contact.Email, "Contact Email", "Email")) contact.Email = string.Empty;
+            if (IsMatchingLabel(contact.Phone, "Contact Phone", "Phone", "Mobile")) contact.Phone = string.Empty;
+            if (IsMatchingLabel(contact.PhoneExtension, "Ext", "Extension")) contact.PhoneExtension = string.Empty;
+            if (IsMatchingLabel(dealer.Name, "Account Name", "Company Name")) dealer.Name = string.Empty;
+            if (IsMatchingLabel(dealer.ServerCode, "Server ID", "Server Code", "Server", "Automate Server Code")) dealer.ServerCode = string.Empty;
+            if (IsMatchingLabel(company.Name, "Account Name", "Company Name")) company.Name = string.Empty;
+            if (IsMatchingLabel(company.CompanyCode, "Company Number", "Company Code")) company.CompanyCode = string.Empty;
 
             _logger?.LogInfo("Case text parsed into NoteModel.");
         }
