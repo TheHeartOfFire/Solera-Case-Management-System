@@ -142,6 +142,12 @@ public class FormGenHookService : IHostedService, IDisposable
 
                 if (isShift)
                 {
+                    var isFlyoutEnabled = App.GetService<ISupportTool>()?.Settings?.UserSettings?.EnableShiftRightClickFlyout ?? true;
+                    if (!isFlyoutEnabled)
+                    {
+                        return CallNextHookEx(_hookId, nCode, wParam, lParam);
+                    }
+
                     // Layer 3: Shift + RMB hotkey override across all external apps (Notepad, FormGen, VS Code, etc.)
                     // Directly display Solera Quick-Paste and Parse flyout at cursor
                     if (IsValidTargetWindowAt(hookStruct.pt, out IntPtr rootHwnd))

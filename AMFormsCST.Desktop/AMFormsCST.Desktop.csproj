@@ -57,6 +57,9 @@
     <EmbeddedResource Include="SampleData\Formgen Sample Data\Pdf Sample\Sample Pdf.formgen">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
+    <Content Include="..\BrowserExtension\**\*" Link="BrowserExtension\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

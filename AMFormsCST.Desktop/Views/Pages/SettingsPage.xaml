@@ -74,14 +74,19 @@
                     <ui:ToggleSwitch
                         Content="Enable Windows Explorer context menu for .formgen files"
                         IsChecked="{Binding EnableExplorerContextMenu, Mode=TwoWay}"
-                        Margin="0,0,0,12" />
+                        Margin="0,0,0,6" />
 
                     <TextBlock
-                        Margin="0,0,0,4"
+                        Margin="0,0,0,12"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="Adds 'Open in Solera Formgen Utilities' to the right-click menu of .formgen files." />
 
-                    <TextBlock Text="FormGen Executable Path (Optional)" Margin="0,8,0,0" />
+                    <ui:ToggleSwitch
+                        Content="Enable Shift + Right-Click Quick-Paste Flyout across external apps"
+                        IsChecked="{Binding EnableShiftRightClickFlyout, Mode=TwoWay}"
+                        Margin="0,0,0,12" />
+
+                    <TextBlock Text="FormGen Executable / Batch Path (Optional)" Margin="0,4,0,0" />
                     <Grid Margin="0,4,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -89,7 +94,7 @@
                         </Grid.ColumnDefinitions>
                         <ui:TextBox
                             Grid.Column="0"
-                            PlaceholderText="C:\path\to\formgen.exe"
+                            PlaceholderText="C:\Users\...\AppData\Roaming\NewFormGen\NewFormGen.bat"
                             Text="{Binding FormGenExecutablePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                         <ui:Button
                             Grid.Column="1"
@@ -121,6 +126,88 @@
                 </StackPanel>
             </ui:CardControl>
 
+            <!--  FormGen Modifications & Patching Section  -->
+            <ui:CardControl Margin="0,0,0,10" Header="FormGen Modifications &amp; Patching">
+                <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,10"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Deploy or remove the Solera FormGen integration payload and toggle individual FormGen features. Unpatching removes all traces of modification while remembering your toggle preferences."
+                        TextWrapping="Wrap" />
+
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock FontWeight="Medium" Text="FormGen Payload Status" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="{Binding FormGenPatchStatus}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ui:Button
+                            Grid.Column="1"
+                            Margin="0,0,8,0"
+                            Content="Patch FormGen"
+                            Appearance="Primary"
+                            Icon="{ui:SymbolIcon Wrench24}"
+                            Command="{Binding PatchFormGenCommand}" />
+                        <ui:Button
+                            Grid.Column="2"
+                            Content="Unpatch FormGen"
+                            Appearance="Secondary"
+                            Icon="{ui:SymbolIcon ArrowUndo24}"
+                            Command="{Binding UnpatchFormGenCommand}" />
+                    </Grid>
+
+                    <TextBlock
+                        Margin="0,2,0,8"
+                        FontWeight="Medium"
+                        Text="Individual FormGen Feature Toggles" />
+
+                    <StackPanel IsEnabled="{Binding IsFormGenPatched}">
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Preserve Code Window (UdfDlg) tab selection on Push &amp; form switch"
+                            IsChecked="{Binding FormGenPreserveUdfTab, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Right-click empty form canvas to paste Code Block as new Text / Numeric field"
+                            IsChecked="{Binding FormGenCanvasPasteField, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Focus existing tab &amp; show non-intrusive toast when opening an already-open file"
+                            IsChecked="{Binding FormGenAlreadyOpenToast, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Inject Solera Tools &amp; Quick Paste into FormGen right-click menus"
+                            IsChecked="{Binding FormGenContextMenus, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Enable multi-step Undo / Redo (Ctrl+Z / Ctrl+Y) in Code &amp; Prompt editors"
+                            IsChecked="{Binding FormGenEditorUndoRedo, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Add '⚡ Fill from Solera CMS' auto-fill buttons to FormGen dialogs"
+                            IsChecked="{Binding FormGenDialogAutoFill, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,4"
+                            Content="Auto-restore previously open forms when FormGen starts or reloads"
+                            IsChecked="{Binding FormGenAutoRestoreForms, Mode=TwoWay}" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:CardControl>
+
             <!--  Browser Integration Section  -->
             <ui:CardControl Margin="0,0,0,10" Header="Browser Integration">
                 <StackPanel>
@@ -133,8 +220,9 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                             <TextBlock FontWeight="Medium" Text="Native Messaging Bridge" />
                             <TextBlock
                                 FontSize="12"
@@ -143,10 +231,17 @@
                         </StackPanel>
                         <ui:Button
                             Grid.Column="1"
+                            Margin="0,0,8,0"
                             Content="Register Bridge"
                             Appearance="Primary"
                             Icon="{ui:SymbolIcon CheckmarkCircle24}"
                             Command="{Binding RegisterBrowserBridgeCommand}" />
+                        <ui:Button
+                            Grid.Column="2"
+                            Content="Remove Bridge"
+                            Appearance="Secondary"
+                            Icon="{ui:SymbolIcon Delete24}"
+                            Command="{Binding RemoveBrowserBridgeCommand}" />
                     </Grid>
 
                     <TextBlock Margin="0,4,0,6" FontWeight="Medium" Text="Launch Browser with Extension" />

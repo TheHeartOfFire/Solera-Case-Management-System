@@ -130,22 +130,97 @@ public class BrowserIntegrationService : IBrowserIntegrationService
                 return false;
             }
 
-            string targetUrl = browserType switch
+            string browserDisplayName = browserType switch
+            {
+                BrowserType.OperaGX => "Opera GX",
+                BrowserType.Edge => "Microsoft Edge",
+                _ => "Google Chrome"
+            };
+
+            string extensionsUrl = browserType switch
             {
                 BrowserType.OperaGX => "opera://extensions",
                 BrowserType.Edge => "edge://extensions",
                 _ => "chrome://extensions"
             };
 
-            var psi = new ProcessStartInfo
+            // Copy extension directory path to clipboard for instant Ctrl+V if needed
+            try
             {
-                FileName = exe,
-                Arguments = $"--load-extension=\"{extDir}\" {targetUrl}",
-                UseShellExecute = true
-            };
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    try { System.Windows.Clipboard.SetText(extDir); } catch { }
+                });
+            }
+            catch { }
 
-            Process.Start(psi);
-            _logger?.LogInfo($"Launched {browserType} with extension from: {extDir}");
+            var guidePath = EnsureInstallGuideHtml(extDir, browserDisplayName, extensionsUrl);
+            var guideUri = new Uri(guidePath).AbsoluteUri;
+
+            bool isAlreadyRunning = IsBrowserProcessRunning(browserType, exe);
+            bool restartBrowser = false;
+
+            if (isAlreadyRunning && System.Windows.Application.Current != null)
+            {
+                var choice = System.Windows.MessageBox.Show(
+                    $"{browserDisplayName} is currently open.\n\n" +
+                    $"Chromium browsers only apply '--load-extension' when starting a new browser session.\n\n" +
+                    $"• Click 'Yes' to restart {browserDisplayName} and load the Solera CMS extension automatically (your open tabs will restore).\n" +
+                    $"• Click 'No' to keep {browserDisplayName} open — we will open the setup tab in {browserDisplayName} and open the extension folder (path already copied to your clipboard).",
+                    $"Install Solera CMS Extension in {browserDisplayName}",
+                    System.Windows.MessageBoxButton.YesNoCancel,
+                    System.Windows.MessageBoxImage.Question);
+
+                if (choice == System.Windows.MessageBoxResult.Cancel)
+                    return false;
+
+                restartBrowser = choice == System.Windows.MessageBoxResult.Yes;
+            }
+
+            if (restartBrowser)
+            {
+                CloseBrowserProcesses(browserType, exe);
+                System.Threading.Thread.Sleep(700);
+            }
+
+            if (!isAlreadyRunning || restartBrowser)
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = $"--load-extension=\"{extDir}\" \"{guideUri}\"",
+                    UseShellExecute = true
+                };
+                Process.Start(psi);
+                _logger?.LogInfo($"Launched {browserDisplayName} with --load-extension from: {extDir}");
+            }
+            else
+            {
+                // Browser is already running and user chose not to restart:
+                // Open the guide HTML in a new tab in the running browser (which activates the browser window)
+                // and open Windows Explorer with the extension folder selected for 1-second drag-and-drop / Load Unpacked.
+                var psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = $"\"{guideUri}\"",
+                    UseShellExecute = true
+                };
+                Process.Start(psi);
+
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"/select,\"{extDir}\"",
+                        UseShellExecute = true
+                    });
+                }
+                catch { }
+
+                _logger?.LogInfo($"Opened extension setup guide in running {browserDisplayName} and revealed folder: {extDir}");
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -153,6 +228,158 @@ public class BrowserIntegrationService : IBrowserIntegrationService
             _logger?.LogError($"Error launching browser '{browserType}' with extension.", ex);
             return false;
         }
+    }
+
+    private static bool IsBrowserProcessRunning(BrowserType browserType, string exePath)
+    {
+        try
+        {
+            string procName = browserType switch
+            {
+                BrowserType.OperaGX => "opera",
+                BrowserType.Edge => "msedge",
+                _ => "chrome"
+            };
+
+            var procs = Process.GetProcessesByName(procName);
+            try
+            {
+                if (procs.Length == 0) return false;
+                if (browserType == BrowserType.OperaGX)
+                {
+                    var exeDir = Path.GetDirectoryName(exePath);
+                    foreach (var p in procs)
+                    {
+                        try
+                        {
+                            var pPath = p.MainModule?.FileName;
+                            if (!string.IsNullOrWhiteSpace(pPath) &&
+                                !string.IsNullOrWhiteSpace(exeDir) &&
+                                pPath.StartsWith(exeDir, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return true;
+                            }
+                        }
+                        catch
+                        {
+                            return true;
+                        }
+                    }
+                }
+                return procs.Length > 0;
+            }
+            finally
+            {
+                foreach (var p in procs) p.Dispose();
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void CloseBrowserProcesses(BrowserType browserType, string exePath)
+    {
+        try
+        {
+            string procName = browserType switch
+            {
+                BrowserType.OperaGX => "opera",
+                BrowserType.Edge => "msedge",
+                _ => "chrome"
+            };
+
+            var exeDir = Path.GetDirectoryName(exePath);
+            var procs = Process.GetProcessesByName(procName);
+            try
+            {
+                foreach (var p in procs)
+                {
+                    try
+                    {
+                        if (browserType == BrowserType.OperaGX && !string.IsNullOrWhiteSpace(exeDir))
+                        {
+                            var pPath = p.MainModule?.FileName;
+                            if (!string.IsNullOrWhiteSpace(pPath) && !pPath.StartsWith(exeDir, StringComparison.OrdinalIgnoreCase))
+                                continue;
+                        }
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                        {
+                            p.CloseMainWindow();
+                        }
+                    }
+                    catch { }
+                }
+
+                System.Threading.Thread.Sleep(500);
+
+                foreach (var p in procs)
+                {
+                    try
+                    {
+                        if (!p.HasExited)
+                        {
+                            p.Kill();
+                            p.WaitForExit(1500);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            finally
+            {
+                foreach (var p in procs) p.Dispose();
+            }
+        }
+        catch { }
+    }
+
+    private static string EnsureInstallGuideHtml(string extDir, string browserName, string extensionsUrl)
+    {
+        var htmlPath = Path.Combine(extDir, "install-guide.html");
+        try
+        {
+            var escapedDir = extDir.Replace("\\", "\\\\");
+            var html = $@"<!DOCTYPE html>
+<html lang=""en"">
+<head>
+<meta charset=""UTF-8"">
+<title>Solera CMS Browser Extension Setup</title>
+<style>
+  body {{ font-family: 'Segoe UI', system-ui, sans-serif; background: #12131a; color: #f0f2f8; margin: 0; padding: 40px 20px; display: flex; justify-content: center; }}
+  .card {{ max-width: 680px; width: 100%; background: #1c1e29; border: 1px solid #2e3244; border-radius: 12px; padding: 28px 32px; box-shadow: 0 12px 32px rgba(0,0,0,0.45); }}
+  h1 {{ margin: 0 0 8px 0; font-size: 22px; color: #63b3ed; }}
+  p {{ color: #b5bcd0; line-height: 1.55; margin: 8px 0 16px 0; }}
+  .step {{ background: #242736; border-left: 4px solid #63b3ed; padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; }}
+  .step strong {{ color: #fff; }}
+  code {{ background: #12131a; color: #90cdf4; padding: 4px 8px; border-radius: 4px; font-family: Consolas, monospace; font-size: 13px; word-break: break-all; }}
+  .btn {{ display: inline-block; background: #3182ce; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 8px; margin-right: 8px; }}
+  .btn:hover {{ background: #2b6cb0; }}
+  .badge {{ display: inline-block; background: #276749; color: #9ae6b4; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; margin-bottom: 12px; }}
+</style>
+</head>
+<body>
+  <div class=""card"">
+    <div class=""badge"">✓ Native Messaging Bridge Registered</div>
+    <h1>Solera CMS Extension for {browserName}</h1>
+    <p>If {browserName} was launched fresh, the extension is already active! If {browserName} was already running or blocks command-line extensions, complete setup in 10 seconds:</p>
+    <div class=""step"">
+      <strong>Step 1:</strong> Open <code>{extensionsUrl}</code> in {browserName} and enable <strong>Developer mode</strong> (top-right toggle).<br/>
+      <button class=""btn"" onclick=""navigator.clipboard.writeText('{extensionsUrl}'); this.textContent='Copied {extensionsUrl}!';"">Copy {extensionsUrl}</button>
+    </div>
+    <div class=""step"">
+      <strong>Step 2:</strong> Click <strong>Load unpacked</strong> and paste (<code>Ctrl+V</code>) the extension folder path below (already copied to your clipboard):<br/><br/>
+      <code>{extDir}</code><br/>
+      <button class=""btn"" onclick=""navigator.clipboard.writeText('{escapedDir}'); this.textContent='Copied Folder Path!';"">Copy Extension Folder Path</button>
+    </div>
+  </div>
+</body>
+</html>";
+            File.WriteAllText(htmlPath, html);
+        }
+        catch { }
+        return htmlPath;
     }
 
     private string? EnsureManifestUpdated()
@@ -199,20 +426,38 @@ public class BrowserIntegrationService : IBrowserIntegrationService
 
     public static string? GetExtensionDirectory()
     {
-        var candidates = new[]
+        var localAppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AMFormsCST", "BrowserExtension");
+
+        var sourceCandidates = new[]
         {
             Path.Combine(AppContext.BaseDirectory, "BrowserExtension"),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "BrowserExtension")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "BrowserExtension")),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AMFormsCST", "BrowserExtension")
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "BrowserExtension"))
         };
 
-        foreach (var candidate in candidates)
+        string? sourceDir = sourceCandidates.FirstOrDefault(c => File.Exists(Path.Combine(c, "manifest.json")));
+
+        if (sourceDir != null)
         {
-            if (File.Exists(Path.Combine(candidate, "manifest.json")))
+            try
             {
-                return candidate;
+                Directory.CreateDirectory(localAppDataDir);
+                foreach (var file in Directory.GetFiles(sourceDir))
+                {
+                    var destFile = Path.Combine(localAppDataDir, Path.GetFileName(file));
+                    File.Copy(file, destFile, overwrite: true);
+                }
+                return localAppDataDir;
             }
+            catch
+            {
+                return sourceDir;
+            }
+        }
+
+        if (File.Exists(Path.Combine(localAppDataDir, "manifest.json")))
+        {
+            return localAppDataDir;
         }
 
         return null;
@@ -224,12 +469,32 @@ public class BrowserIntegrationService : IBrowserIntegrationService
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
+        if (browserType == BrowserType.OperaGX)
+        {
+            // Check Opera Software registry keys first for custom or standard Opera GX installs
+            try
+            {
+                using var operaKey = Registry.CurrentUser.OpenSubKey(@"Software\Opera Software");
+                var regInstallPath = operaKey?.GetValue("Last Opera GX Stable Install Path") as string
+                                  ?? operaKey?.GetValue("Last Install Path") as string;
+                if (!string.IsNullOrWhiteSpace(regInstallPath))
+                {
+                    var regOperaExe = Path.Combine(regInstallPath, "opera.exe");
+                    if (File.Exists(regOperaExe)) return regOperaExe;
+                    var regLauncherExe = Path.Combine(regInstallPath, "launcher.exe");
+                    if (File.Exists(regLauncherExe)) return regLauncherExe;
+                }
+            }
+            catch { }
+        }
+
         string[] candidates = browserType switch
         {
             BrowserType.OperaGX =>
             [
                 Path.Combine(localAppData, "Programs", "Opera GX", "opera.exe"),
                 Path.Combine(localAppData, "Programs", "Opera GX", "launcher.exe"),
+                Path.Combine(programFiles, "Opera GX", "opera.exe"),
                 Path.Combine(programFiles, "Opera GX", "launcher.exe"),
                 Path.Combine(programFilesX86, "Opera GX", "launcher.exe")
             ],

@@ -226,6 +226,78 @@ public class FormGenLauncherHelperTests
         }
     }
 
+    [Fact]
+    public void UserSettings_DefaultFeatureToggles_AreAllEnabledByDefault()
+    {
+        var orgMock = new Moq.Mock<AMFormsCST.Core.Interfaces.UserSettings.IOrgVariables>();
+        var settings = new AMFormsCST.Core.Types.UserSettings.UserSettings(orgMock.Object);
+        Assert.True(settings.IsFormGenPatched);
+        Assert.True(settings.FormGenPreserveUdfTab);
+        Assert.True(settings.FormGenCanvasPasteField);
+        Assert.True(settings.FormGenAlreadyOpenToast);
+        Assert.True(settings.FormGenContextMenus);
+        Assert.True(settings.FormGenEditorUndoRedo);
+        Assert.True(settings.FormGenDialogAutoFill);
+        Assert.True(settings.FormGenAutoRestoreForms);
+        Assert.True(settings.EnableShiftRightClickFlyout);
+    }
+
+    [Fact]
+    public void WriteAgentConfig_WritesPropertiesFileWithFeatureFlags()
+    {
+        var tempPortFile = UsePrivatePortFile();
+        var dir = Path.GetDirectoryName(tempPortFile)!;
+        var configPath = Path.Combine(dir, "formgen_agent.properties");
+
+        try
+        {
+            var orgMock = new Moq.Mock<AMFormsCST.Core.Interfaces.UserSettings.IOrgVariables>();
+            var settings = new AMFormsCST.Core.Types.UserSettings.UserSettings(orgMock.Object)
+            {
+                FormGenPreserveUdfTab = true,
+                FormGenCanvasPasteField = false,
+                FormGenAlreadyOpenToast = true
+            };
+            FormGenLauncherHelper.WriteAgentConfig(settings);
+
+            Assert.True(File.Exists(configPath));
+            var content = File.ReadAllText(configPath);
+            Assert.Contains("FormGenPreserveUdfTab=true", content);
+            Assert.Contains("FormGenCanvasPasteField=false", content);
+            Assert.Contains("FormGenAlreadyOpenToast=true", content);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void RestoreVanillaBatch_AlsoRemovesDeployedJarFile()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "FormGenUnpatch_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
+        var tempJar = Path.Combine(tempDir, "FormGenAgent.jar");
+
+        try
+        {
+            File.WriteAllText(tempBat, "cd /d \"%~dp0\"\r\njava -Xms1024m -cp * -javaagent:FormGenAgent.jar com.automate.formgen.NewFormGen %*");
+            File.WriteAllText(tempJar, "dummy jar");
+
+            Assert.True(FormGenLauncherHelper.IsBatchPatched(tempBat));
+
+            FormGenLauncherHelper.RestoreVanillaBatch(tempBat);
+
+            Assert.False(FormGenLauncherHelper.IsBatchPatched(tempBat));
+            Assert.False(File.Exists(tempJar));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
     /// <summary>
     /// Points the launcher helper at a private directory for the current test's async flow, so parallel tests
     /// and background sync calls never share (or delete) the real %TEMP%\formgen_agent.port.
@@ -238,5 +310,3 @@ public class FormGenLauncherHelperTests
         return Path.Combine(dir, "formgen_agent.port");
     }
 }
-
-

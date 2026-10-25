@@ -55,6 +55,27 @@ public class IpcLiveVariables
     [JsonPropertyName("activeCodeSnippetOutputType")]
     public string ActiveCodeSnippetOutputType { get; set; } = string.Empty;
 
+    [JsonPropertyName("formGenPreserveUdfTab")]
+    public string FormGenPreserveUdfTab { get; set; } = "true";
+
+    [JsonPropertyName("formGenCanvasPasteField")]
+    public string FormGenCanvasPasteField { get; set; } = "true";
+
+    [JsonPropertyName("formGenAlreadyOpenToast")]
+    public string FormGenAlreadyOpenToast { get; set; } = "true";
+
+    [JsonPropertyName("formGenContextMenus")]
+    public string FormGenContextMenus { get; set; } = "true";
+
+    [JsonPropertyName("formGenEditorUndoRedo")]
+    public string FormGenEditorUndoRedo { get; set; } = "true";
+
+    [JsonPropertyName("formGenDialogAutoFill")]
+    public string FormGenDialogAutoFill { get; set; } = "true";
+
+    [JsonPropertyName("formGenAutoRestoreForms")]
+    public string FormGenAutoRestoreForms { get; set; } = "true";
+
     public Dictionary<string, string> ToDictionary()
     {
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -74,7 +95,14 @@ public class IpcLiveVariables
             [nameof(ActiveTemplateName)] = ActiveTemplateName,
             [nameof(ActiveTemplateText)] = ActiveTemplateText,
             [nameof(ActiveCodeSnippetText)] = ActiveCodeSnippetText,
-            [nameof(ActiveCodeSnippetOutputType)] = ActiveCodeSnippetOutputType
+            [nameof(ActiveCodeSnippetOutputType)] = ActiveCodeSnippetOutputType,
+            [nameof(FormGenPreserveUdfTab)] = FormGenPreserveUdfTab,
+            [nameof(FormGenCanvasPasteField)] = FormGenCanvasPasteField,
+            [nameof(FormGenAlreadyOpenToast)] = FormGenAlreadyOpenToast,
+            [nameof(FormGenContextMenus)] = FormGenContextMenus,
+            [nameof(FormGenEditorUndoRedo)] = FormGenEditorUndoRedo,
+            [nameof(FormGenDialogAutoFill)] = FormGenDialogAutoFill,
+            [nameof(FormGenAutoRestoreForms)] = FormGenAutoRestoreForms
         };
     }
 }

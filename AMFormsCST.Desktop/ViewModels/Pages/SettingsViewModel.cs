@@ -66,6 +66,39 @@ public partial class SettingsViewModel : ViewModel
     [ObservableProperty]
     private string _formgenAssociationStatus = string.Empty;
 
+    [ObservableProperty]
+    private bool _isFormGenPatched = true;
+
+    [ObservableProperty]
+    private string _formGenPatchStatus = string.Empty;
+
+    [ObservableProperty]
+    private bool _formGenPreserveUdfTab = true;
+
+    [ObservableProperty]
+    private bool _formGenCanvasPasteField = true;
+
+    [ObservableProperty]
+    private bool _formGenAlreadyOpenToast = true;
+
+    [ObservableProperty]
+    private bool _formGenContextMenus = true;
+
+    [ObservableProperty]
+    private bool _formGenEditorUndoRedo = true;
+
+    [ObservableProperty]
+    private bool _formGenDialogAutoFill = true;
+
+    [ObservableProperty]
+    private bool _formGenAutoRestoreForms = true;
+
+    [ObservableProperty]
+    private bool _enableShiftRightClickFlyout = true;
+
+    [ObservableProperty]
+    private bool _isBrowserBridgeRegistered;
+
     public SettingsViewModel(
         IUpdateManagerService updateManagerService,
         ISupportTool supportTool,
@@ -93,6 +126,8 @@ public partial class SettingsViewModel : ViewModel
     {
         _logger?.LogInfo("SettingsPage navigated to.");
         UpdateFormgenAssociationStatus();
+        UpdateFormGenPatchStatus();
+        UpdateBrowserStatus();
     }
 
     private void InitializeViewModel()
@@ -117,8 +152,21 @@ public partial class SettingsViewModel : ViewModel
         EnableExplorerContextMenu = userSettings.EnableExplorerContextMenu;
         FormGenExecutablePath = userSettings.FormGenExecutablePath;
 
+        IsFormGenPatched = userSettings.IsFormGenPatched;
+        FormGenPreserveUdfTab = userSettings.FormGenPreserveUdfTab;
+        FormGenCanvasPasteField = userSettings.FormGenCanvasPasteField;
+        FormGenAlreadyOpenToast = userSettings.FormGenAlreadyOpenToast;
+        FormGenContextMenus = userSettings.FormGenContextMenus;
+        FormGenEditorUndoRedo = userSettings.FormGenEditorUndoRedo;
+        FormGenDialogAutoFill = userSettings.FormGenDialogAutoFill;
+        FormGenAutoRestoreForms = userSettings.FormGenAutoRestoreForms;
+        EnableShiftRightClickFlyout = userSettings.EnableShiftRightClickFlyout;
+
+        FormGenLauncherHelper.WriteAgentConfig(userSettings, _logger);
+
         UpdateBrowserStatus();
         UpdateFormgenAssociationStatus();
+        UpdateFormGenPatchStatus();
 
         _isInitialized = true;
         _logger?.LogInfo("SettingsViewModel initialized and settings loaded.");
@@ -178,7 +226,34 @@ public partial class SettingsViewModel : ViewModel
                     _supportTool.Settings.UserSettings.FormGenExecutablePath = FormGenExecutablePath;
                     _explorerContextMenuService?.SyncWithSettings(EnableExplorerContextMenu, FormGenExecutablePath);
                     UpdateFormgenAssociationStatus();
+                    UpdateFormGenPatchStatus();
                     _logger?.LogInfo($"Explorer context menu settings updated: Enabled={EnableExplorerContextMenu}, Path={FormGenExecutablePath}");
+                    break;
+
+                case nameof(IsFormGenPatched):
+                case nameof(FormGenPreserveUdfTab):
+                case nameof(FormGenCanvasPasteField):
+                case nameof(FormGenAlreadyOpenToast):
+                case nameof(FormGenContextMenus):
+                case nameof(FormGenEditorUndoRedo):
+                case nameof(FormGenDialogAutoFill):
+                case nameof(FormGenAutoRestoreForms):
+                case nameof(EnableShiftRightClickFlyout):
+                    var us = _supportTool.Settings.UserSettings;
+                    us.IsFormGenPatched = IsFormGenPatched;
+                    us.FormGenPreserveUdfTab = FormGenPreserveUdfTab;
+                    us.FormGenCanvasPasteField = FormGenCanvasPasteField;
+                    us.FormGenAlreadyOpenToast = FormGenAlreadyOpenToast;
+                    us.FormGenContextMenus = FormGenContextMenus;
+                    us.FormGenEditorUndoRedo = FormGenEditorUndoRedo;
+                    us.FormGenDialogAutoFill = FormGenDialogAutoFill;
+                    us.FormGenAutoRestoreForms = FormGenAutoRestoreForms;
+                    us.EnableShiftRightClickFlyout = EnableShiftRightClickFlyout;
+
+                    FormGenLauncherHelper.WriteAgentConfig(us, _logger);
+                    SyncFeatureTogglesToAgent();
+                    UpdateFormGenPatchStatus();
+                    _logger?.LogInfo($"FormGen feature toggle '{e.PropertyName}' updated.");
                     break;
             }
 
@@ -194,6 +269,232 @@ public partial class SettingsViewModel : ViewModel
         }
     }
 
+    private void SyncFeatureTogglesToAgent()
+    {
+        if (!_isInitialized || !IsFormGenPatched) return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var ipcService = App.GetService<IpcService>();
+                var vars = ipcService?.GetLiveVariables();
+                if (vars != null)
+                {
+                    FormGenLauncherHelper.SyncStateToAgent(vars, Environment.ProcessPath, _logger);
+                }
+            }
+            catch { }
+        });
+    }
+
+    public void UpdateFormGenPatchStatus()
+    {
+        bool batPatched = FormGenLauncherHelper.IsBatchPatched(FormGenExecutablePath);
+        bool agentActive = FormGenLauncherHelper.IsAgentActive();
+
+        if (IsFormGenPatched)
+        {
+            if (agentActive)
+            {
+                FormGenPatchStatus = "Patched & Active (FormGenAgent connected to running FormGen)";
+            }
+            else if (batPatched)
+            {
+                FormGenPatchStatus = "Patched & Ready (Modifications active on FormGen launch)";
+            }
+            else
+            {
+                FormGenPatchStatus = "Enabled (Click 'Patch FormGen' to deploy payload to FormGen)";
+            }
+        }
+        else
+        {
+            FormGenPatchStatus = "Unpatched (Vanilla FormGen — all modifications removed; feature states saved)";
+        }
+    }
+
+    [RelayCommand]
+    private void PatchFormGen()
+    {
+        try
+        {
+            var batPath = FormGenLauncherHelper.ResolveFormGenBatchPath(FormGenExecutablePath);
+            if (string.IsNullOrWhiteSpace(batPath) || !File.Exists(batPath))
+            {
+                _snackbarService?.Show(
+                    "FormGen Not Found",
+                    "Could not find NewFormGen.bat. Please browse for NewFormGen.bat in Windows Integration above.",
+                    ControlAppearance.Danger,
+                    new SymbolIcon(SymbolRegular.ErrorCircle24),
+                    TimeSpan.FromSeconds(4));
+                return;
+            }
+
+            var openForms = FormGenLauncherHelper.GetOpenFormsFromAgent(_logger);
+            bool isRunning = FormGenLauncherHelper.IsFormGenProcessRunning();
+
+            string openFormsText = openForms.Count > 0
+                ? $"\n\nOpen form(s) that will be automatically reopened ({openForms.Count}):\n• " +
+                  string.Join("\n• ", openForms.Select(Path.GetFileName))
+                : string.Empty;
+
+            string message = isRunning
+                ? "FormGen is currently running.\n\n" +
+                  "Patching FormGen will deploy the Solera payload, close FormGen, and relaunch it with your modifications enabled.\n\n" +
+                  "Please save any unsaved changes in FormGen before proceeding." +
+                  openFormsText +
+                  "\n\nAre you ready to reload FormGen and apply the patch?"
+                : "Deploy the Solera payload to FormGen and launch FormGen now?" +
+                  openFormsText +
+                  "\n\nClick 'Yes' to patch and launch FormGen, or 'No' to patch without launching.";
+
+            var buttons = isRunning ? System.Windows.MessageBoxButton.OKCancel : System.Windows.MessageBoxButton.YesNoCancel;
+            var result = System.Windows.MessageBox.Show(
+                message,
+                "Patch FormGen — Prepare for Reload",
+                buttons,
+                System.Windows.MessageBoxImage.Information);
+
+            if (result == System.Windows.MessageBoxResult.Cancel)
+                return;
+
+            bool shouldRelaunch = isRunning ? (result == System.Windows.MessageBoxResult.OK) : (result == System.Windows.MessageBoxResult.Yes);
+
+            // Re-query open forms right before closing in case the user saved a new form while the dialog was up
+            if (isRunning)
+            {
+                var latestForms = FormGenLauncherHelper.GetOpenFormsFromAgent(_logger);
+                if (latestForms.Count > 0)
+                {
+                    openForms = latestForms;
+                }
+            }
+
+            IsFormGenPatched = true;
+            _supportTool.Settings.UserSettings.IsFormGenPatched = true;
+            _supportTool.SaveAllSettings();
+
+            bool ok = FormGenLauncherHelper.PatchAndReloadFormGen(
+                batPath,
+                _supportTool.Settings.UserSettings,
+                openForms,
+                relaunchFormGen: shouldRelaunch,
+                _logger);
+
+            UpdateFormGenPatchStatus();
+
+            if (ok)
+            {
+                _snackbarService?.Show(
+                    "FormGen Patched",
+                    shouldRelaunch
+                        ? $"Payload deployed and FormGen reloaded{(openForms.Count > 0 ? $" (restoring {openForms.Count} form(s))" : "")}."
+                        : "Payload deployed to NewFormGen.bat. Feature toggles are active.",
+                    ControlAppearance.Success,
+                    new SymbolIcon(SymbolRegular.CheckmarkCircle24),
+                    TimeSpan.FromSeconds(4));
+            }
+            else
+            {
+                _snackbarService?.Show(
+                    "Patch Failed",
+                    "Could not patch FormGen. Check logs for details.",
+                    ControlAppearance.Danger,
+                    new SymbolIcon(SymbolRegular.ErrorCircle24),
+                    TimeSpan.FromSeconds(4));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error patching FormGen.", ex);
+        }
+    }
+
+    [RelayCommand]
+    private void UnpatchFormGen()
+    {
+        try
+        {
+            var batPath = FormGenLauncherHelper.ResolveFormGenBatchPath(FormGenExecutablePath);
+            if (string.IsNullOrWhiteSpace(batPath) || !File.Exists(batPath))
+            {
+                _snackbarService?.Show(
+                    "FormGen Not Found",
+                    "Could not find NewFormGen.bat. Please browse for NewFormGen.bat in Windows Integration above.",
+                    ControlAppearance.Danger,
+                    new SymbolIcon(SymbolRegular.ErrorCircle24),
+                    TimeSpan.FromSeconds(4));
+                return;
+            }
+
+            var openForms = FormGenLauncherHelper.GetOpenFormsFromAgent(_logger);
+            bool isRunning = FormGenLauncherHelper.IsFormGenProcessRunning();
+
+            string openFormsText = openForms.Count > 0
+                ? $"\n\nOpen form(s) to reopen after unpatching ({openForms.Count}):\n• " +
+                  string.Join("\n• ", openForms.Select(Path.GetFileName))
+                : string.Empty;
+
+            string message = isRunning
+                ? "FormGen is currently running.\n\n" +
+                  "Unpatching FormGen will close FormGen, remove all traces of Solera modifications (restoring vanilla NewFormGen.bat and deleting FormGenAgent.jar), and relaunch vanilla FormGen.\n\n" +
+                  "Individual feature toggles will be disabled while unpatched, but their states will be remembered.\n\n" +
+                  "Please save any unsaved changes in FormGen before proceeding." +
+                  openFormsText +
+                  "\n\nProceed with unpatching and reloading FormGen?"
+                : "Remove all traces of Solera modifications from FormGen (restore vanilla NewFormGen.bat and delete FormGenAgent.jar)?\n\n" +
+                  "Individual feature toggles will be disabled while unpatched, but their states will be remembered.";
+
+            var result = System.Windows.MessageBox.Show(
+                message,
+                "Unpatch FormGen — Remove Modifications",
+                System.Windows.MessageBoxButton.OKCancel,
+                System.Windows.MessageBoxImage.Warning);
+
+            if (result != System.Windows.MessageBoxResult.OK)
+                return;
+
+            if (isRunning)
+            {
+                var latestForms = FormGenLauncherHelper.GetOpenFormsFromAgent(_logger);
+                if (latestForms.Count > 0)
+                {
+                    openForms = latestForms;
+                }
+            }
+
+            // Set IsFormGenPatched = false (disables toggle controls in UI without altering their saved boolean values)
+            IsFormGenPatched = false;
+            _supportTool.Settings.UserSettings.IsFormGenPatched = false;
+            _supportTool.SaveAllSettings();
+
+            bool ok = FormGenLauncherHelper.UnpatchAndReloadFormGen(
+                batPath,
+                _supportTool.Settings.UserSettings,
+                openForms,
+                relaunchFormGen: isRunning,
+                _logger);
+
+            UpdateFormGenPatchStatus();
+
+            if (ok)
+            {
+                _snackbarService?.Show(
+                    "FormGen Unpatched",
+                    isRunning
+                        ? "All modifications removed and vanilla FormGen reloaded. Toggle states are preserved."
+                        : "All modifications removed from FormGen. Toggle states are preserved.",
+                    ControlAppearance.Success,
+                    new SymbolIcon(SymbolRegular.CheckmarkCircle24),
+                    TimeSpan.FromSeconds(4));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error unpatching FormGen.", ex);
+        }
+    }
+
     [RelayCommand]
     private void BrowseFormGenExecutable()
     {
@@ -201,8 +502,8 @@ public partial class SettingsViewModel : ViewModel
         {
             var openFileDialog = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Select FormGen Executable",
-                Filter = "Executables (*.exe;javaw.exe)|*.exe;*.cmd;*.bat;javaw.exe|All files (*.*)|*.*",
+                Title = "Select FormGen Executable or Batch File",
+                Filter = "Executables & Batch (*.exe;*.bat;*.cmd;javaw.exe)|*.exe;*.cmd;*.bat;javaw.exe|All files (*.*)|*.*",
                 CheckFileExists = true
             };
 
@@ -246,12 +547,14 @@ public partial class SettingsViewModel : ViewModel
             IsChromeInstalled = _browserIntegrationService.IsBrowserInstalled(Services.Interfaces.BrowserType.Chrome);
 
             bool isReg = _browserIntegrationService.IsRegistered();
+            IsBrowserBridgeRegistered = isReg;
             BrowserBridgeStatus = isReg
                 ? $"Registered & Ready (ID: {_browserIntegrationService.ExtensionId})"
                 : "Not Registered (Click 'Register Bridge' to connect)";
         }
         else
         {
+            IsBrowserBridgeRegistered = false;
             BrowserBridgeStatus = "Service unavailable";
         }
     }
@@ -261,27 +564,72 @@ public partial class SettingsViewModel : ViewModel
     {
         _browserIntegrationService?.RegisterNativeMessagingHost();
         UpdateBrowserStatus();
+        _snackbarService?.Show(
+            "Bridge Registered",
+            "Browser Native Messaging Bridge registered in Windows Registry.",
+            ControlAppearance.Success,
+            new SymbolIcon(SymbolRegular.CheckmarkCircle24),
+            TimeSpan.FromSeconds(3));
+    }
+
+    [RelayCommand]
+    private void RemoveBrowserBridge()
+    {
+        _browserIntegrationService?.UnregisterNativeMessagingHost();
+        UpdateBrowserStatus();
+        _snackbarService?.Show(
+            "Bridge Removed",
+            "Browser Native Messaging Bridge removed from Windows Registry.",
+            ControlAppearance.Info,
+            new SymbolIcon(SymbolRegular.Delete24),
+            TimeSpan.FromSeconds(3));
     }
 
     [RelayCommand]
     private void LaunchOperaGXExtension()
     {
-        _browserIntegrationService?.LaunchBrowserWithExtension(Services.Interfaces.BrowserType.OperaGX);
-        UpdateBrowserStatus();
+        LaunchBrowserExtensionWithFeedback(Services.Interfaces.BrowserType.OperaGX, "Opera GX");
     }
 
     [RelayCommand]
     private void LaunchEdgeExtension()
     {
-        _browserIntegrationService?.LaunchBrowserWithExtension(Services.Interfaces.BrowserType.Edge);
-        UpdateBrowserStatus();
+        LaunchBrowserExtensionWithFeedback(Services.Interfaces.BrowserType.Edge, "Microsoft Edge");
     }
 
     [RelayCommand]
     private void LaunchChromeExtension()
     {
-        _browserIntegrationService?.LaunchBrowserWithExtension(Services.Interfaces.BrowserType.Chrome);
+        LaunchBrowserExtensionWithFeedback(Services.Interfaces.BrowserType.Chrome, "Google Chrome");
+    }
+
+    private void LaunchBrowserExtensionWithFeedback(Services.Interfaces.BrowserType browserType, string browserName)
+    {
+        if (_browserIntegrationService == null) return;
+
+        if (!_browserIntegrationService.IsBrowserInstalled(browserType))
+        {
+            _snackbarService?.Show(
+                $"{browserName} Not Found",
+                $"Could not locate {browserName} on this machine.",
+                ControlAppearance.Danger,
+                new SymbolIcon(SymbolRegular.ErrorCircle24),
+                TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        bool launched = _browserIntegrationService.LaunchBrowserWithExtension(browserType);
         UpdateBrowserStatus();
+
+        if (launched)
+        {
+            _snackbarService?.Show(
+                $"{browserName} Extension Setup",
+                $"Bridge registered and {browserName} launched with extension setup (folder path copied to clipboard).",
+                ControlAppearance.Success,
+                new SymbolIcon(SymbolRegular.CheckmarkCircle24),
+                TimeSpan.FromSeconds(4));
+        }
     }
 
     public void UpdateFormgenAssociationStatus()
@@ -364,5 +712,4 @@ public partial class SettingsViewModel : ViewModel
     }
 
     private static string GetAppVersion() => FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileVersion ?? "1.0.0";
-    
 }

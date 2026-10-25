@@ -22,8 +22,12 @@ public class FormGenAgent {
     private static volatile int lastUdfTabIndex = -1;
     private static volatile int lastMenuDetectX = -1;
     private static volatile int lastMenuDetectY = -1;
+    private static volatile long lastConfigModified = 0L;
+    private static volatile boolean sessionRestoreCompleted = false;
     private static final String PORT_FILE = System.getProperty("java.io.tmpdir") + File.separator + "formgen_agent.port";
     private static final String LOG_FILE = System.getProperty("java.io.tmpdir") + File.separator + "formgen_agent.log";
+    private static final String CONFIG_FILE = System.getProperty("java.io.tmpdir") + File.separator + "formgen_agent.properties";
+    private static final String SESSION_FORMS_FILE = System.getProperty("java.io.tmpdir") + File.separator + "formgen_session_forms.txt";
 
     // SWT Constants
     private static final int SWT_KeyDown = 1;
@@ -48,6 +52,42 @@ public class FormGenAgent {
         System.out.println("[FormGenAgent] " + msg);
     }
 
+    public static void reloadConfigIfChanged() {
+        try {
+            File cf = new File(CONFIG_FILE);
+            if (!cf.exists()) return;
+            long mod = cf.lastModified();
+            if (mod == lastConfigModified) return;
+            lastConfigModified = mod;
+
+            BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(cf), "UTF-8"));
+            String line;
+            synchronized (liveVariables) {
+                while ((line = br.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty() || line.startsWith("#")) continue;
+                    int eq = line.indexOf('=');
+                    if (eq > 0) {
+                        String k = line.substring(0, eq).trim();
+                        String v = line.substring(eq + 1).trim();
+                        liveVariables.put(k, v);
+                    }
+                }
+            }
+            br.close();
+        } catch (Throwable ignored) {}
+    }
+
+    public static boolean isFeatureEnabled(String featureKey) {
+        if (featureKey == null || featureKey.isEmpty()) return true;
+        reloadConfigIfChanged();
+        synchronized (liveVariables) {
+            String val = liveVariables.get(featureKey);
+            if (val == null || val.trim().isEmpty()) return true;
+            return !"false".equalsIgnoreCase(val.trim()) && !"0".equals(val.trim());
+        }
+    }
+
     public static void premain(String agentArgs, Instrumentation inst) {
         init(agentArgs, false, inst);
     }
@@ -58,6 +98,7 @@ public class FormGenAgent {
 
     private static synchronized void init(final String agentArgs, boolean isDynamicAttach, Instrumentation inst) {
         log("Initializing agent (args: " + agentArgs + ", dynamic: " + isDynamicAttach + ")...");
+        reloadConfigIfChanged();
 
         String sysPropFile = System.getProperty("formgen.file");
         String fileToOpen = cleanFilePath(sysPropFile != null && !sysPropFile.trim().isEmpty() ? sysPropFile : agentArgs);
@@ -67,6 +108,8 @@ public class FormGenAgent {
             System.exit(0);
             return;
         }
+
+        final List<String> previousSessionForms = readSessionFormsFile();
 
         try {
             new ClientHandler(null);
@@ -89,6 +132,12 @@ public class FormGenAgent {
 
         if (!fileToOpen.isEmpty()) {
             openFileWithRetry(fileToOpen, 120);
+        }
+
+        if (!previousSessionForms.isEmpty()) {
+            restoreSessionFormsWithRetry(previousSessionForms, fileToOpen, 120);
+        } else {
+            sessionRestoreCompleted = true;
         }
     }
 
@@ -226,6 +275,168 @@ public class FormGenAgent {
             try { new File(PORT_FILE).delete(); } catch (Throwable ignored) {}
             return false;
         }
+    }
+
+    private static List<String> readSessionFormsFile() {
+        List<String> list = new ArrayList<String>();
+        try {
+            File f = new File(SESSION_FORMS_FILE);
+            if (!f.exists()) return list;
+            BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
+            String line;
+            while ((line = br.readLine()) != null) {
+                String clean = cleanFilePath(line);
+                if (!clean.isEmpty() && new File(clean).exists() && !list.contains(clean)) {
+                    list.add(clean);
+                }
+            }
+            br.close();
+        } catch (Throwable ignored) {}
+        return list;
+    }
+
+    private static void restoreSessionFormsWithRetry(final List<String> formPaths, final String alreadyOpeningPath, final int retriesLeft) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Object display = null;
+                    for (int i = 0; i < 40; i++) {
+                        display = getDisplay();
+                        if (display != null && !isDisposed(display)) break;
+                        Thread.sleep(250);
+                    }
+
+                    if (display == null) {
+                        if (retriesLeft > 0) {
+                            Thread.sleep(500);
+                            restoreSessionFormsWithRetry(formPaths, alreadyOpeningPath, retriesLeft - 1);
+                        } else {
+                            sessionRestoreCompleted = true;
+                        }
+                        return;
+                    }
+
+                    runOnDisplay(display, new Runnable() {
+                        @Override
+                        public void run() {
+                            if (discoverFormGen()) {
+                                try {
+                                    if (isFeatureEnabled("FormGenAutoRestoreForms")) {
+                                        for (String path : formPaths) {
+                                            if (path == null || path.isEmpty()) continue;
+                                            if (alreadyOpeningPath != null && path.equalsIgnoreCase(alreadyOpeningPath)) continue;
+                                            File f = new File(path);
+                                            if (!f.exists()) continue;
+                                            if (focusExistingTabIfOpen(f, false)) continue;
+                                            try {
+                                                Method openMethod = formGenInstance.getClass().getDeclaredMethod("openFormgenFile", File.class, boolean.class);
+                                                openMethod.setAccessible(true);
+                                                openMethod.invoke(formGenInstance, f, false);
+                                                log("Auto-restored session form: " + f.getAbsolutePath());
+                                            } catch (Throwable openErr) {
+                                                log("Error auto-restoring form " + path + ": " + openErr.getMessage());
+                                            }
+                                        }
+                                    }
+                                } finally {
+                                    sessionRestoreCompleted = true;
+                                }
+                            } else if (retriesLeft > 0) {
+                                Object d = getDisplay();
+                                if (d != null && !isDisposed(d)) {
+                                    runTimer(d, 500, new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            restoreSessionFormsWithRetry(formPaths, alreadyOpeningPath, retriesLeft - 1);
+                                        }
+                                    });
+                                } else {
+                                    sessionRestoreCompleted = true;
+                                }
+                            } else {
+                                sessionRestoreCompleted = true;
+                            }
+                        }
+                    });
+                } catch (Throwable t) {
+                    sessionRestoreCompleted = true;
+                    log("Error in restoreSessionFormsWithRetry: " + t.getMessage());
+                }
+            }
+        }, "FormGenAgent-SessionRestore").start();
+    }
+
+    public static List<String> getOpenFormFilePathsOnUiThread() {
+        List<String> paths = new ArrayList<String>();
+        try {
+            discoverFormGen();
+            if (formGenInstance == null) return paths;
+            Field f = formGenInstance.getClass().getDeclaredField("mainTabFolder");
+            f.setAccessible(true);
+            Object mainTabFolder = f.get(formGenInstance);
+            if (mainTabFolder == null || isDisposed(mainTabFolder)) return paths;
+
+            Method getItemsMethod = mainTabFolder.getClass().getMethod("getItems");
+            Object[] tabItems = (Object[]) getItemsMethod.invoke(mainTabFolder);
+            if (tabItems == null) return paths;
+
+            for (Object tabItem : tabItems) {
+                if (tabItem == null || isDisposed(tabItem)) continue;
+                try {
+                    Object viewer = tabItem.getClass().getMethod("getControl").invoke(tabItem);
+                    if (viewer == null || isDisposed(viewer)) continue;
+                    File curFile = (File) viewer.getClass().getMethod("getCurrentFormgenFile").invoke(viewer);
+                    if (curFile != null && curFile.exists()) {
+                        String abs = curFile.getAbsolutePath();
+                        if (!paths.contains(abs)) {
+                            paths.add(abs);
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+        return paths;
+    }
+
+    public static List<String> getOpenFormFilePaths() {
+        final List<String> result = new ArrayList<String>();
+        Object display = getDisplay();
+        if (display == null || isDisposed(display)) return result;
+        try {
+            Method getThreadMethod = display.getClass().getMethod("getThread");
+            Object dispThread = getThreadMethod.invoke(display);
+            if (Thread.currentThread() == dispThread) {
+                return getOpenFormFilePathsOnUiThread();
+            }
+            Method syncExecMethod = display.getClass().getMethod("syncExec", Runnable.class);
+            syncExecMethod.invoke(display, new Runnable() {
+                @Override
+                public void run() {
+                    result.addAll(getOpenFormFilePathsOnUiThread());
+                }
+            });
+        } catch (Throwable ignored) {}
+        return result;
+    }
+
+    public static void saveOpenFormsSnapshotOnUiThread() {
+        if (!sessionRestoreCompleted) return;
+        try {
+            if (mainShell == null || isDisposed(mainShell)) return;
+            Boolean vis = (Boolean) mainShell.getClass().getMethod("isVisible").invoke(mainShell);
+            if (!Boolean.TRUE.equals(vis)) return;
+
+            List<String> paths = getOpenFormFilePathsOnUiThread();
+            FileWriter fw = new FileWriter(SESSION_FORMS_FILE, false);
+            try {
+                for (String p : paths) {
+                    fw.write(p + "\n");
+                }
+            } finally {
+                fw.close();
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static void openFileWithRetry(final String filePath, final int retriesLeft) {
@@ -566,6 +777,7 @@ public class FormGenAgent {
     }
 
     public static int getCurrentOrLastUdfTabIndex() {
+        if (!isFeatureEnabled("FormGenPreserveUdfTab")) return -1;
         try {
             Object udfDlg = getUdfDlg();
             Object tf = getUdfTabFolder(udfDlg);
@@ -582,6 +794,7 @@ public class FormGenAgent {
     }
 
     public static void onBeforeUdfLoadCode(Object udfDlg) {
+        if (!isFeatureEnabled("FormGenPreserveUdfTab")) return;
         try {
             Object tf = getUdfTabFolder(udfDlg);
             if (tf != null) {
@@ -595,12 +808,14 @@ public class FormGenAgent {
     }
 
     public static void onAfterUdfLoadCode(Object udfDlg) {
+        if (!isFeatureEnabled("FormGenPreserveUdfTab")) return;
         if (lastUdfTabIndex >= 0) {
             restoreUdfTabSelection(udfDlg, lastUdfTabIndex);
         }
     }
 
     public static void restoreUdfTabSelection(Object udfDlg, int tabIndex) {
+        if (!isFeatureEnabled("FormGenPreserveUdfTab")) return;
         if (udfDlg == null || tabIndex < 0 || isDisposed(udfDlg)) return;
         try {
             Object tf = getUdfTabFolder(udfDlg);
@@ -662,6 +877,7 @@ public class FormGenAgent {
                     Object listener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
                         @Override
                         public void run() {
+                            if (!isFeatureEnabled("FormGenPreserveUdfTab")) return;
                             final int targetTab = lastUdfTabIndex;
                             if (targetTab >= 0) {
                                 restoreUdfTabSelection(getUdfDlg(), targetTab);
@@ -682,6 +898,7 @@ public class FormGenAgent {
     }
 
     public static boolean onPreOpenFormgenFile(Object nfgInstance, File file) {
+        if (!isFeatureEnabled("FormGenAlreadyOpenToast")) return false;
         try {
             if (nfgInstance != null && formGenInstance == null) {
                 formGenInstance = nfgInstance;
@@ -700,6 +917,7 @@ public class FormGenAgent {
 
     public static boolean focusExistingTabIfOpen(File file, boolean showToast) {
         if (file == null || formGenInstance == null) return false;
+        if (showToast && !isFeatureEnabled("FormGenAlreadyOpenToast")) return false;
         try {
             Field f = formGenInstance.getClass().getDeclaredField("mainTabFolder");
             f.setAccessible(true);
@@ -778,7 +996,7 @@ public class FormGenAgent {
 
             activateMainShell();
 
-            if (showToast) {
+            if (showToast && isFeatureEnabled("FormGenAlreadyOpenToast")) {
                 showToastNotification("File already open, focus switched to the form you attempted to open.");
             }
             return true;
@@ -1388,6 +1606,39 @@ public class FormGenAgent {
                     OutputStream out = socket.getOutputStream();
                     out.write(((formPath != null ? formPath : "") + "\n").getBytes("UTF-8"));
                     out.flush();
+                } else if (line.equalsIgnoreCase("GET_OPEN_FORMS")) {
+                    List<String> openForms = getOpenFormFilePaths();
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < openForms.size(); i++) {
+                        if (i > 0) sb.append("|");
+                        sb.append(openForms.get(i));
+                    }
+                    OutputStream out = socket.getOutputStream();
+                    out.write((sb.toString() + "\n").getBytes("UTF-8"));
+                    out.flush();
+                } else if (line.equalsIgnoreCase("SHUTDOWN")) {
+                    try {
+                        List<String> openForms = getOpenFormFilePaths();
+                        if (!openForms.isEmpty()) {
+                            FileWriter fw = new FileWriter(SESSION_FORMS_FILE, false);
+                            try {
+                                for (String p : openForms) fw.write(p + "\n");
+                            } finally {
+                                fw.close();
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                    try { new File(PORT_FILE).delete(); } catch (Throwable ignored) {}
+                    OutputStream out = socket.getOutputStream();
+                    out.write("OK\n".getBytes("UTF-8"));
+                    out.flush();
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try { Thread.sleep(150); } catch (Throwable ignored) {}
+                            System.exit(0);
+                        }
+                    }, "FormGenAgent-Shutdown").start();
                 } else if (line.startsWith("PUSH_FORM:")) {
                     String payload = line.substring(10).trim();
                     String uuid = null;
@@ -1639,6 +1890,7 @@ public class FormGenAgent {
     }
 
     private static void attachUndoManagersRecursively(Object parent) {
+        if (!isFeatureEnabled("FormGenEditorUndoRedo")) return;
         if (parent == null || isDisposed(parent)) return;
         try {
             String clsName = parent.getClass().getName();
@@ -1700,6 +1952,7 @@ public class FormGenAgent {
                 try {
                     if (display == null || isDisposed(display)) return;
                     ensureUdfAndMainTabHooksInstalled(display);
+                    saveOpenFormsSnapshotOnUiThread();
                     Method getShellsMethod = display.getClass().getMethod("getShells");
                     Object[] shells = (Object[]) getShellsMethod.invoke(display);
                     if (shells != null) {
@@ -1748,7 +2001,7 @@ public class FormGenAgent {
                 } catch (Throwable ignored) {}
                 return;
             } else if (eventType == SWT_KeyDown) {
-                if (widget != null) {
+                if (widget != null && isFeatureEnabled("FormGenEditorUndoRedo")) {
                     String clsName = widget.getClass().getName();
                     if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
                         StyledTextUndoManager mgr = getOrCreateUndoManager(widget);
@@ -1784,7 +2037,7 @@ public class FormGenAgent {
                     }
                 }
             } else if (eventType == SWT_FocusIn) {
-                if (widget != null) {
+                if (widget != null && isFeatureEnabled("FormGenEditorUndoRedo")) {
                     String clsName = widget.getClass().getName();
                     if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
                         getOrCreateUndoManager(widget);
@@ -1792,6 +2045,9 @@ public class FormGenAgent {
                 }
             } else if (eventType == SWT_Show) {
                 if (menuClass.isInstance(widget)) {
+                    if (!isFeatureEnabled("FormGenContextMenus") && !isFeatureEnabled("FormGenCanvasPasteField")) {
+                        return;
+                    }
                     Method getStyleMethod = widget.getClass().getMethod("getStyle");
                     int style = (Integer) getStyleMethod.invoke(widget);
                     if ((style & SWT_POP_UP) != 0) {
@@ -1822,6 +2078,9 @@ public class FormGenAgent {
                         } catch (Throwable ignored) {}
                         return;
                     }
+                    if (!isFeatureEnabled("FormGenContextMenus")) {
+                        return;
+                    }
                     // Intercept black code window (RainbowParenText), StyledText
                     if (clsName.contains("RainbowParenText") || clsName.contains("StyledText")) {
                         attachCodeEditorContextMenu(display, widget, eventObj);
@@ -1849,6 +2108,7 @@ public class FormGenAgent {
     // ==========================================
 
     private static void attachCodeEditorContextMenu(final Object display, final Object control, Object eventObj) {
+        if (!isFeatureEnabled("FormGenContextMenus")) return;
         try {
             log("Attaching Code Editor Context Menu to: " + control.getClass().getName());
             Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
@@ -1863,33 +2123,35 @@ public class FormGenAgent {
             Constructor<?> subMenuCons = menuClass.getConstructor(menuItemClass);
             Method addListenerMethod = menuItemClass.getMethod("addListener", int.class, listenerClass);
 
-            // 0. Undo, Redo
-            final StyledTextUndoManager undoMgr = getOrCreateUndoManager(control);
-            Object itemUndo = itemCons.newInstance(menu, SWT_PUSH);
-            itemUndo.getClass().getMethod("setText", String.class).invoke(itemUndo, "Undo\tCtrl+Z");
-            if (undoMgr != null && !undoMgr.canUndo()) {
-                itemUndo.getClass().getMethod("setEnabled", boolean.class).invoke(itemUndo, false);
-            }
-            addListenerMethod.invoke(itemUndo, SWT_Selection, createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
-                @Override
-                public void run() {
-                    if (undoMgr != null) undoMgr.undo();
+            // 0. Undo, Redo (if FormGenEditorUndoRedo is enabled)
+            if (isFeatureEnabled("FormGenEditorUndoRedo")) {
+                final StyledTextUndoManager undoMgr = getOrCreateUndoManager(control);
+                Object itemUndo = itemCons.newInstance(menu, SWT_PUSH);
+                itemUndo.getClass().getMethod("setText", String.class).invoke(itemUndo, "Undo\tCtrl+Z");
+                if (undoMgr != null && !undoMgr.canUndo()) {
+                    itemUndo.getClass().getMethod("setEnabled", boolean.class).invoke(itemUndo, false);
                 }
-            }));
+                addListenerMethod.invoke(itemUndo, SWT_Selection, createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                    @Override
+                    public void run() {
+                        if (undoMgr != null) undoMgr.undo();
+                    }
+                }));
 
-            Object itemRedo = itemCons.newInstance(menu, SWT_PUSH);
-            itemRedo.getClass().getMethod("setText", String.class).invoke(itemRedo, "Redo\tCtrl+Y");
-            if (undoMgr != null && !undoMgr.canRedo()) {
-                itemRedo.getClass().getMethod("setEnabled", boolean.class).invoke(itemRedo, false);
-            }
-            addListenerMethod.invoke(itemRedo, SWT_Selection, createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
-                @Override
-                public void run() {
-                    if (undoMgr != null) undoMgr.redo();
+                Object itemRedo = itemCons.newInstance(menu, SWT_PUSH);
+                itemRedo.getClass().getMethod("setText", String.class).invoke(itemRedo, "Redo\tCtrl+Y");
+                if (undoMgr != null && !undoMgr.canRedo()) {
+                    itemRedo.getClass().getMethod("setEnabled", boolean.class).invoke(itemRedo, false);
                 }
-            }));
+                addListenerMethod.invoke(itemRedo, SWT_Selection, createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                    @Override
+                    public void run() {
+                        if (undoMgr != null) undoMgr.redo();
+                    }
+                }));
 
-            itemCons.newInstance(menu, SWT_SEPARATOR);
+                itemCons.newInstance(menu, SWT_SEPARATOR);
+            }
 
             // 1. Cut, Copy, Paste, Select All
             addTextActionItem(display, menu, control, "Cut\tCtrl+X", "cut");
@@ -1960,6 +2222,7 @@ public class FormGenAgent {
     }
 
     private static void attachStandardTextContextMenu(Object display, Object control, Object eventObj) {
+        if (!isFeatureEnabled("FormGenContextMenus")) return;
         try {
             Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
             Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
@@ -2017,6 +2280,10 @@ public class FormGenAgent {
 
     private static void injectSoleraMenuItems(final Object display, Object menu) {
         try {
+            boolean contextMenusEnabled = isFeatureEnabled("FormGenContextMenus");
+            boolean canvasPasteEnabled = isFeatureEnabled("FormGenCanvasPasteField");
+            if (!contextMenusEnabled && !canvasPasteEnabled) return;
+
             // Remove previous Solera items so we have a clean refresh
             Method getItemsMethod = menu.getClass().getMethod("getItems");
             Object[] items = (Object[]) getItemsMethod.invoke(menu);
@@ -2050,7 +2317,7 @@ public class FormGenAgent {
 
             // Check if there is an active canvas field selected in PdfViewer
             final String fieldFormula = getSelectedFieldFormula();
-            if (fieldFormula != null && !fieldFormula.trim().isEmpty()) {
+            if (fieldFormula != null && !fieldFormula.trim().isEmpty() && contextMenusEnabled) {
                 Object itemFieldFormula = itemCons.newInstance(menu, SWT_PUSH);
                 itemFieldFormula.getClass().getMethod("setText", String.class).invoke(itemFieldFormula, "🔬 Parse Field Formula in Code Snippets");
                 setDataMethod.invoke(itemFieldFormula, "SoleraItem", Boolean.TRUE);
@@ -2062,7 +2329,7 @@ public class FormGenAgent {
                     }
                 });
                 addListenerMethod.invoke(itemFieldFormula, SWT_Selection, listenerField);
-            } else if (isEmptyCanvasMenu && !hasSelectedCanvasFields()) {
+            } else if (isEmptyCanvasMenu && !hasSelectedCanvasFields() && canvasPasteEnabled) {
                 final int[] dropPt = extractDropPointFromMenu(menu, display);
                 String activeCode = null;
                 String activeType = null;
@@ -2091,51 +2358,53 @@ public class FormGenAgent {
                 addListenerMethod.invoke(itemDropCode, SWT_Selection, listenerDropCode);
             }
 
-            // Separator
-            Object sep = itemCons.newInstance(menu, SWT_SEPARATOR);
-            setDataMethod.invoke(sep, "SoleraItem", Boolean.TRUE);
+            if (contextMenusEnabled) {
+                // Separator
+                Object sep = itemCons.newInstance(menu, SWT_SEPARATOR);
+                setDataMethod.invoke(sep, "SoleraItem", Boolean.TRUE);
 
-            // Cascade Item: ⚡ Solera Tools
-            Object soleraCascade = itemCons.newInstance(menu, SWT_CASCADE);
-            soleraCascade.getClass().getMethod("setText", String.class).invoke(soleraCascade, "⚡ Solera Tools");
-            setDataMethod.invoke(soleraCascade, "SoleraItem", Boolean.TRUE);
+                // Cascade Item: ⚡ Solera Tools
+                Object soleraCascade = itemCons.newInstance(menu, SWT_CASCADE);
+                soleraCascade.getClass().getMethod("setText", String.class).invoke(soleraCascade, "⚡ Solera Tools");
+                setDataMethod.invoke(soleraCascade, "SoleraItem", Boolean.TRUE);
 
-            Object soleraSubMenu = subMenuCons.newInstance(soleraCascade);
-            soleraCascade.getClass().getMethod("setMenu", menuClass).invoke(soleraCascade, soleraSubMenu);
+                Object soleraSubMenu = subMenuCons.newInstance(soleraCascade);
+                soleraCascade.getClass().getMethod("setMenu", menuClass).invoke(soleraCascade, soleraSubMenu);
 
-            // Sub-item 1: 🛠 Open in FormGen Utilities
-            Object itemOpenUtils = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
-            itemOpenUtils.getClass().getMethod("setText", String.class).invoke(itemOpenUtils, "🛠 Open in FormGen Utilities");
-            Object listenerOpenUtils = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
-                @Override
-                public void run() {
-                    notifyScmtOpenFormgenUtils(getActiveFormFilePath());
-                }
-            });
-            addListenerMethod.invoke(itemOpenUtils, SWT_Selection, listenerOpenUtils);
+                // Sub-item 1: 🛠 Open in FormGen Utilities
+                Object itemOpenUtils = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
+                itemOpenUtils.getClass().getMethod("setText", String.class).invoke(itemOpenUtils, "🛠 Open in FormGen Utilities");
+                Object listenerOpenUtils = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                    @Override
+                    public void run() {
+                        notifyScmtOpenFormgenUtils(getActiveFormFilePath());
+                    }
+                });
+                addListenerMethod.invoke(itemOpenUtils, SWT_Selection, listenerOpenUtils);
 
-            // Sub-item 2: 🔬 Parse Selection in Code Snippets
-            Object itemParseCode = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
-            itemParseCode.getClass().getMethod("setText", String.class).invoke(itemParseCode, "🔬 Parse Selection in Code Snippets");
-            Object listenerParseCode = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
-                @Override
-                public void run() {
-                    String selectedText = getSelectedTextFromFocusControl(display);
-                    notifyScmtParseCode(selectedText);
-                }
-            });
-            addListenerMethod.invoke(itemParseCode, SWT_Selection, listenerParseCode);
+                // Sub-item 2: 🔬 Parse Selection in Code Snippets
+                Object itemParseCode = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
+                itemParseCode.getClass().getMethod("setText", String.class).invoke(itemParseCode, "🔬 Parse Selection in Code Snippets");
+                Object listenerParseCode = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                    @Override
+                    public void run() {
+                        String selectedText = getSelectedTextFromFocusControl(display);
+                        notifyScmtParseCode(selectedText);
+                    }
+                });
+                addListenerMethod.invoke(itemParseCode, SWT_Selection, listenerParseCode);
 
-            // Separator inside Solera Tools
-            itemCons.newInstance(soleraSubMenu, SWT_SEPARATOR);
+                // Separator inside Solera Tools
+                itemCons.newInstance(soleraSubMenu, SWT_SEPARATOR);
 
-            // Sub-item 3: 📋 Quick Paste Variable ▶
-            Object pasteCascade = itemCons.newInstance(soleraSubMenu, SWT_CASCADE);
-            pasteCascade.getClass().getMethod("setText", String.class).invoke(pasteCascade, "📋 Quick Paste Variable");
-            Object pasteSubMenu = subMenuCons.newInstance(pasteCascade);
-            pasteCascade.getClass().getMethod("setMenu", menuClass).invoke(pasteCascade, pasteSubMenu);
+                // Sub-item 3: 📋 Quick Paste Variable ▶
+                Object pasteCascade = itemCons.newInstance(soleraSubMenu, SWT_CASCADE);
+                pasteCascade.getClass().getMethod("setText", String.class).invoke(pasteCascade, "📋 Quick Paste Variable");
+                Object pasteSubMenu = subMenuCons.newInstance(pasteCascade);
+                pasteCascade.getClass().getMethod("setMenu", menuClass).invoke(pasteCascade, pasteSubMenu);
 
-            populateQuickPasteItems(display, pasteSubMenu, itemCons, addListenerMethod);
+                populateQuickPasteItems(display, pasteSubMenu, itemCons, addListenerMethod);
+            }
 
             // Mark the menu as having Solera injected
             Method setMenuData = menu.getClass().getMethod("setData", String.class, Object.class);
@@ -2666,6 +2935,7 @@ public class FormGenAgent {
     // ==========================================
 
     private static void enhanceDialogShell(final Object display, final Object shell) {
+        if (!isFeatureEnabled("FormGenDialogAutoFill")) return;
         if (shell == null || isDisposed(shell)) return;
         try {
             Method getDataMethod = shell.getClass().getMethod("getData", String.class);

@@ -188,6 +188,12 @@ public class IpcService : IHostedService, IAsyncDisposable
         string activeCodeSnippetText = CodeSnippetsViewModel.GetActiveFormulaText();
         string activeCodeSnippetOutputType = CodeSnippetsViewModel.InferFormulaOutputType(activeCodeSnippetText);
 
+        var userSettings = App.GetService<ISupportTool>()?.Settings?.UserSettings;
+        if (userSettings != null)
+        {
+            FormGenLauncherHelper.WriteAgentConfig(userSettings, _logger);
+        }
+
         return new IpcLiveVariables
         {
             ServerId = selectedDealer?.ServerCode ?? string.Empty,
@@ -207,7 +213,14 @@ public class IpcService : IHostedService, IAsyncDisposable
             ActiveTemplateName = activeTemplateName,
             ActiveTemplateText = activeTemplateText,
             ActiveCodeSnippetText = activeCodeSnippetText,
-            ActiveCodeSnippetOutputType = activeCodeSnippetOutputType
+            ActiveCodeSnippetOutputType = activeCodeSnippetOutputType,
+            FormGenPreserveUdfTab = (userSettings?.FormGenPreserveUdfTab ?? true).ToString().ToLowerInvariant(),
+            FormGenCanvasPasteField = (userSettings?.FormGenCanvasPasteField ?? true).ToString().ToLowerInvariant(),
+            FormGenAlreadyOpenToast = (userSettings?.FormGenAlreadyOpenToast ?? true).ToString().ToLowerInvariant(),
+            FormGenContextMenus = (userSettings?.FormGenContextMenus ?? true).ToString().ToLowerInvariant(),
+            FormGenEditorUndoRedo = (userSettings?.FormGenEditorUndoRedo ?? true).ToString().ToLowerInvariant(),
+            FormGenDialogAutoFill = (userSettings?.FormGenDialogAutoFill ?? true).ToString().ToLowerInvariant(),
+            FormGenAutoRestoreForms = (userSettings?.FormGenAutoRestoreForms ?? true).ToString().ToLowerInvariant()
         };
     }
 

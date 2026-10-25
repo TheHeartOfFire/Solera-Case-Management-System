@@ -15,6 +15,15 @@ namespace AMFormsCST.Desktop.Services;
 public static class FormGenLauncherHelper
 {
     private const string PortFileName = "formgen_agent.port";
+    private const string ConfigFileName = "formgen_agent.properties";
+    private const string SessionFormsFileName = "formgen_session_forms.txt";
+    private const string LogFileName = "formgen_agent.log";
+
+    /// <summary>
+    /// Tracks whether FormGen patching is currently enabled in user settings.
+    /// When false (Unpatched), OpenInFormGen will launch vanilla FormGen without deploying or injecting FormGenAgent.jar.
+    /// </summary>
+    public static bool IsPatchingAllowed { get; set; } = true;
 
     /// <summary>
     /// Test seam: lets a test (and only the async flow it starts) point the helper at a private directory,
@@ -22,13 +31,48 @@ public static class FormGenLauncherHelper
     /// </summary>
     internal static readonly System.Threading.AsyncLocal<string?> PortFileDirectoryOverride = new();
 
-    private static string GetPortFilePath() =>
-        Path.Combine(PortFileDirectoryOverride.Value ?? Path.GetTempPath(), PortFileName);
+    private static string GetTempDir() => PortFileDirectoryOverride.Value ?? Path.GetTempPath();
+
+    private static string GetPortFilePath() => Path.Combine(GetTempDir(), PortFileName);
+    public static string GetConfigFilePath() => Path.Combine(GetTempDir(), ConfigFileName);
+    public static string GetSessionFormsFilePath() => Path.Combine(GetTempDir(), SessionFormsFileName);
+    public static string GetLogFilePath() => Path.Combine(GetTempDir(), LogFileName);
+
+    /// <summary>
+    /// Writes the user's individual FormGen feature toggle states to %TEMP%\formgen_agent.properties
+    /// so FormGenAgent can read them at startup and live at runtime.
+    /// </summary>
+    public static void WriteAgentConfig(AMFormsCST.Core.Interfaces.UserSettings.IUserSettings? userSettings, ILogService? logger = null)
+    {
+        if (userSettings == null) return;
+        IsPatchingAllowed = userSettings.IsFormGenPatched;
+
+        if (!userSettings.IsFormGenPatched)
+            return;
+
+        try
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"FormGenPreserveUdfTab={userSettings.FormGenPreserveUdfTab.ToString().ToLowerInvariant()}");
+            sb.AppendLine($"FormGenCanvasPasteField={userSettings.FormGenCanvasPasteField.ToString().ToLowerInvariant()}");
+            sb.AppendLine($"FormGenAlreadyOpenToast={userSettings.FormGenAlreadyOpenToast.ToString().ToLowerInvariant()}");
+            sb.AppendLine($"FormGenContextMenus={userSettings.FormGenContextMenus.ToString().ToLowerInvariant()}");
+            sb.AppendLine($"FormGenEditorUndoRedo={userSettings.FormGenEditorUndoRedo.ToString().ToLowerInvariant()}");
+            sb.AppendLine($"FormGenDialogAutoFill={userSettings.FormGenDialogAutoFill.ToString().ToLowerInvariant()}");
+            sb.AppendLine($"FormGenAutoRestoreForms={userSettings.FormGenAutoRestoreForms.ToString().ToLowerInvariant()}");
+
+            File.WriteAllText(GetConfigFilePath(), sb.ToString(), new UTF8Encoding(false));
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning($"Failed to write FormGenAgent config file: {ex.Message}");
+        }
+    }
 
     /// <summary>
     /// Opens the specified .formgen or .fga file in FormGen.
     /// If FormGen is already running with FormGenAgent, the file is sent over localhost TCP in milliseconds.
-    /// If not running, FormGen is launched with the agent and opens the file on startup.
+    /// If not running, FormGen is launched (with the agent if IsPatchingAllowed is true, or vanilla if unpatched).
     /// </summary>
     public static bool OpenInFormGen(string filePath, string? formgenBatPath = null, ILogService? logger = null)
     {
@@ -42,8 +86,8 @@ public static class FormGenLauncherHelper
             return false;
         }
 
-        // 1. Try IPC socket to existing FormGen instance
-        if (TrySendViaIpc(cleanPath, logger))
+        // 1. Try IPC socket to existing FormGen instance (only when patched)
+        if (IsPatchingAllowed && TrySendViaIpc(cleanPath, logger))
         {
             logger?.LogInfo($"Successfully opened '{cleanPath}' in running FormGen via IPC socket.");
             return true;
@@ -53,7 +97,10 @@ public static class FormGenLauncherHelper
         var batPath = ResolveFormGenBatchPath(formgenBatPath);
         if (!string.IsNullOrWhiteSpace(batPath) && File.Exists(batPath))
         {
-            EnsureAgentDeployedAndPatched(batPath, logger);
+            if (IsPatchingAllowed)
+            {
+                EnsureAgentDeployedAndPatched(batPath, logger);
+            }
 
             var dir = Path.GetDirectoryName(batPath);
             var startInfo = new ProcessStartInfo
@@ -91,7 +138,7 @@ public static class FormGenLauncherHelper
         }
 
         // Try pushing via IPC to running FormGen
-        if (TryPushViaIpc(cleanPath, uuid, logger))
+        if (IsPatchingAllowed && TryPushViaIpc(cleanPath, uuid, logger))
         {
             logger?.LogInfo($"Successfully pushed '{cleanPath}' (UUID: {uuid}) to running FormGen via IPC.");
             return true;
@@ -167,7 +214,6 @@ public static class FormGenLauncherHelper
         catch { }
     }
 
-
     /// <summary>
     /// Attempts to send the file path to the FormGen agent via localhost TCP.
     /// </summary>
@@ -242,6 +288,71 @@ public static class FormGenLauncherHelper
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Checks whether NewFormGen.bat is currently patched with FormGenAgent.jar and the jar exists in the FormGen directory.
+    /// </summary>
+    public static bool IsBatchPatched(string? explicitBatPath = null)
+    {
+        try
+        {
+            var batPath = ResolveFormGenBatchPath(explicitBatPath);
+            if (string.IsNullOrWhiteSpace(batPath) || !File.Exists(batPath))
+                return false;
+
+            var dir = Path.GetDirectoryName(batPath);
+            if (string.IsNullOrWhiteSpace(dir))
+                return false;
+
+            var jarPath = Path.Combine(dir, "FormGenAgent.jar");
+            if (!File.Exists(jarPath))
+                return false;
+
+            var content = File.ReadAllText(batPath);
+            return content.Contains("FormGenAgent.jar", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks whether any FormGen JVM process is currently running (either via Agent IPC or window title).
+    /// </summary>
+    public static bool IsFormGenProcessRunning()
+    {
+        if (IsAgentActive())
+            return true;
+
+        try
+        {
+            foreach (var procName in new[] { "javaw", "java" })
+            {
+                foreach (var proc in Process.GetProcessesByName(procName))
+                {
+                    try
+                    {
+                        var title = proc.MainWindowTitle;
+                        if (!string.IsNullOrWhiteSpace(title) &&
+                            (title.Contains("FormGen", StringComparison.OrdinalIgnoreCase) ||
+                             title.Contains("Form Generator", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            return true;
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        proc.Dispose();
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return false;
     }
 
     /// <summary>
@@ -340,6 +451,317 @@ public static class FormGenLauncherHelper
     }
 
     /// <summary>
+    /// Queries FormGenAgent for all currently open .formgen / .fga file paths across all tabs,
+    /// falling back to the persisted session forms file or active form if needed.
+    /// </summary>
+    public static List<string> GetOpenFormsFromAgent(ILogService? logger = null)
+    {
+        var results = new List<string>();
+        try
+        {
+            var portFilePath = GetPortFilePath();
+            if (File.Exists(portFilePath))
+            {
+                var portText = File.ReadAllText(portFilePath).Trim();
+                if (int.TryParse(portText, out int port) && port > 0 && port <= 65535)
+                {
+                    using var client = new TcpClient { ReceiveTimeout = IpcIoTimeoutMs, SendTimeout = IpcIoTimeoutMs };
+                    var connectTask = client.ConnectAsync("127.0.0.1", port);
+                    if (connectTask.Wait(IpcConnectTimeoutMs))
+                    {
+                        using var stream = client.GetStream();
+                        using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+                        using var reader = new StreamReader(stream, new UTF8Encoding(false));
+
+                        writer.WriteLine("GET_OPEN_FORMS");
+                        var response = reader.ReadLine();
+                        if (!string.IsNullOrWhiteSpace(response))
+                        {
+                            foreach (var part in response.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                            {
+                                var clean = part.Trim().Trim('"');
+                                if (File.Exists(clean) && !results.Contains(clean, StringComparer.OrdinalIgnoreCase))
+                                {
+                                    results.Add(clean);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        client.Close();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning($"Failed to query GET_OPEN_FORMS from FormGenAgent: {ex.Message}");
+        }
+
+        if (results.Count == 0)
+        {
+            var active = GetActiveFormFromAgent(logger);
+            if (!string.IsNullOrWhiteSpace(active) && File.Exists(active))
+            {
+                results.Add(active);
+            }
+        }
+
+        if (results.Count == 0)
+        {
+            try
+            {
+                var sessionFile = GetSessionFormsFilePath();
+                if (File.Exists(sessionFile))
+                {
+                    foreach (var line in File.ReadAllLines(sessionFile))
+                    {
+                        var clean = line.Trim().Trim('"');
+                        if (File.Exists(clean) && !results.Contains(clean, StringComparer.OrdinalIgnoreCase))
+                        {
+                            results.Add(clean);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Gracefully requests FormGen shutdown or terminates running FormGen JVM instances and waits for file locks to release.
+    /// </summary>
+    public static void CloseFormGenProcesses(ILogService? logger = null)
+    {
+        // 1. Ask FormGenAgent to close gracefully via IPC if listening
+        try
+        {
+            var portFilePath = GetPortFilePath();
+            if (File.Exists(portFilePath))
+            {
+                var portText = File.ReadAllText(portFilePath).Trim();
+                if (int.TryParse(portText, out int port) && port > 0 && port <= 65535)
+                {
+                    using var client = new TcpClient { ReceiveTimeout = 1000, SendTimeout = 1000 };
+                    if (client.ConnectAsync("127.0.0.1", port).Wait(500))
+                    {
+                        using var stream = client.GetStream();
+                        using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+                        writer.WriteLine("SHUTDOWN");
+                    }
+                }
+            }
+        }
+        catch { }
+
+        // 2. Also find any javaw/java processes with FormGen window title and close/kill them
+        try
+        {
+            foreach (var procName in new[] { "javaw", "java" })
+            {
+                foreach (var proc in Process.GetProcessesByName(procName))
+                {
+                    try
+                    {
+                        var title = proc.MainWindowTitle;
+                        if (!string.IsNullOrWhiteSpace(title) &&
+                            (title.Contains("FormGen", StringComparison.OrdinalIgnoreCase) ||
+                             title.Contains("Form Generator", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            logger?.LogInfo($"Closing FormGen process PID {proc.Id} ('{title}')...");
+                            proc.Kill();
+                            proc.WaitForExit(3000);
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        proc.Dispose();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning($"Error while closing FormGen processes: {ex.Message}");
+        }
+
+        try
+        {
+            var p = GetPortFilePath();
+            if (File.Exists(p)) File.Delete(p);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Deploys FormGenAgent.jar, patches NewFormGen.bat, closes any running FormGen instance,
+    /// and relaunches FormGen restoring all previously open forms.
+    /// </summary>
+    public static bool PatchAndReloadFormGen(
+        string? explicitBatPath,
+        AMFormsCST.Core.Interfaces.UserSettings.IUserSettings? userSettings,
+        IReadOnlyList<string>? openFormsToRestore = null,
+        bool relaunchFormGen = true,
+        ILogService? logger = null)
+    {
+        try
+        {
+            var batPath = ResolveFormGenBatchPath(explicitBatPath);
+            if (string.IsNullOrWhiteSpace(batPath) || !File.Exists(batPath))
+            {
+                logger?.LogWarning("PatchAndReloadFormGen: Could not locate NewFormGen.bat.");
+                return false;
+            }
+
+            var formsToReopen = openFormsToRestore?.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                ?? GetOpenFormsFromAgent(logger);
+
+            bool wasRunning = IsFormGenProcessRunning();
+            if (wasRunning)
+            {
+                CloseFormGenProcesses(logger);
+                System.Threading.Thread.Sleep(500);
+            }
+
+            IsPatchingAllowed = true;
+            if (userSettings != null)
+            {
+                userSettings.IsFormGenPatched = true;
+                WriteAgentConfig(userSettings, logger);
+            }
+
+            // Persist open forms to session file so FormGenAgent restores all of them on startup
+            try
+            {
+                File.WriteAllLines(GetSessionFormsFilePath(), formsToReopen, new UTF8Encoding(false));
+            }
+            catch { }
+
+            EnsureAgentDeployedAndPatched(batPath, logger);
+
+            if (relaunchFormGen)
+            {
+                var dir = Path.GetDirectoryName(batPath);
+                var firstForm = formsToReopen.FirstOrDefault();
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = batPath,
+                    Arguments = !string.IsNullOrWhiteSpace(firstForm) ? $"\"{firstForm}\"" : string.Empty,
+                    WorkingDirectory = dir,
+                    UseShellExecute = true
+                };
+                Process.Start(startInfo);
+                logger?.LogInfo($"Relaunched patched FormGen via '{batPath}' (restoring {formsToReopen.Count} open form(s)).");
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError("Error in PatchAndReloadFormGen.", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes all traces of FormGen modification (restores vanilla NewFormGen.bat, deletes FormGenAgent.jar,
+    /// removes agent temp files), closes FormGen if running, and relaunches vanilla FormGen restoring open forms.
+    /// </summary>
+    public static bool UnpatchAndReloadFormGen(
+        string? explicitBatPath,
+        AMFormsCST.Core.Interfaces.UserSettings.IUserSettings? userSettings,
+        IReadOnlyList<string>? openFormsToRestore = null,
+        bool relaunchFormGen = true,
+        ILogService? logger = null)
+    {
+        try
+        {
+            var batPath = ResolveFormGenBatchPath(explicitBatPath);
+            if (string.IsNullOrWhiteSpace(batPath) || !File.Exists(batPath))
+            {
+                logger?.LogWarning("UnpatchAndReloadFormGen: Could not locate NewFormGen.bat.");
+                return false;
+            }
+
+            var formsToReopen = openFormsToRestore?.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                ?? GetOpenFormsFromAgent(logger);
+
+            bool wasRunning = IsFormGenProcessRunning();
+            if (wasRunning)
+            {
+                CloseFormGenProcesses(logger);
+                System.Threading.Thread.Sleep(600);
+            }
+
+            IsPatchingAllowed = false;
+            if (userSettings != null)
+            {
+                userSettings.IsFormGenPatched = false;
+            }
+
+            // 1. Restore NewFormGen.bat to clean vanilla state
+            RestoreVanillaBatch(batPath, logger);
+
+            // 2. Delete FormGenAgent.jar from the FormGen folder (with retry in case JVM is releasing file handle)
+            var dir = Path.GetDirectoryName(batPath);
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                var agentJarPath = Path.Combine(dir, "FormGenAgent.jar");
+                for (int i = 0; i < 5 && File.Exists(agentJarPath); i++)
+                {
+                    try
+                    {
+                        File.Delete(agentJarPath);
+                        logger?.LogInfo($"Deleted '{agentJarPath}'.");
+                        break;
+                    }
+                    catch
+                    {
+                        System.Threading.Thread.Sleep(300);
+                    }
+                }
+            }
+
+            // 3. Remove all agent temp files (port, config, log, session forms)
+            foreach (var tempFile in new[] { GetPortFilePath(), GetConfigFilePath(), GetLogFilePath(), GetSessionFormsFilePath() })
+            {
+                try
+                {
+                    if (File.Exists(tempFile))
+                        File.Delete(tempFile);
+                }
+                catch { }
+            }
+
+            // 4. Relaunch vanilla FormGen if requested
+            if (relaunchFormGen)
+            {
+                var firstForm = formsToReopen.FirstOrDefault();
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = batPath,
+                    Arguments = !string.IsNullOrWhiteSpace(firstForm) ? $"\"{firstForm}\"" : string.Empty,
+                    WorkingDirectory = dir,
+                    UseShellExecute = true
+                };
+                Process.Start(startInfo);
+                logger?.LogInfo($"Relaunched vanilla FormGen via '{batPath}'.");
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError("Error in UnpatchAndReloadFormGen.", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Resolves the path to NewFormGen.bat.
     /// </summary>
     public static string? ResolveFormGenBatchPath(string? explicitPath = null)
@@ -415,7 +837,7 @@ public static class FormGenLauncherHelper
     }
 
     /// <summary>
-    /// Restores NewFormGen.bat to its original vanilla configuration by removing the FormGenAgent javaagent parameter.
+    /// Restores NewFormGen.bat to its original vanilla configuration by removing the FormGenAgent javaagent parameter and cd prefix.
     /// </summary>
     public static void RestoreVanillaBatch(string batPath, ILogService? logger = null)
     {
@@ -425,13 +847,33 @@ public static class FormGenLauncherHelper
                 return;
 
             var content = File.ReadAllText(batPath);
-            if (content.Contains("FormGenAgent.jar", StringComparison.OrdinalIgnoreCase))
+            var updated = content
+                .Replace("cd /d \"%~dp0\"\r\n", "")
+                .Replace("cd /d \"%~dp0\"\n", "")
+                .Replace("-javaagent:FormGenAgent.jar -Dformgen.file=\"%~f1\" ", "")
+                .Replace("-javaagent:FormGenAgent.jar -Dformgen.file=\"%~f1\"", "")
+                .Replace("-javaagent:FormGenAgent.jar ", "")
+                .Replace("-javaagent:FormGenAgent.jar", "");
+
+            if (!string.Equals(content, updated, StringComparison.Ordinal))
             {
-                content = content.Replace("-javaagent:FormGenAgent.jar -Dformgen.file=\"%~f1\" ", "");
-                content = content.Replace("-javaagent:FormGenAgent.jar -Dformgen.file=\"%~f1\"", "");
-                content = content.Replace("-javaagent:FormGenAgent.jar ", "");
-                File.WriteAllText(batPath, content);
+                File.WriteAllText(batPath, updated);
                 logger?.LogInfo($"Restored vanilla NewFormGen.bat at '{batPath}'.");
+            }
+
+            var dir = Path.GetDirectoryName(batPath);
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                var jarPath = Path.Combine(dir, "FormGenAgent.jar");
+                if (File.Exists(jarPath))
+                {
+                    try
+                    {
+                        File.Delete(jarPath);
+                        logger?.LogInfo($"Removed FormGenAgent.jar from '{dir}'.");
+                    }
+                    catch { }
+                }
             }
         }
         catch (Exception ex)

@@ -240,6 +240,12 @@ public partial class App : Application
         return _host.Services.GetRequiredService<T>();
     }
 
+    public static T? GetService<T>()
+        where T : class
+    {
+        return _host.Services.GetService<T>();
+    }
+
     private const string AppMutexName = @"Local\SoleraCMS_SingleInstance_Mutex";
     private static Mutex? _instanceMutex;
 
