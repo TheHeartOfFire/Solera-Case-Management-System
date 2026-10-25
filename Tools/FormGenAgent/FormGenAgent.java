@@ -421,6 +421,13 @@ public class FormGenAgent {
     }
 
     public static void saveOpenFormsSnapshotOnUiThread() {
+        if (!isFeatureEnabled("FormGenAutoRestoreForms")) {
+            try {
+                File f = new File(SESSION_FORMS_FILE);
+                if (f.exists()) f.delete();
+            } catch (Throwable ignored) {}
+            return;
+        }
         if (!sessionRestoreCompleted) return;
         try {
             if (mainShell == null || isDisposed(mainShell)) return;
@@ -1598,6 +1605,15 @@ public class FormGenAgent {
                 } else if (line.startsWith("VARS:")) {
                     String varsJson = line.substring(5).trim();
                     updateLiveVariablesFromJson(varsJson);
+                    final Object disp = getDisplay();
+                    if (disp != null && !isDisposed(disp)) {
+                        runOnDisplay(disp, new Runnable() {
+                            @Override
+                            public void run() {
+                                reconcileFeaturesOnUiThread(disp);
+                            }
+                        });
+                    }
                     OutputStream out = socket.getOutputStream();
                     out.write("OK\n".getBytes("UTF-8"));
                     out.flush();
@@ -1618,14 +1634,19 @@ public class FormGenAgent {
                     out.flush();
                 } else if (line.equalsIgnoreCase("SHUTDOWN")) {
                     try {
-                        List<String> openForms = getOpenFormFilePaths();
-                        if (!openForms.isEmpty()) {
-                            FileWriter fw = new FileWriter(SESSION_FORMS_FILE, false);
-                            try {
-                                for (String p : openForms) fw.write(p + "\n");
-                            } finally {
-                                fw.close();
+                        if (isFeatureEnabled("FormGenAutoRestoreForms")) {
+                            List<String> openForms = getOpenFormFilePaths();
+                            if (!openForms.isEmpty()) {
+                                FileWriter fw = new FileWriter(SESSION_FORMS_FILE, false);
+                                try {
+                                    for (String p : openForms) fw.write(p + "\n");
+                                } finally {
+                                    fw.close();
+                                }
                             }
+                        } else {
+                            File sf = new File(SESSION_FORMS_FILE);
+                            if (sf.exists()) sf.delete();
                         }
                     } catch (Throwable ignored) {}
                     try { new File(PORT_FILE).delete(); } catch (Throwable ignored) {}
@@ -1951,24 +1972,80 @@ public class FormGenAgent {
             public void run() {
                 try {
                     if (display == null || isDisposed(display)) return;
-                    ensureUdfAndMainTabHooksInstalled(display);
-                    saveOpenFormsSnapshotOnUiThread();
-                    Method getShellsMethod = display.getClass().getMethod("getShells");
-                    Object[] shells = (Object[]) getShellsMethod.invoke(display);
-                    if (shells != null) {
-                        for (Object s : shells) {
-                            if (s != null && !isDisposed(s)) {
-                                enhanceDialogShell(display, s);
-                                attachUndoManagersRecursively(s);
-                            }
-                        }
-                    }
+                    reconcileFeaturesOnUiThread(display);
                 } catch (Throwable ignored) {}
                 if (!isDisposed(display)) {
                     runTimer(display, 500, this);
                 }
             }
         });
+    }
+
+    public static void reconcileFeaturesOnUiThread(final Object display) {
+        if (display == null || isDisposed(display)) return;
+        try {
+            ensureUdfAndMainTabHooksInstalled(display);
+            saveOpenFormsSnapshotOnUiThread();
+            Method getShellsMethod = display.getClass().getMethod("getShells");
+            Object[] shells = (Object[]) getShellsMethod.invoke(display);
+            boolean autoFillEnabled = isFeatureEnabled("FormGenDialogAutoFill");
+            boolean undoEnabled = isFeatureEnabled("FormGenEditorUndoRedo");
+            boolean contextMenusEnabled = isFeatureEnabled("FormGenContextMenus");
+            if (shells != null) {
+                for (Object s : shells) {
+                    if (s != null && !isDisposed(s)) {
+                        if (autoFillEnabled) {
+                            enhanceDialogShell(display, s);
+                        } else {
+                            removeEnhanceDialogShell(s);
+                        }
+                        if (undoEnabled) {
+                            attachUndoManagersRecursively(s);
+                        }
+                        if (!contextMenusEnabled) {
+                            removeCustomMenusRecursively(s);
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void removeCustomMenusRecursively(Object widget) {
+        if (widget == null || isDisposed(widget)) return;
+        try {
+            Method getDataMethod = widget.getClass().getMethod("getData", String.class);
+            Method setDataMethod = widget.getClass().getMethod("setData", String.class, Object.class);
+            Object customMenu = getDataMethod.invoke(widget, "SoleraCustomMenu");
+            if (customMenu != null) {
+                try {
+                    Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
+                    Method getMenuMethod = widget.getClass().getMethod("getMenu");
+                    Object curMenu = getMenuMethod.invoke(widget);
+                    if (curMenu == customMenu) {
+                        Method setMenuMethod = widget.getClass().getMethod("setMenu", menuClass);
+                        setMenuMethod.invoke(widget, new Object[] { null });
+                    }
+                } catch (Throwable ignored) {}
+                try {
+                    if (!isDisposed(customMenu)) {
+                        customMenu.getClass().getMethod("dispose").invoke(customMenu);
+                    }
+                } catch (Throwable ignored) {}
+                setDataMethod.invoke(widget, "SoleraCustomMenu", null);
+            }
+
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            if (compositeClass.isInstance(widget)) {
+                Method getChildrenMethod = compositeClass.getMethod("getChildren");
+                Object[] children = (Object[]) getChildrenMethod.invoke(widget);
+                if (children != null) {
+                    for (Object c : children) {
+                        removeCustomMenusRecursively(c);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static void handleSwtEvent(Object display, Object eventObj) {
@@ -2045,27 +2122,33 @@ public class FormGenAgent {
                 }
             } else if (eventType == SWT_Show) {
                 if (menuClass.isInstance(widget)) {
-                    if (!isFeatureEnabled("FormGenContextMenus") && !isFeatureEnabled("FormGenCanvasPasteField")) {
-                        return;
-                    }
                     Method getStyleMethod = widget.getClass().getMethod("getStyle");
                     int style = (Integer) getStyleMethod.invoke(widget);
                     if ((style & SWT_POP_UP) != 0) {
                         try {
                             Method getDataMethod = widget.getClass().getMethod("getData", String.class);
-                            if (Boolean.TRUE.equals(getDataMethod.invoke(widget, "SoleraInjected"))) {
+                            if (Boolean.TRUE.equals(getDataMethod.invoke(widget, "SoleraOwnedMenu"))) {
                                 return;
                             }
                         } catch (Throwable ignored) {}
+                        // Always call injectSoleraMenuItems on native pop-up menus so disabled features are stripped immediately
                         injectSoleraMenuItems(display, widget);
                     }
                 } else if (shellClass.isInstance(widget)) {
-                    enhanceDialogShell(display, widget);
+                    if (isFeatureEnabled("FormGenDialogAutoFill")) {
+                        enhanceDialogShell(display, widget);
+                    } else {
+                        removeEnhanceDialogShell(widget);
+                    }
                     attachUndoManagersRecursively(widget);
                 }
             } else if (eventType == SWT_Activate) {
                 if (shellClass.isInstance(widget)) {
-                    enhanceDialogShell(display, widget);
+                    if (isFeatureEnabled("FormGenDialogAutoFill")) {
+                        enhanceDialogShell(display, widget);
+                    } else {
+                        removeEnhanceDialogShell(widget);
+                    }
                     attachUndoManagersRecursively(widget);
                 }
             } else if (eventType == SWT_MenuDetect) {
@@ -2079,6 +2162,7 @@ public class FormGenAgent {
                         return;
                     }
                     if (!isFeatureEnabled("FormGenContextMenus")) {
+                        removeCustomMenusRecursively(widget);
                         return;
                     }
                     // Intercept black code window (RainbowParenText), StyledText
@@ -2092,7 +2176,13 @@ public class FormGenAgent {
                         !clsName.contains("Canvas") && !clsName.contains("PdfViewer") && !clsName.contains("Shell")) {
                         Method getMenuMethod = widget.getClass().getMethod("getMenu");
                         Object existingMenu = getMenuMethod.invoke(widget);
-                        if (existingMenu == null) {
+                        boolean isOurMenu = false;
+                        if (existingMenu != null && !isDisposed(existingMenu)) {
+                            try {
+                                isOurMenu = Boolean.TRUE.equals(existingMenu.getClass().getMethod("getData", String.class).invoke(existingMenu, "SoleraOwnedMenu"));
+                            } catch (Throwable ignored) {}
+                        }
+                        if (existingMenu == null || isDisposed(existingMenu) || isOurMenu) {
                             attachStandardTextContextMenu(display, widget, eventObj);
                         }
                     }
@@ -2108,8 +2198,12 @@ public class FormGenAgent {
     // ==========================================
 
     private static void attachCodeEditorContextMenu(final Object display, final Object control, Object eventObj) {
-        if (!isFeatureEnabled("FormGenContextMenus")) return;
+        if (!isFeatureEnabled("FormGenContextMenus")) {
+            removeCustomMenusRecursively(control);
+            return;
+        }
         try {
+            removeCustomMenusRecursively(control);
             log("Attaching Code Editor Context Menu to: " + control.getClass().getName());
             Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
             Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
@@ -2206,6 +2300,8 @@ public class FormGenAgent {
 
             Method setDataMethod = menu.getClass().getMethod("setData", String.class, Object.class);
             setDataMethod.invoke(menu, "SoleraInjected", Boolean.TRUE);
+            setDataMethod.invoke(menu, "SoleraOwnedMenu", Boolean.TRUE);
+            control.getClass().getMethod("setData", String.class, Object.class).invoke(control, "SoleraCustomMenu", menu);
 
             Method setMenuMethod = control.getClass().getMethod("setMenu", menuClass);
             setMenuMethod.invoke(control, menu);
@@ -2222,8 +2318,12 @@ public class FormGenAgent {
     }
 
     private static void attachStandardTextContextMenu(Object display, Object control, Object eventObj) {
-        if (!isFeatureEnabled("FormGenContextMenus")) return;
+        if (!isFeatureEnabled("FormGenContextMenus")) {
+            removeCustomMenusRecursively(control);
+            return;
+        }
         try {
+            removeCustomMenusRecursively(control);
             Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
             Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");
             Constructor<?> menuCons = menuClass.getConstructor(controlClass);
@@ -2241,6 +2341,8 @@ public class FormGenAgent {
 
             Method setDataMethod = newMenu.getClass().getMethod("setData", String.class, Object.class);
             setDataMethod.invoke(newMenu, "SoleraInjected", Boolean.TRUE);
+            setDataMethod.invoke(newMenu, "SoleraOwnedMenu", Boolean.TRUE);
+            control.getClass().getMethod("setData", String.class, Object.class).invoke(control, "SoleraCustomMenu", newMenu);
 
             Method setMenuMethod = control.getClass().getMethod("setMenu", menuClass);
             setMenuMethod.invoke(control, newMenu);
@@ -2282,9 +2384,8 @@ public class FormGenAgent {
         try {
             boolean contextMenusEnabled = isFeatureEnabled("FormGenContextMenus");
             boolean canvasPasteEnabled = isFeatureEnabled("FormGenCanvasPasteField");
-            if (!contextMenusEnabled && !canvasPasteEnabled) return;
 
-            // Remove previous Solera items so we have a clean refresh
+            // Always remove previous Solera items first so disabled features are immediately stripped from native menus
             Method getItemsMethod = menu.getClass().getMethod("getItems");
             Object[] items = (Object[]) getItemsMethod.invoke(menu);
             boolean isEmptyCanvasMenu = false;
@@ -2303,6 +2404,8 @@ public class FormGenAgent {
                     }
                 }
             }
+
+            if (!contextMenusEnabled && !canvasPasteEnabled) return;
 
             // Trigger non-blocking async variable refresh
             refreshLiveVariablesAsync();
@@ -2935,7 +3038,10 @@ public class FormGenAgent {
     // ==========================================
 
     private static void enhanceDialogShell(final Object display, final Object shell) {
-        if (!isFeatureEnabled("FormGenDialogAutoFill")) return;
+        if (!isFeatureEnabled("FormGenDialogAutoFill")) {
+            removeEnhanceDialogShell(shell);
+            return;
+        }
         if (shell == null || isDisposed(shell)) return;
         try {
             Method getDataMethod = shell.getClass().getMethod("getData", String.class);
@@ -2983,6 +3089,59 @@ public class FormGenAgent {
         }
     }
 
+    private static void removeEnhanceDialogShell(final Object shell) {
+        if (shell == null || isDisposed(shell)) return;
+        try {
+            boolean removed = removeInjectedButtonsRecursively(shell);
+            Method getDataMethod = shell.getClass().getMethod("getData", String.class);
+            if (removed || Boolean.TRUE.equals(getDataMethod.invoke(shell, "SoleraEnhanced"))) {
+                shell.getClass().getMethod("setData", String.class, Object.class).invoke(shell, "SoleraEnhanced", null);
+                shell.getClass().getMethod("layout", boolean.class, boolean.class).invoke(shell, true, true);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static boolean removeInjectedButtonsRecursively(Object widget) {
+        if (widget == null || isDisposed(widget)) return false;
+        boolean anyRemoved = false;
+        try {
+            Method getDataMethod = widget.getClass().getMethod("getData", String.class);
+            if (Boolean.TRUE.equals(getDataMethod.invoke(widget, "SoleraInjectedButton"))) {
+                Object parent = null;
+                try { parent = widget.getClass().getMethod("getParent").invoke(widget); } catch (Throwable ignored) {}
+                try { widget.getClass().getMethod("dispose").invoke(widget); } catch (Throwable ignored) {}
+                if (parent != null && !isDisposed(parent)) {
+                    try {
+                        Object layout = parent.getClass().getMethod("getLayout").invoke(parent);
+                        if (layout != null) {
+                            Field nc = layout.getClass().getField("numColumns");
+                            int cols = nc.getInt(layout);
+                            if (cols > 1) {
+                                nc.setInt(layout, cols - 1);
+                            }
+                        }
+                        parent.getClass().getMethod("layout", boolean.class, boolean.class).invoke(parent, true, true);
+                    } catch (Throwable ignored) {}
+                }
+                return true;
+            }
+
+            Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
+            if (compositeClass.isInstance(widget)) {
+                Method getChildrenMethod = compositeClass.getMethod("getChildren");
+                Object[] children = (Object[]) getChildrenMethod.invoke(widget);
+                if (children != null) {
+                    for (Object c : children) {
+                        if (removeInjectedButtonsRecursively(c)) {
+                            anyRemoved = true;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return anyRemoved;
+    }
+
     private static void enhancePublishDialog(final Object display, final Object shell, final Object publishDlg) {
         try {
             log("Enhancing PublishDlg with '⚡ Fill from Solera CMS' button...");
@@ -3021,6 +3180,7 @@ public class FormGenAgent {
             Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
             Constructor<?> btnCons = buttonClass.getConstructor(compositeClass, int.class);
             Object btnFill = btnCons.newInstance(buttonComposite, SWT_PUSH);
+            btnFill.getClass().getMethod("setData", String.class, Object.class).invoke(btnFill, "SoleraInjectedButton", Boolean.TRUE);
 
             btnFill.getClass().getMethod("setText", String.class).invoke(btnFill, "⚡ Fill from Solera CMS");
             try {
@@ -3135,6 +3295,7 @@ public class FormGenAgent {
             Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
             Constructor<?> btnCons = buttonClass.getConstructor(compositeClass, int.class);
             Object btnRegen = btnCons.newInstance(buttonComposite, SWT_PUSH);
+            btnRegen.getClass().getMethod("setData", String.class, Object.class).invoke(btnRegen, "SoleraInjectedButton", Boolean.TRUE);
 
             btnRegen.getClass().getMethod("setText", String.class).invoke(btnRegen, "🔄 Regenerate UUID (Clone)");
             try {
@@ -3241,6 +3402,7 @@ public class FormGenAgent {
             Class<?> compositeClass = Class.forName("org.eclipse.swt.widgets.Composite");
             Constructor<?> btnCons = buttonClass.getConstructor(compositeClass, int.class);
             Object btnOpenUtils = btnCons.newInstance(compButtons, SWT_PUSH);
+            btnOpenUtils.getClass().getMethod("setData", String.class, Object.class).invoke(btnOpenUtils, "SoleraInjectedButton", Boolean.TRUE);
 
             btnOpenUtils.getClass().getMethod("setText", String.class).invoke(btnOpenUtils, "🛠 Send to FormGen Utilities");
             try {

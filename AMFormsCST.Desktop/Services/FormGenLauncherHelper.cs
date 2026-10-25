@@ -62,6 +62,15 @@ public static class FormGenLauncherHelper
             sb.AppendLine($"FormGenAutoRestoreForms={userSettings.FormGenAutoRestoreForms.ToString().ToLowerInvariant()}");
 
             File.WriteAllText(GetConfigFilePath(), sb.ToString(), new UTF8Encoding(false));
+
+            if (!userSettings.FormGenAutoRestoreForms)
+            {
+                var sessionFile = GetSessionFormsFilePath();
+                if (File.Exists(sessionFile))
+                {
+                    try { File.Delete(sessionFile); } catch { /* ignore */ }
+                }
+            }
         }
         catch (Exception ex)
         {
