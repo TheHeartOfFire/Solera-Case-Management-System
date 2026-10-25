@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using AMFormsCST.Core.Interfaces;
 
 namespace AMFormsCST.Desktop.Services;
@@ -14,6 +17,18 @@ namespace AMFormsCST.Desktop.Services;
 /// </summary>
 public static class FormGenLauncherHelper
 {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
     private const string PortFileName = "formgen_agent.port";
     private const string ConfigFileName = "formgen_agent.properties";
     private const string SessionFormsFileName = "formgen_session_forms.txt";
@@ -48,7 +63,17 @@ public static class FormGenLauncherHelper
         IsPatchingAllowed = userSettings.IsFormGenPatched;
 
         if (!userSettings.IsFormGenPatched)
+        {
+            try
+            {
+                foreach (var tempFile in new[] { GetPortFilePath(), GetConfigFilePath(), GetLogFilePath(), GetSessionFormsFilePath() })
+                {
+                    if (File.Exists(tempFile)) File.Delete(tempFile);
+                }
+            }
+            catch { }
             return;
+        }
 
         try
         {
@@ -328,6 +353,66 @@ public static class FormGenLauncherHelper
     }
 
     /// <summary>
+    /// Finds all running FormGen JVM process IDs using IPC, main window title, and Win32 window enumeration.
+    /// This ensures detection even when Java/SWT creates windows that don't populate Process.MainWindowHandle.
+    /// </summary>
+    public static List<int> GetFormGenProcessIds()
+    {
+        var pids = new HashSet<int>();
+
+        // 1. Gather all java/javaw process IDs
+        var javaPids = new HashSet<int>();
+        try
+        {
+            foreach (var name in new[] { "javaw", "java" })
+            {
+                foreach (var p in Process.GetProcessesByName(name))
+                {
+                    javaPids.Add(p.Id);
+                    if (!string.IsNullOrWhiteSpace(p.MainWindowTitle) &&
+                        (p.MainWindowTitle.Contains("FormGen", StringComparison.OrdinalIgnoreCase) ||
+                         p.MainWindowTitle.Contains("Form Generator", StringComparison.OrdinalIgnoreCase) ||
+                         p.MainWindowTitle.Contains("Auto/Mate", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        pids.Add(p.Id);
+                    }
+                    p.Dispose();
+                }
+            }
+        }
+        catch { }
+
+        // 2. Enumerate all top-level windows to catch SWT windows where MainWindowHandle is 0
+        if (javaPids.Count > 0 && OperatingSystem.IsWindows())
+        {
+            try
+            {
+                EnumWindows((hWnd, lParam) =>
+                {
+                    GetWindowThreadProcessId(hWnd, out uint pid);
+                    if (pid != 0 && javaPids.Contains((int)pid))
+                    {
+                        var sb = new StringBuilder(256);
+                        GetWindowText(hWnd, sb, sb.Capacity);
+                        var title = sb.ToString();
+                        if (!string.IsNullOrWhiteSpace(title) &&
+                            (title.Contains("FormGen", StringComparison.OrdinalIgnoreCase) ||
+                             title.Contains("Form Generator", StringComparison.OrdinalIgnoreCase) ||
+                             title.Contains("Auto/Mate", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            pids.Add((int)pid);
+                        }
+                    }
+                    return true;
+                }, IntPtr.Zero);
+            }
+            catch { }
+        }
+
+        return pids.ToList();
+    }
+
+    /// <summary>
     /// Checks whether any FormGen JVM process is currently running (either via Agent IPC or window title).
     /// </summary>
     public static bool IsFormGenProcessRunning()
@@ -335,33 +420,7 @@ public static class FormGenLauncherHelper
         if (IsAgentActive())
             return true;
 
-        try
-        {
-            foreach (var procName in new[] { "javaw", "java" })
-            {
-                foreach (var proc in Process.GetProcessesByName(procName))
-                {
-                    try
-                    {
-                        var title = proc.MainWindowTitle;
-                        if (!string.IsNullOrWhiteSpace(title) &&
-                            (title.Contains("FormGen", StringComparison.OrdinalIgnoreCase) ||
-                             title.Contains("Form Generator", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            return true;
-                        }
-                    }
-                    catch { }
-                    finally
-                    {
-                        proc.Dispose();
-                    }
-                }
-            }
-        }
-        catch { }
-
-        return false;
+        return GetFormGenProcessIds().Count > 0;
     }
 
     /// <summary>
@@ -559,38 +618,29 @@ public static class FormGenLauncherHelper
                     {
                         using var stream = client.GetStream();
                         using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+                        using var reader = new StreamReader(stream, new UTF8Encoding(false));
                         writer.WriteLine("SHUTDOWN");
+                        try { reader.ReadLine(); } catch { }
                     }
                 }
             }
         }
         catch { }
 
-        // 2. Also find any javaw/java processes with FormGen window title and close/kill them
+        // 2. Kill all identified FormGen processes
         try
         {
-            foreach (var procName in new[] { "javaw", "java" })
+            var pids = GetFormGenProcessIds();
+            foreach (var pid in pids)
             {
-                foreach (var proc in Process.GetProcessesByName(procName))
+                try
                 {
-                    try
-                    {
-                        var title = proc.MainWindowTitle;
-                        if (!string.IsNullOrWhiteSpace(title) &&
-                            (title.Contains("FormGen", StringComparison.OrdinalIgnoreCase) ||
-                             title.Contains("Form Generator", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            logger?.LogInfo($"Closing FormGen process PID {proc.Id} ('{title}')...");
-                            proc.Kill();
-                            proc.WaitForExit(3000);
-                        }
-                    }
-                    catch { }
-                    finally
-                    {
-                        proc.Dispose();
-                    }
+                    using var proc = Process.GetProcessById(pid);
+                    logger?.LogInfo($"Closing FormGen process PID {pid}...");
+                    proc.Kill();
+                    proc.WaitForExit(3000);
                 }
+                catch { }
             }
         }
         catch (Exception ex)
@@ -699,43 +749,49 @@ public static class FormGenLauncherHelper
             var formsToReopen = openFormsToRestore?.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
                 ?? GetOpenFormsFromAgent(logger);
 
-            bool wasRunning = IsFormGenProcessRunning();
-            if (wasRunning)
-            {
-                CloseFormGenProcesses(logger);
-                System.Threading.Thread.Sleep(600);
-            }
-
+            // 0. Update state flags immediately so background services/hooks cease FormGen interaction
             IsPatchingAllowed = false;
             if (userSettings != null)
             {
                 userSettings.IsFormGenPatched = false;
             }
 
-            // 1. Restore NewFormGen.bat to clean vanilla state
+            // 1. Terminate all running FormGen JVM processes to release any file locks
+            CloseFormGenProcesses(logger);
+            System.Threading.Thread.Sleep(800);
+
+            // 2. Restore NewFormGen.bat to clean vanilla state
             RestoreVanillaBatch(batPath, logger);
 
-            // 2. Delete FormGenAgent.jar from the FormGen folder (with retry in case JVM is releasing file handle)
+            // 3. Delete any agent JARs and backup files from the FormGen directory
             var dir = Path.GetDirectoryName(batPath);
-            if (!string.IsNullOrWhiteSpace(dir))
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             {
-                var agentJarPath = Path.Combine(dir, "FormGenAgent.jar");
-                for (int i = 0; i < 5 && File.Exists(agentJarPath); i++)
+                var filesToDelete = new DirectoryInfo(dir)
+                    .GetFiles("*agent*.jar")
+                    .Concat(new DirectoryInfo(dir).GetFiles("NewFormGen.bat.*"))
+                    .ToList();
+
+                foreach (var file in filesToDelete)
                 {
-                    try
+                    for (int i = 0; i < 10 && file.Exists; i++)
                     {
-                        File.Delete(agentJarPath);
-                        logger?.LogInfo($"Deleted '{agentJarPath}'.");
-                        break;
-                    }
-                    catch
-                    {
-                        System.Threading.Thread.Sleep(300);
+                        try
+                        {
+                            file.Delete();
+                            logger?.LogInfo($"Deleted '{file.FullName}'.");
+                            break;
+                        }
+                        catch
+                        {
+                            System.Threading.Thread.Sleep(200);
+                            file.Refresh();
+                        }
                     }
                 }
             }
 
-            // 3. Remove all agent temp files (port, config, log, session forms)
+            // 4. Remove all agent temp files (port, config, log, session forms)
             foreach (var tempFile in new[] { GetPortFilePath(), GetConfigFilePath(), GetLogFilePath(), GetSessionFormsFilePath() })
             {
                 try
@@ -746,7 +802,18 @@ public static class FormGenLauncherHelper
                 catch { }
             }
 
-            // 4. Relaunch vanilla FormGen if requested
+            // Also clean up any leftover FormGenPort_* directories in temp
+            try
+            {
+                var tempDir = Path.GetTempPath();
+                foreach (var d in Directory.GetDirectories(tempDir, "FormGenPort_*"))
+                {
+                    try { Directory.Delete(d, true); } catch { }
+                }
+            }
+            catch { }
+
+            // 5. Relaunch vanilla FormGen if requested
             if (relaunchFormGen)
             {
                 var firstForm = formsToReopen.FirstOrDefault();
@@ -789,16 +856,32 @@ public static class FormGenLauncherHelper
             }
         }
 
-        // Check AppData default
-        var defaultBat = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"NewFormGen\NewFormGen.bat");
-        if (File.Exists(defaultBat))
-            return defaultBat;
+        // Check common default locations
+        var candidates = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"NewFormGen\NewFormGen.bat"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"NewFormGen\NewFormGen.bat"),
+            @"C:\ProgramData\automate\NewFormGen\NewFormGen.bat",
+            @"C:\ProgramData\automate\NewFormGen.bat",
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\Tools\FormGenLibs\NewFormGen.bat")
+        };
+
+        foreach (var c in candidates)
+        {
+            try
+            {
+                if (File.Exists(c))
+                    return Path.GetFullPath(c);
+            }
+            catch { }
+        }
 
         return null;
     }
 
     /// <summary>
     /// Ensures FormGenAgent.jar is copied into the NewFormGen directory and NewFormGen.bat is configured with the agent.
+    /// Backs up the original NewFormGen.bat to NewFormGen.bat.vanilla before making any changes.
     /// </summary>
     public static void EnsureAgentDeployedAndPatched(string batPath, ILogService? logger = null)
     {
@@ -811,6 +894,21 @@ public static class FormGenLauncherHelper
             var ext = Path.GetExtension(batPath);
             if (!ext.Equals(".bat", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
                 return;
+
+            var vanillaBackup = batPath + ".vanilla";
+            if (File.Exists(batPath) && !File.Exists(vanillaBackup))
+            {
+                var original = File.ReadAllText(batPath);
+                if (!original.Contains("FormGenAgent.jar", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        File.WriteAllText(vanillaBackup, original);
+                        logger?.LogInfo($"Created pristine vanilla backup at '{vanillaBackup}'.");
+                    }
+                    catch { }
+                }
+            }
 
             var agentDest = Path.Combine(dir, "FormGenAgent.jar");
             ExtractEmbeddedAgent(agentDest, logger);
@@ -846,7 +944,9 @@ public static class FormGenLauncherHelper
     }
 
     /// <summary>
-    /// Restores NewFormGen.bat to its original vanilla configuration by removing the FormGenAgent javaagent parameter and cd prefix.
+    /// Restores NewFormGen.bat to its original vanilla configuration.
+    /// Uses the .vanilla backup if present; otherwise scrubs all -javaagent, -Dformgen, and cd /d commands.
+    /// Also deletes any FormGenAgent jars and backups in the directory.
     /// </summary>
     public static void RestoreVanillaBatch(string batPath, ILogService? logger = null)
     {
@@ -855,14 +955,50 @@ public static class FormGenLauncherHelper
             if (!File.Exists(batPath))
                 return;
 
+            var vanillaBackup = batPath + ".vanilla";
+            var bakBackup = batPath + ".bak";
+
+            if (File.Exists(vanillaBackup))
+            {
+                try
+                {
+                    File.Copy(vanillaBackup, batPath, overwrite: true);
+                    File.Delete(vanillaBackup);
+                    if (File.Exists(bakBackup)) File.Delete(bakBackup);
+                    logger?.LogInfo($"Restored NewFormGen.bat from pristine vanilla backup '{vanillaBackup}'.");
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning($"Could not restore vanilla backup '{vanillaBackup}': {ex.Message}");
+                }
+            }
+
             var content = File.ReadAllText(batPath);
-            var updated = content
-                .Replace("cd /d \"%~dp0\"\r\n", "")
-                .Replace("cd /d \"%~dp0\"\n", "")
-                .Replace("-javaagent:FormGenAgent.jar -Dformgen.file=\"%~f1\" ", "")
-                .Replace("-javaagent:FormGenAgent.jar -Dformgen.file=\"%~f1\"", "")
-                .Replace("-javaagent:FormGenAgent.jar ", "")
-                .Replace("-javaagent:FormGenAgent.jar", "");
+            var updated = content;
+
+            // Strip cd /d "%~dp0"
+            updated = Regex.Replace(
+                updated,
+                @"^\s*cd\s+/d\s+""%~dp0""\r?\n?",
+                "",
+                RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+            // Strip any -javaagent:... parameter pointing to FormGenAgent or any agent jar
+            updated = Regex.Replace(
+                updated,
+                @"-javaagent:(?:""[^""]*""|[^\s]+)\s*",
+                "",
+                RegexOptions.IgnoreCase);
+
+            // Strip any -Dformgen.file=... parameter
+            updated = Regex.Replace(
+                updated,
+                @"-Dformgen\.file=(?:""[^""]*""|[^\s]+)\s*",
+                "",
+                RegexOptions.IgnoreCase);
+
+            // Clean up any double spaces
+            updated = Regex.Replace(updated, @"[ \t]{2,}", " ");
 
             if (!string.Equals(content, updated, StringComparison.Ordinal))
             {
@@ -871,17 +1007,26 @@ public static class FormGenLauncherHelper
             }
 
             var dir = Path.GetDirectoryName(batPath);
-            if (!string.IsNullOrWhiteSpace(dir))
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             {
-                var jarPath = Path.Combine(dir, "FormGenAgent.jar");
-                if (File.Exists(jarPath))
+                foreach (var pattern in new[] { "*FormGenAgent*.jar", "*formgen*agent*.jar", "NewFormGen.bat.vanilla", "NewFormGen.bat.bak" })
                 {
-                    try
+                    foreach (var f in Directory.GetFiles(dir, pattern))
                     {
-                        File.Delete(jarPath);
-                        logger?.LogInfo($"Removed FormGenAgent.jar from '{dir}'.");
+                        for (int i = 0; i < 5 && File.Exists(f); i++)
+                        {
+                            try
+                            {
+                                File.Delete(f);
+                                logger?.LogInfo($"Removed '{f}'.");
+                                break;
+                            }
+                            catch
+                            {
+                                System.Threading.Thread.Sleep(200);
+                            }
+                        }
                     }
-                    catch { }
                 }
             }
         }

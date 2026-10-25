@@ -138,6 +138,14 @@ public class FormGenHookService : IHostedService, IDisposable
             try
             {
                 var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+
+                // 0-footprint check: If FormGen is unpatched, never intercept mouse events on FormGen
+                bool isFormGen = IsFormGenWindowAt(hookStruct.pt, out _);
+                if (isFormGen && !FormGenLauncherHelper.IsPatchingAllowed)
+                {
+                    return CallNextHookEx(_hookId, nCode, wParam, lParam);
+                }
+
                 bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 
                 if (isShift)

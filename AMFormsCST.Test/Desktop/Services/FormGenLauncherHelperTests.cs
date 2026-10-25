@@ -299,6 +299,66 @@ public class FormGenLauncherHelperTests
     }
 
     [Fact]
+    public void RestoreVanillaBatch_WhenVanillaBackupExists_RestoresPristineBackupAndDeletesBackup()
+    {
+        var tempPortFile = UsePrivatePortFile();
+        var tempDir = Path.GetDirectoryName(tempPortFile)!;
+        var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
+        var tempVanilla = Path.Combine(tempDir, "NewFormGen.bat.vanilla");
+
+        try
+        {
+            const string pristineContent = "@echo off\r\njava -Xms1024m -cp * -ea com.automate.formgen.NewFormGen %*";
+            File.WriteAllText(tempVanilla, pristineContent);
+            File.WriteAllText(tempBat, "cd /d \"%~dp0\"\r\njava -javaagent:FormGenAgent.jar -Xms1024m -cp * -ea com.automate.formgen.NewFormGen %*");
+
+            FormGenLauncherHelper.RestoreVanillaBatch(tempBat);
+
+            Assert.False(File.Exists(tempVanilla));
+            var restored = File.ReadAllText(tempBat);
+            Assert.Equal(pristineContent, restored);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void RestoreVanillaBatch_WhenJavaAgentBeforeMemoryFlags_ScrubsCleanly()
+    {
+        var tempPortFile = UsePrivatePortFile();
+        var tempDir = Path.GetDirectoryName(tempPortFile)!;
+        var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
+        var extraJar = Path.Combine(tempDir, "WorkMachine_FormGenAgent.jar");
+
+        try
+        {
+            File.WriteAllText(tempBat,
+                "cd /d \"%~dp0\"\r\n" +
+                "if \"%~1\"==\"\" (\r\n" +
+                "    java -javaagent:FormGenAgent.jar -Xms1024m -cp * -ea com.automate.formgen.NewFormGen %*\r\n" +
+                ") else (\r\n" +
+                "    java -javaagent:FormGenAgent.jar -Dformgen.file=\"%~f1\" -Xms1024m -cp * -ea com.automate.formgen.NewFormGen %*\r\n" +
+                ")");
+            File.WriteAllText(extraJar, "dummy content");
+
+            FormGenLauncherHelper.RestoreVanillaBatch(tempBat);
+
+            var restored = File.ReadAllText(tempBat);
+            Assert.DoesNotContain("FormGenAgent", restored);
+            Assert.DoesNotContain("-Dformgen.file", restored);
+            Assert.DoesNotContain("cd /d \"%~dp0\"", restored);
+            Assert.Contains("java -Xms1024m", restored);
+            Assert.False(File.Exists(extraJar));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public void BrowserIntegrationService_EnsureManifestUpdated_NeverWritesTestHostExe()
     {
         var resolvedExe = BrowserIntegrationService.ResolveDesktopExecutablePath();
