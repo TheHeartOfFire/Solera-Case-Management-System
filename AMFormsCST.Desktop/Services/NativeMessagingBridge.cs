@@ -16,54 +16,96 @@ public static class NativeMessagingBridge
 
     public static async Task RunAsync()
     {
-        using var stdin = Console.OpenStandardInput();
-        using var stdout = Console.OpenStandardOutput();
-
-        byte[] lengthBuffer = new byte[4];
-
-        while (true)
+        try
         {
-            int bytesRead = await ReadExactAsync(stdin, lengthBuffer, 0, 4);
-            if (bytesRead < 4) break; // Stream ended
+            LogBridge($"NativeMessagingBridge started. PID={Environment.ProcessId}, Args=[{string.Join(", ", Environment.GetCommandLineArgs())}]");
 
-            int length = BitConverter.ToInt32(lengthBuffer, 0);
-            if (length <= 0 || length > MaxMessageSize) break;
+            using var stdin = Console.OpenStandardInput();
+            using var stdout = Console.OpenStandardOutput();
 
-            byte[] messageBuffer = new byte[length];
-            int read = await ReadExactAsync(stdin, messageBuffer, 0, length);
-            if (read < length) break;
+            byte[] lengthBuffer = new byte[4];
 
-            string json = Encoding.UTF8.GetString(messageBuffer);
-
-            IpcMessage? message = null;
-            try
+            while (true)
             {
-                message = JsonSerializer.Deserialize<IpcMessage>(json);
-            }
-            catch (Exception ex)
-            {
-                var errResponse = IpcResponse.Fail($"Invalid native message format: {ex.Message}");
-                await WriteResponseAsync(stdout, errResponse);
-                continue;
-            }
-
-            message ??= new IpcMessage { Action = IpcActions.Ping };
-
-            var response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 1500);
-            if (!response.Success && string.Equals(message.Target, "SoleraCMS", StringComparison.OrdinalIgnoreCase))
-            {
-                if (TryLaunchDesktopApp())
+                int bytesRead = await ReadExactAsync(stdin, lengthBuffer, 0, 4).ConfigureAwait(false);
+                if (bytesRead < 4)
                 {
-                    for (int attempt = 0; attempt < 12; attempt++)
+                    LogBridge($"stdin closed (bytesRead={bytesRead}). Exiting loop.");
+                    break; // Stream ended
+                }
+
+                int length = BitConverter.ToInt32(lengthBuffer, 0);
+                if (length <= 0 || length > MaxMessageSize)
+                {
+                    LogBridge($"Invalid message length={length}. Exiting loop.");
+                    break;
+                }
+
+                byte[] messageBuffer = new byte[length];
+                int read = await ReadExactAsync(stdin, messageBuffer, 0, length).ConfigureAwait(false);
+                if (read < length)
+                {
+                    LogBridge($"Incomplete message body read ({read}/{length}). Exiting loop.");
+                    break;
+                }
+
+                string json = Encoding.UTF8.GetString(messageBuffer);
+                LogBridge($"Received message ({length} bytes): {json}");
+
+                IpcMessage? message = null;
+                try
+                {
+                    message = JsonSerializer.Deserialize<IpcMessage>(json);
+                }
+                catch (Exception ex)
+                {
+                    LogBridge($"JSON deserialize error: {ex.Message}");
+                    var errResponse = IpcResponse.Fail($"Invalid native message format: {ex.Message}");
+                    await WriteResponseAsync(stdout, errResponse).ConfigureAwait(false);
+                    continue;
+                }
+
+                message ??= new IpcMessage { Action = IpcActions.Ping };
+
+                var response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 2500).ConfigureAwait(false);
+                if (!response.Success &&
+                    string.Equals(message.Target, "SoleraCMS", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(Environment.GetEnvironmentVariable("SOLERA_NO_AUTOLAUNCH"), "1", StringComparison.OrdinalIgnoreCase))
+                {
+                    LogBridge($"Initial pipe send failed ({response.Message}). Attempting to launch SoleraCMS desktop app...");
+                    if (TryLaunchDesktopApp())
                     {
-                        await Task.Delay(500);
-                        response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 1500);
-                        if (response.Success)
-                            break;
+                        for (int attempt = 0; attempt < 12; attempt++)
+                        {
+                            await Task.Delay(500).ConfigureAwait(false);
+                            response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 1500).ConfigureAwait(false);
+                            if (response.Success)
+                                break;
+                        }
                     }
                 }
+
+                LogBridge($"Sending response: Success={response.Success}, Message={response.Message}");
+                await WriteResponseAsync(stdout, response).ConfigureAwait(false);
             }
-            await WriteResponseAsync(stdout, response);
+        }
+        catch (Exception ex)
+        {
+            LogBridge($"Unhandled exception in NativeMessagingBridge: {ex}");
+        }
+    }
+
+    private static void LogBridge(string text)
+    {
+        try
+        {
+            var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "native_messaging.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+            File.AppendAllText(logPath, $"[{DateTime.Now:O}] {text}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Never write to stdout/stderr or throw from diagnostic logging
         }
     }
 
@@ -95,9 +137,9 @@ public static class NativeMessagingBridge
         byte[] responseBytes = Encoding.UTF8.GetBytes(responseJson);
         byte[] responseLengthBytes = BitConverter.GetBytes(responseBytes.Length);
 
-        await stdout.WriteAsync(responseLengthBytes.AsMemory(0, 4));
-        await stdout.WriteAsync(responseBytes.AsMemory(0, responseBytes.Length));
-        await stdout.FlushAsync();
+        await stdout.WriteAsync(responseLengthBytes.AsMemory(0, 4)).ConfigureAwait(false);
+        await stdout.WriteAsync(responseBytes.AsMemory(0, responseBytes.Length)).ConfigureAwait(false);
+        await stdout.FlushAsync().ConfigureAwait(false);
     }
 
     private static async Task<int> ReadExactAsync(Stream stream, byte[] buffer, int offset, int count)
@@ -105,7 +147,7 @@ public static class NativeMessagingBridge
         int totalRead = 0;
         while (totalRead < count)
         {
-            int read = await stream.ReadAsync(buffer.AsMemory(offset + totalRead, count - totalRead));
+            int read = await stream.ReadAsync(buffer.AsMemory(offset + totalRead, count - totalRead)).ConfigureAwait(false);
             if (read == 0) return totalRead;
             totalRead += read;
         }

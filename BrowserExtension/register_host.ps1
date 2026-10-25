@@ -46,7 +46,8 @@ if ($ExtensionId) {
     Write-Host "Added allowed origin: $origin" -ForegroundColor Cyan
 }
 
-$jsonContent | ConvertTo-Json -Depth 5 | Set-Content $manifestPath -Encoding UTF8
+$jsonText = $jsonContent | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText($manifestPath, $jsonText, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "Updated $manifestPath with executable path: $targetExe"
 

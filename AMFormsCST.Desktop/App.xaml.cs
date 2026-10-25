@@ -51,7 +51,8 @@ namespace AMFormsCST.Desktop;
 /// </summary>
 public partial class App : Application
 {
-    private static readonly IHost _host = BuildHost();
+    private static IHost? _hostInstance;
+    private static IHost _host => _hostInstance ??= BuildHost();
 
     private static IHost BuildHost()
     {
@@ -256,7 +257,7 @@ public partial class App : Application
     {
         if (e.Args.Any(a => a.Contains("--native-messaging", StringComparison.OrdinalIgnoreCase) || a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase)))
         {
-            NativeMessagingBridge.RunAsync().GetAwaiter().GetResult();
+            Task.Run(() => NativeMessagingBridge.RunAsync()).GetAwaiter().GetResult();
             Environment.Exit(0);
             return;
         }
