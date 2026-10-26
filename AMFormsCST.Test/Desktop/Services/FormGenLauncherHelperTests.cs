@@ -449,6 +449,67 @@ public class FormGenLauncherHelperTests
     }
 
     [Fact]
+    public void RestoreVanillaBatch_WhenVanillaBackupIs0Bytes_DiscardsBackupAndRecreatesDefaultVanillaBatch()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "FormGenCorrupt_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
+        var tempVanilla = Path.Combine(tempDir, "NewFormGen.bat.vanilla");
+
+        try
+        {
+            // Simulate the exact bug from the work machine: NewFormGen.bat has only "cd /d ...", vanilla is 0 bytes
+            File.WriteAllText(tempBat, "cd /d \"%~dp0\"\r\n");
+            File.WriteAllBytes(tempVanilla, Array.Empty<byte>());
+
+            FormGenLauncherHelper.RestoreVanillaBatch(tempBat);
+
+            Assert.True(File.Exists(tempBat));
+            var content = File.ReadAllText(tempBat);
+            Assert.Contains("com.automate.formgen.NewFormGen", content);
+            Assert.DoesNotContain("FormGenAgent", content);
+            Assert.False(File.Exists(tempVanilla), "0-byte NewFormGen.bat.vanilla was not deleted!");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void EnsureAgentDeployedAndPatched_WhenBatIsEmptyOrCorrupted_InitializesVanillaAndPatchesCleanly()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "FormGenCorruptPatch_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
+        var tempVanilla = Path.Combine(tempDir, "NewFormGen.bat.vanilla");
+
+        try
+        {
+            // Empty 0-byte file
+            File.WriteAllBytes(tempBat, Array.Empty<byte>());
+
+            FormGenLauncherHelper.EnsureAgentDeployedAndPatched(tempBat);
+
+            Assert.True(File.Exists(tempBat));
+            var content = File.ReadAllText(tempBat);
+            Assert.Contains("com.automate.formgen.NewFormGen", content);
+            Assert.Contains("-javaagent:FormGenAgent.jar", content);
+            Assert.Contains("cd /d \"%~dp0\"", content);
+
+            Assert.True(File.Exists(tempVanilla));
+            Assert.True(new FileInfo(tempVanilla).Length > 0, "vanilla backup was 0 bytes!");
+            var vanillaContent = File.ReadAllText(tempVanilla);
+            Assert.Contains("com.automate.formgen.NewFormGen", vanillaContent);
+            Assert.DoesNotContain("FormGenAgent", vanillaContent);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public void BrowserIntegrationService_EnsureManifestUpdated_NeverWritesTestHostExe()
     {
         var resolvedExe = BrowserIntegrationService.ResolveDesktopExecutablePath();

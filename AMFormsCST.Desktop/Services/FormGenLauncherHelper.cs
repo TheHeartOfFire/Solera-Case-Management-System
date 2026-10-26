@@ -878,6 +878,15 @@ if ""%~1""=="""" (
             // 5. Relaunch vanilla FormGen if requested
             if (relaunchFormGen)
             {
+                // Final sanity guard: Ensure NewFormGen.bat is valid, non-empty, and contains launch command before launching
+                if (!File.Exists(batPath) ||
+                    new FileInfo(batPath).Length == 0 ||
+                    !File.ReadAllText(batPath).Contains("com.automate.formgen.NewFormGen", StringComparison.OrdinalIgnoreCase))
+                {
+                    File.WriteAllText(batPath, DefaultVanillaBatchContent, new UTF8Encoding(false));
+                    logger?.LogInfo($"Re-populated NewFormGen.bat with standard vanilla launch script at '{batPath}' before relaunch.");
+                }
+
                 var firstForm = formsToReopen.FirstOrDefault();
                 var startInfo = new ProcessStartInfo
                 {
@@ -986,15 +995,26 @@ if ""%~1""=="""" (
             if (!ext.Equals(".bat", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
                 return;
 
-            var vanillaBackup = batPath + ".vanilla";
-            if (File.Exists(batPath) && !File.Exists(vanillaBackup))
+            // Sanity check: If NewFormGen.bat is empty, whitespace, or missing the FormGen class, initialize it from DefaultVanillaBatchContent first
+            var currentContent = File.Exists(batPath) ? File.ReadAllText(batPath) : string.Empty;
+            if (string.IsNullOrWhiteSpace(currentContent) ||
+                !currentContent.Contains("com.automate.formgen.NewFormGen", StringComparison.OrdinalIgnoreCase))
             {
-                var original = File.ReadAllText(batPath);
-                if (!original.Contains("FormGenAgent.jar", StringComparison.OrdinalIgnoreCase))
+                File.WriteAllText(batPath, DefaultVanillaBatchContent, new UTF8Encoding(false));
+                currentContent = DefaultVanillaBatchContent;
+                logger?.LogInfo($"Initialized NewFormGen.bat with default vanilla launch script at '{batPath}'.");
+            }
+
+            var vanillaBackup = batPath + ".vanilla";
+            if (!File.Exists(vanillaBackup))
+            {
+                if (!currentContent.Contains("FormGenAgent.jar", StringComparison.OrdinalIgnoreCase) &&
+                    currentContent.Contains("com.automate.formgen.NewFormGen", StringComparison.OrdinalIgnoreCase) &&
+                    currentContent.Trim().Length > 20)
                 {
                     try
                     {
-                        File.WriteAllText(vanillaBackup, original);
+                        File.WriteAllText(vanillaBackup, currentContent, new UTF8Encoding(false));
                         logger?.LogInfo($"Created pristine vanilla backup at '{vanillaBackup}'.");
                     }
                     catch { }
@@ -1046,34 +1066,60 @@ if ""%~1""=="""" (
             var vanillaBackup = batPath + ".vanilla";
             var bakBackup = batPath + ".bak";
 
+            bool restoredFromBackup = false;
+
             if (File.Exists(vanillaBackup))
             {
                 try
                 {
-                    File.Copy(vanillaBackup, batPath, overwrite: true);
+                    if (new FileInfo(vanillaBackup).Length > 0 &&
+                        File.ReadAllText(vanillaBackup).Contains("com.automate.formgen.NewFormGen", StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Copy(vanillaBackup, batPath, overwrite: true);
+                        restoredFromBackup = true;
+                        logger?.LogInfo($"Restored NewFormGen.bat from pristine vanilla backup '{vanillaBackup}'.");
+                    }
+                    else
+                    {
+                        logger?.LogWarning($"Vanilla backup '{vanillaBackup}' is empty or invalid; discarding it.");
+                    }
                     File.Delete(vanillaBackup);
                     if (File.Exists(bakBackup)) File.Delete(bakBackup);
-                    logger?.LogInfo($"Restored NewFormGen.bat from pristine vanilla backup '{vanillaBackup}'.");
                 }
                 catch (Exception ex)
                 {
                     logger?.LogWarning($"Could not restore vanilla backup '{vanillaBackup}': {ex.Message}");
                 }
             }
-            else if (File.Exists(bakBackup))
+
+            if (!restoredFromBackup && File.Exists(bakBackup))
             {
                 try
                 {
-                    File.Copy(bakBackup, batPath, overwrite: true);
+                    if (new FileInfo(bakBackup).Length > 0 &&
+                        File.ReadAllText(bakBackup).Contains("com.automate.formgen.NewFormGen", StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Copy(bakBackup, batPath, overwrite: true);
+                        restoredFromBackup = true;
+                        logger?.LogInfo($"Restored NewFormGen.bat from backup '{bakBackup}'.");
+                    }
+                    else
+                    {
+                        logger?.LogWarning($"Backup '{bakBackup}' is empty or invalid; discarding it.");
+                    }
                     File.Delete(bakBackup);
-                    logger?.LogInfo($"Restored NewFormGen.bat from backup '{bakBackup}'.");
                 }
                 catch (Exception ex)
                 {
                     logger?.LogWarning($"Could not restore backup '{bakBackup}': {ex.Message}");
                 }
             }
-            else if (!File.Exists(batPath))
+
+            // If NewFormGen.bat is missing, 0 bytes, whitespace-only, or lacks the FormGen command, populate it with DefaultVanillaBatchContent
+            if (!File.Exists(batPath) ||
+                new FileInfo(batPath).Length == 0 ||
+                string.IsNullOrWhiteSpace(File.ReadAllText(batPath)) ||
+                !File.ReadAllText(batPath).Contains("com.automate.formgen.NewFormGen", StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
@@ -1081,12 +1127,12 @@ if ""%~1""=="""" (
                     if (!string.IsNullOrWhiteSpace(parentDir) && Directory.Exists(parentDir))
                     {
                         File.WriteAllText(batPath, DefaultVanillaBatchContent, new UTF8Encoding(false));
-                        logger?.LogInfo($"Recreated missing NewFormGen.bat with standard vanilla launch script at '{batPath}'.");
+                        logger?.LogInfo($"Recreated NewFormGen.bat with standard vanilla launch script at '{batPath}'.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    logger?.LogWarning($"Could not recreate vanilla NewFormGen.bat at '{batPath}': {ex.Message}");
+                    logger?.LogWarning($"Could not write vanilla NewFormGen.bat at '{batPath}': {ex.Message}");
                 }
             }
 
@@ -1120,9 +1166,15 @@ if ""%~1""=="""" (
             // Clean up any double spaces
             updated = Regex.Replace(updated, @"[ \t]{2,}", " ");
 
+            // If scrubbing left the file invalid, empty, or whitespace, replace with DefaultVanillaBatchContent
+            if (string.IsNullOrWhiteSpace(updated) || !updated.Contains("com.automate.formgen.NewFormGen", StringComparison.OrdinalIgnoreCase))
+            {
+                updated = DefaultVanillaBatchContent;
+            }
+
             if (!string.Equals(content, updated, StringComparison.Ordinal))
             {
-                File.WriteAllText(batPath, updated);
+                File.WriteAllText(batPath, updated, new UTF8Encoding(false));
                 logger?.LogInfo($"Restored vanilla NewFormGen.bat at '{batPath}'.");
             }
 
