@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# FormGen libraries downloaded for offline reference
+Tools/FormGenLibs/

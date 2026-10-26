@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Xml;
 
@@ -18,10 +18,12 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
 
             if (Settings is not null && Settings.Type != CodeLineSettings.CodeType.PROMPT)
             {
-                Settings.PropertyChanged += (s, e) => OnPropertyChanged();
                 if (node.FirstChild is not null) Expression = node.FirstChild.InnerText;
             }
             else if (node.FirstChild is not null) PromptData = new PromptData(node.FirstChild);
+
+            if (Settings is not null) Settings.PropertyChanged += (s, e) => OnPropertyChanged();
+            if (PromptData is not null) PromptData.PropertyChanged += (s, e) => OnPropertyChanged();
         }
         public CodeLine(CodeLine codeLine, string? newName, int newIndex)
         {
@@ -36,6 +38,7 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
             Settings = new CodeLineSettings();
             PromptData = new PromptData();
             Settings.PropertyChanged += (s, e) => OnPropertyChanged();
+            PromptData.PropertyChanged += (s, e) => OnPropertyChanged();
         }
 
         public void GenerateXml(XmlWriter xml)
@@ -59,12 +62,11 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
             xml.WriteEndElement();
         }
 
-        public  bool Equals(CodeLine? other) => 
+        public bool Equals(CodeLine? other) => 
             other is not null &&
             Settings?.Equals(other.Settings) == true &&
-            ((Expression is null && other.Expression is null) ||
-            (Expression is not null && Expression.Equals(other.Expression))) &&
-                    ((PromptData is null && other.PromptData is null) ||
+            (Expression ?? string.Empty).Equals(other.Expression ?? string.Empty, StringComparison.Ordinal) &&
+            ((PromptData is null && other.PromptData is null) ||
             (PromptData is not null && PromptData.Equals(other.PromptData)));
 
         public override bool Equals(object? obj) => Equals(obj as CodeLine);

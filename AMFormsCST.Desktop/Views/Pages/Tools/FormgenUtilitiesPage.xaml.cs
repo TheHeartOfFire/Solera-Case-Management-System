@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Desktop.ControlsLookup;
 using AMFormsCST.Desktop.ViewModels.Pages.Tools;
 using System.Windows;

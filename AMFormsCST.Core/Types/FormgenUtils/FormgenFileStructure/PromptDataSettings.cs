@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Xml;
 
@@ -172,7 +172,7 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
             Required == other.Required &&
             Length == other.Length &&
             DecimalPlaces == other.DecimalPlaces &&
-            Delimiter?.Equals(other.Delimiter) == true &&
+            (Delimiter ?? string.Empty).Equals(other.Delimiter ?? string.Empty, StringComparison.Ordinal) &&
             AllowNegative == other.AllowNegative &&
             ForceUpperCase == other.ForceUpperCase &&
             MakeBuyerVars == other.MakeBuyerVars &&

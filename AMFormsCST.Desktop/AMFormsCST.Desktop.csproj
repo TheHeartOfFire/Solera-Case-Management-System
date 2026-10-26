@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\Solera_Logo_Symbol_Only.ico</ApplicationIcon>
-    <AssemblyVersion>2.6.2</AssemblyVersion>
+    <AssemblyVersion>2.6.3</AssemblyVersion>
     <FileVersion>$(assemblyversion)</FileVersion>
     <Version>$(assemblyversion)</Version>
     <UserSecretsId>8b2d1faf-aa49-46d4-aff5-f53d0b5a1380</UserSecretsId>
@@ -53,9 +53,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\Tools\FormGenAgent\FormGenAgent.jar" Link="Resources\FormGenAgent.jar" />
     <EmbeddedResource Include="SampleData\Formgen Sample Data\Pdf Sample\Sample Pdf.formgen">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </EmbeddedResource>
+    <Content Include="..\BrowserExtension\**\*" Link="BrowserExtension\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

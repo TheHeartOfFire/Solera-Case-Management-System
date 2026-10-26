@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Xml;
 
@@ -62,7 +62,7 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
             other is not null &&
             Order == other.Order &&
             Type == other.Type &&
-            Variable?.Equals(other.Variable) == true;
+            (Variable ?? string.Empty).Equals(other.Variable ?? string.Empty, StringComparison.Ordinal);
 
 
         public override bool Equals(object? obj) => Equals(obj as CodeLineSettings);

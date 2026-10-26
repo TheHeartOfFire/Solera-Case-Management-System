@@ -918,4 +918,24 @@ public class CodeSnippetsViewModelTests
         Assert.True(vm.IsGuideTabSelected);
         Assert.False(vm.IsCodePathTabSelected);
     }
+
+    [Theory]
+    [InlineData("ROUND(F3, 2)", "NUMERIC")]
+    [InlineData("NUM(F72)", "NUMERIC")]
+    [InlineData("F3 + 100", "NUMERIC")]
+    [InlineData("F3 * 0.0825", "NUMERIC")]
+    [InlineData("IF(F72 = 'N', F3, 0)", "NUMERIC")]
+    [InlineData("CASE(F72, 'N', 100, 'U', 50, 0)", "NUMERIC")]
+    [InlineData("F3", "NUMERIC")]
+    [InlineData("TEXT(ROUND(F3, 2))", "TEXT")]
+    [InlineData("SEPLIST(', ', F100, F101)", "TEXT")]
+    [InlineData("IF(F72 = 'N', 'NEW', 'USED')", "TEXT")]
+    [InlineData("IF(F72 = 'N', F3, 'N/A')", "TEXT")]
+    [InlineData("F776", "TEXT")]
+    [InlineData("UNKNOWN_VAR", "TEXT")]
+    [InlineData("", "TEXT")]
+    public void InferFormulaOutputType_ReturnsExpectedFieldTypeWithTextFallback(string expr, string expectedType)
+    {
+        Assert.Equal(expectedType, CodeSnippetsViewModel.InferFormulaOutputType(expr));
+    }
 }

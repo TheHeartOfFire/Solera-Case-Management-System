@@ -17,16 +17,22 @@
     <Page.Resources>
         <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter" />
     </Page.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="20">
 
             <!--  Personalization Section  -->
-            <ui:CardControl Margin="0,0,0,10" Header="Personalization">
+            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,4"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Text="Personalization" />
                     <TextBlock
                         Margin="0,0,0,12"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="Customize the look and feel of the application." />
+                        Text="Customize the look and feel of the application."
+                        TextWrapping="Wrap" />
 
                     <TextBlock FontWeight="Medium" Text="Application Theme" />
                     <RadioButton
@@ -45,11 +51,17 @@
                         Content="Always on Top"
                         IsChecked="{Binding AlwaysOnTop, Mode=TwoWay}" />
                 </StackPanel>
-            </ui:CardControl>
+            </ui:Card>
 
             <!--  Behavior Section  -->
-            <ui:CardControl Margin="0,0,0,10" Header="Behavior">
+            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,12"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Text="Behavior" />
+
                     <ui:ToggleSwitch
                         Content="Automatically select new templates"
                         IsChecked="{Binding SelectNewTemplate, Mode=TwoWay}"
@@ -66,28 +78,256 @@
                         PlaceholderText="e.g., x"
                         Text="{Binding ExtSeparator, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
-            </ui:CardControl>
+            </ui:Card>
+
+            <!--  Windows Integration Section  -->
+            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,12"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Text="Windows Integration" />
+
+                    <ui:ToggleSwitch
+                        Content="Enable Windows Explorer context menu for .formgen files"
+                        IsChecked="{Binding EnableExplorerContextMenu, Mode=TwoWay}"
+                        Margin="0,0,0,4" />
+
+                    <TextBlock
+                        Margin="0,0,0,12"
+                        FontSize="12"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Adds 'Open in Solera Formgen Utilities' to the right-click menu of .formgen files."
+                        TextWrapping="Wrap" />
+
+                    <ui:ToggleSwitch
+                        Content="Enable Shift + Right-Click Quick-Paste Flyout across external apps (Applies immediately)"
+                        IsChecked="{Binding EnableShiftRightClickFlyout, Mode=TwoWay}"
+                        Margin="0,0,0,12" />
+
+                    <TextBlock Text="FormGen Executable / Batch Path (Optional)" Margin="0,4,0,0" />
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox
+                            Grid.Column="0"
+                            PlaceholderText="C:\Users\...\AppData\Roaming\NewFormGen\NewFormGen.bat"
+                            Text="{Binding FormGenExecutablePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <ui:Button
+                            Grid.Column="1"
+                            Margin="8,0,0,0"
+                            Content="Browse..."
+                            Command="{Binding BrowseFormGenExecutableCommand}" />
+                    </Grid>
+
+                    <StackPanel Margin="0,14,0,0">
+                        <TextBlock FontWeight="Medium" Text="Default File Association (.formgen / .fga)" />
+                        <TextBlock
+                            Margin="0,2,0,8"
+                            FontSize="12"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="{Binding FormgenAssociationStatus}"
+                            TextWrapping="Wrap" />
+                        <WrapPanel Orientation="Horizontal">
+                            <ui:Button
+                                Content="Associate with FormGen"
+                                Appearance="Primary"
+                                Icon="{ui:SymbolIcon CheckmarkCircle24}"
+                                Command="{Binding AssociateFormGenCommand}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
+            <!--  FormGen Modifications & Patching Section  -->
+            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,4"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Text="FormGen Modifications &amp; Patching" />
+                    <TextBlock
+                        Margin="0,0,0,12"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Deploy or remove the Solera FormGen integration payload and toggle individual FormGen features. Unpatching removes all traces of modification while remembering your toggle preferences."
+                        TextWrapping="Wrap" />
+
+                    <StackPanel Margin="0,0,0,14">
+                        <TextBlock FontWeight="Medium" Text="FormGen Payload Status" />
+                        <TextBlock
+                            Margin="0,2,0,8"
+                            FontSize="12"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="{Binding FormGenPatchStatus}"
+                            TextWrapping="Wrap" />
+                        <WrapPanel Orientation="Horizontal">
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Content="Patch FormGen"
+                                Appearance="Primary"
+                                Icon="{ui:SymbolIcon Wrench24}"
+                                Command="{Binding PatchFormGenCommand}" />
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Content="Unpatch FormGen"
+                                Appearance="Secondary"
+                                Icon="{ui:SymbolIcon ArrowUndo24}"
+                                Command="{Binding UnpatchFormGenCommand}" />
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <TextBlock
+                        Margin="0,2,0,2"
+                        FontWeight="Medium"
+                        Text="Individual FormGen Feature Toggles" />
+                    <TextBlock
+                        Margin="0,0,0,10"
+                        FontSize="12"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Toggling any feature below immediately enables or removes all traces of that feature in a running FormGen session without requiring a restart (except where noted)."
+                        TextWrapping="Wrap" />
+
+                    <StackPanel IsEnabled="{Binding IsFormGenPatched}">
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Preserve Code Window (UdfDlg) tab selection on Push &amp; form switch (Applies live)"
+                            IsChecked="{Binding FormGenPreserveUdfTab, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Right-click empty form canvas to paste Code Block as new Text / Numeric field (Applies live)"
+                            IsChecked="{Binding FormGenCanvasPasteField, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Focus existing tab &amp; show non-intrusive toast when opening an already-open file (Applies live)"
+                            IsChecked="{Binding FormGenAlreadyOpenToast, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Inject Solera Tools &amp; Quick Paste into FormGen right-click menus (Applies live)"
+                            IsChecked="{Binding FormGenContextMenus, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Enable multi-step Undo / Redo (Ctrl+Z / Ctrl+Y) in Code &amp; Prompt editors (Applies live)"
+                            IsChecked="{Binding FormGenEditorUndoRedo, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,8"
+                            Content="Add '⚡ Fill from Solera CMS' &amp; helper buttons to FormGen dialogs (Applies live — removes buttons immediately when off)"
+                            IsChecked="{Binding FormGenDialogAutoFill, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,4"
+                            Content="Auto-restore previously open forms (Takes effect when FormGen starts or reloads; turning off clears saved session immediately)"
+                            IsChecked="{Binding FormGenAutoRestoreForms, Mode=TwoWay}" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
+            <!--  Browser Integration Section  -->
+            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,4"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Text="Browser Integration" />
+                    <TextBlock
+                        Margin="0,0,0,12"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Integrate Solera CMS with Opera GX, Microsoft Edge, and Chrome for right-click FormGen code block parsing and live dashboard paste."
+                        TextWrapping="Wrap" />
+
+                    <StackPanel Margin="0,0,0,12">
+                        <TextBlock FontWeight="Medium" Text="Native Messaging Bridge" />
+                        <TextBlock
+                            Margin="0,2,0,8"
+                            FontSize="12"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="{Binding BrowserBridgeStatus}"
+                            TextWrapping="Wrap" />
+                        <WrapPanel Orientation="Horizontal">
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Content="Register Bridge"
+                                Appearance="Primary"
+                                Icon="{ui:SymbolIcon CheckmarkCircle24}"
+                                Command="{Binding RegisterBrowserBridgeCommand}" />
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Content="Remove Bridge"
+                                Appearance="Secondary"
+                                Icon="{ui:SymbolIcon Delete24}"
+                                Command="{Binding RemoveBrowserBridgeCommand}" />
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <TextBlock Margin="0,4,0,4" FontWeight="Medium" Text="Launch Browser with Extension" />
+                    <TextBlock
+                        Margin="0,0,0,10"
+                        FontSize="12"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="One-click setup: registers native messaging and launches your browser with the extension automatically loaded."
+                        TextWrapping="Wrap" />
+
+                    <WrapPanel Orientation="Horizontal">
+                        <ui:Button
+                            Margin="0,0,8,8"
+                            Content="Install in Opera GX"
+                            Appearance="Secondary"
+                            Icon="{ui:SymbolIcon Globe24}"
+                            Command="{Binding LaunchOperaGXExtensionCommand}" />
+                        <ui:Button
+                            Margin="0,0,8,8"
+                            Content="Install in Microsoft Edge"
+                            Appearance="Secondary"
+                            Icon="{ui:SymbolIcon Globe24}"
+                            Command="{Binding LaunchEdgeExtensionCommand}" />
+                        <ui:Button
+                            Margin="0,0,8,8"
+                            Content="Install in Chrome"
+                            Appearance="Secondary"
+                            Icon="{ui:SymbolIcon Globe24}"
+                            Command="{Binding LaunchChromeExtensionCommand}" />
+                    </WrapPanel>
+                </StackPanel>
+            </ui:Card>
 
             <!--  About Section  -->
-            <ui:CardControl Header="About">
+            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <StackPanel>
+                    <TextBlock
+                        Margin="0,0,0,8"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Text="About" />
                     <TextBlock
                         Margin="0,0,0,12"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="{Binding AppVersion}" />
 
-                    <ui:Button
-                        Command="{Binding CheckForUpdatesCommand}"
-                        Appearance="Primary"
-                        Content="Check for updates"
-                        Icon="{ui:SymbolIcon ArrowDownload24}" />
-                    
-                    <ui:Button
-                        Content="Report a Bug"
-                        Command="{Binding ReportBugCommand}"
-                        Icon="{ui:SymbolIcon Bug24}" />
+                    <WrapPanel Orientation="Horizontal">
+                        <ui:Button
+                            Margin="0,0,8,8"
+                            Command="{Binding CheckForUpdatesCommand}"
+                            Appearance="Primary"
+                            Content="Check for updates"
+                            Icon="{ui:SymbolIcon ArrowDownload24}" />
+
+                        <ui:Button
+                            Margin="0,0,8,8"
+                            Content="Report a Bug"
+                            Command="{Binding ReportBugCommand}"
+                            Icon="{ui:SymbolIcon Bug24}" />
+                    </WrapPanel>
                 </StackPanel>
-            </ui:CardControl>
+            </ui:Card>
 
         </StackPanel>
     </ScrollViewer>

@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Xml;
 
@@ -71,7 +71,7 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
         public bool Equals(DotFormgenSettings? other) => 
             other is not null &&
             Version == other.Version &&
-            UUID?.Equals(other.UUID) == true &&
+            (UUID ?? string.Empty).Equals(other.UUID ?? string.Empty, StringComparison.Ordinal) &&
             LegacyImport == other.LegacyImport &&
             TotalPages == other.TotalPages &&
             DefaultFontSize == other.DefaultFontSize &&

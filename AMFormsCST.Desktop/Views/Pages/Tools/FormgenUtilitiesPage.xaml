@@ -1,4 +1,4 @@
-﻿<Page
+<Page
     x:Class="AMFormsCST.Desktop.Views.Pages.Tools.FormgenUtilitiesPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -49,9 +49,17 @@
                     Margin="0,8,0,0"
                     Appearance="Success"
                     Command="{Binding SaveFormgenFileCommand}"
-                    Content="Save"
+                    Content="{Binding SaveButtonText}"
                     Icon="{ui:SymbolIcon Save24}"
                     IsEnabled="{Binding HasChanged}" />
+                <ui:Button
+                    Margin="0,8,0,0"
+                    Appearance="Info"
+                    Command="{Binding PushToFormGenCommand}"
+                    Content="{Binding PushButtonText}"
+                    Icon="{ui:SymbolIcon ArrowUpload24}"
+                    IsEnabled="{Binding IsFileLoaded}"
+                    ToolTip="Push this form to FormGen (reloads if open, or opens in a new tab)" />
                 <ui:Button
                     Margin="0,8,0,0"
                     Appearance="Secondary"

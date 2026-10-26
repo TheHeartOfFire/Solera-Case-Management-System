@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces.Utils;
+using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure;
 using AMFormsCST.Core.Interfaces;
 using System.Xml;
@@ -75,7 +75,9 @@ public class FormgenUtils : IFormgenUtils
             if (fileToSave is not null) return;
 
             CreateBackup();
-            _backupCopy = ParsedFormgenFile;
+            // Snapshot, not alias: HasChanged compares against this copy, so it must not be the live object.
+            _backupCopy = ParsedFormgenFile?.Clone();
+            OnFormgenFileChanged();
         }
         catch (Exception ex)
         {
