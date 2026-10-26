@@ -359,6 +359,46 @@ public class FormGenLauncherHelperTests
     }
 
     [Fact]
+    public void UnpatchAndReloadFormGen_PreservesNewFormGenBat_AndRemovesAgentArtifacts()
+    {
+        var tempPortFile = UsePrivatePortFile();
+        var tempDir = Path.GetDirectoryName(tempPortFile)!;
+        var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
+        var tempVanilla = Path.Combine(tempDir, "NewFormGen.bat.vanilla");
+        var tempBak = Path.Combine(tempDir, "NewFormGen.bat.bak");
+        var tempJar = Path.Combine(tempDir, "FormGenAgent.jar");
+
+        try
+        {
+            File.WriteAllText(tempVanilla, "java -Xms1024m -cp * -ea com.automate.formgen.NewFormGen %*");
+            File.WriteAllText(tempBak, "backup");
+            File.WriteAllText(tempJar, "dummy jar bytes");
+            File.WriteAllText(tempBat, "cd /d \"%~dp0\"\r\njava -javaagent:FormGenAgent.jar -Xms1024m -cp * -ea com.automate.formgen.NewFormGen %*");
+
+            bool ok = FormGenLauncherHelper.UnpatchAndReloadFormGen(
+                tempBat,
+                userSettings: null,
+                relaunchFormGen: false);
+
+            Assert.True(ok);
+            // NewFormGen.bat MUST still exist and NOT be deleted by wildcard matching
+            Assert.True(File.Exists(tempBat), "NewFormGen.bat was accidentally deleted by unpatch!");
+            var content = File.ReadAllText(tempBat);
+            Assert.DoesNotContain("FormGenAgent", content);
+            Assert.Contains("java -Xms1024m", content);
+
+            // Agent JAR and backups must be completely gone
+            Assert.False(File.Exists(tempJar), "FormGenAgent.jar should have been deleted!");
+            Assert.False(File.Exists(tempVanilla), "NewFormGen.bat.vanilla should have been deleted!");
+            Assert.False(File.Exists(tempBak), "NewFormGen.bat.bak should have been deleted!");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public void BrowserIntegrationService_EnsureManifestUpdated_NeverWritesTestHostExe()
     {
         var resolvedExe = BrowserIntegrationService.ResolveDesktopExecutablePath();

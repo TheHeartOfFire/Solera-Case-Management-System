@@ -381,21 +381,27 @@ public partial class SettingsViewModel : ViewModel
                 relaunchFormGen: shouldRelaunch,
                 _logger);
 
-            UpdateFormGenPatchStatus();
-
             if (ok)
             {
+                UpdateFormGenPatchStatus();
                 _snackbarService?.Show(
                     "FormGen Patched",
                     shouldRelaunch
-                        ? $"Payload deployed and FormGen reloaded{(openForms.Count > 0 ? $" (restoring {openForms.Count} form(s))" : "")}."
-                        : "Payload deployed to NewFormGen.bat. Feature toggles are active.",
+                        ? $"Solera tools enabled and FormGen reloaded{(openForms.Count > 0 ? $" (restoring {openForms.Count} form(s))" : "")}."
+                        : "Solera tools enabled for NewFormGen.bat. Feature toggles are active.",
                     ControlAppearance.Success,
                     new SymbolIcon(SymbolRegular.CheckmarkCircle24),
                     TimeSpan.FromSeconds(4));
             }
             else
             {
+                // Patch failed: revert state
+                FormGenLauncherHelper.IsPatchingAllowed = false;
+                IsFormGenPatched = false;
+                _supportTool.Settings.UserSettings.IsFormGenPatched = false;
+                _supportTool.SaveAllSettings();
+                UpdateFormGenPatchStatus();
+
                 _snackbarService?.Show(
                     "Patch Failed",
                     "Could not patch FormGen. Check logs for details.",
@@ -463,11 +469,6 @@ public partial class SettingsViewModel : ViewModel
                 }
             }
 
-            // Set IsFormGenPatched = false (disables toggle controls in UI without altering their saved boolean values)
-            IsFormGenPatched = false;
-            _supportTool.Settings.UserSettings.IsFormGenPatched = false;
-            _supportTool.SaveAllSettings();
-
             bool ok = FormGenLauncherHelper.UnpatchAndReloadFormGen(
                 batPath,
                 _supportTool.Settings.UserSettings,
@@ -475,18 +476,38 @@ public partial class SettingsViewModel : ViewModel
                 relaunchFormGen: isRunning,
                 _logger);
 
-            UpdateFormGenPatchStatus();
-
             if (ok)
             {
+                // Unpatch succeeded: update UI and persist setting
+                IsFormGenPatched = false;
+                _supportTool.Settings.UserSettings.IsFormGenPatched = false;
+                _supportTool.SaveAllSettings();
+                UpdateFormGenPatchStatus();
+
                 _snackbarService?.Show(
                     "FormGen Unpatched",
                     isRunning
-                        ? "All modifications removed and vanilla FormGen reloaded. Toggle states are preserved."
-                        : "All modifications removed from FormGen. Toggle states are preserved.",
+                        ? "All modifications removed and vanilla FormGen reloaded. Feature states are preserved."
+                        : "All modifications removed from FormGen. Feature states are preserved.",
                     ControlAppearance.Success,
                     new SymbolIcon(SymbolRegular.CheckmarkCircle24),
                     TimeSpan.FromSeconds(4));
+            }
+            else
+            {
+                // Unpatch failed: restore state in helper and UI
+                FormGenLauncherHelper.IsPatchingAllowed = true;
+                IsFormGenPatched = true;
+                _supportTool.Settings.UserSettings.IsFormGenPatched = true;
+                _supportTool.SaveAllSettings();
+                UpdateFormGenPatchStatus();
+
+                _snackbarService?.Show(
+                    "Unpatch Failed",
+                    "Failed to unpatch FormGen. Please check logs for details.",
+                    ControlAppearance.Danger,
+                    new SymbolIcon(SymbolRegular.ErrorCircle24),
+                    TimeSpan.FromSeconds(5));
             }
         }
         catch (Exception ex)

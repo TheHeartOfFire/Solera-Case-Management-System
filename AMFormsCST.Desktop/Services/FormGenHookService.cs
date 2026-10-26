@@ -75,16 +75,17 @@ public class FormGenHookService : IHostedService, IDisposable
 
     private readonly IpcService _ipcService;
     private readonly ILogService _logger;
+    private readonly ISupportTool? _supportTool;
     private readonly Dispatcher _dispatcher;
-
     private LowLevelMouseProc? _hookCallback;
     private IntPtr _hookId = IntPtr.Zero;
     private FormgenQuickPasteWindow? _quickPasteWindow;
 
-    public FormGenHookService(IpcService ipcService, ILogService logger)
+    public FormGenHookService(IpcService ipcService, ILogService logger, ISupportTool? supportTool = null)
     {
         _ipcService = ipcService;
         _logger = logger;
+        _supportTool = supportTool;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
     }
 
@@ -111,8 +112,12 @@ public class FormGenHookService : IHostedService, IDisposable
             {
                 try
                 {
-                    var vars = _ipcService.GetLiveVariables();
-                    FormGenLauncherHelper.SyncStateToAgent(vars, Environment.ProcessPath, _logger);
+                    bool isPatched = _supportTool?.Settings?.UserSettings?.IsFormGenPatched ?? FormGenLauncherHelper.IsPatchingAllowed;
+                    if (isPatched)
+                    {
+                        var vars = _ipcService.GetLiveVariables();
+                        FormGenLauncherHelper.SyncStateToAgent(vars, Environment.ProcessPath, _logger);
+                    }
                 }
                 catch {}
             });
@@ -141,7 +146,8 @@ public class FormGenHookService : IHostedService, IDisposable
 
                 // 0-footprint check: If FormGen is unpatched, never intercept mouse events on FormGen
                 bool isFormGen = IsFormGenWindowAt(hookStruct.pt, out _);
-                if (isFormGen && !FormGenLauncherHelper.IsPatchingAllowed)
+                bool isPatched = _supportTool?.Settings?.UserSettings?.IsFormGenPatched ?? FormGenLauncherHelper.IsPatchingAllowed;
+                if (isFormGen && !isPatched)
                 {
                     return CallNextHookEx(_hookId, nCode, wParam, lParam);
                 }

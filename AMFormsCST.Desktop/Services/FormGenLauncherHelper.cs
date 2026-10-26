@@ -637,8 +637,8 @@ public static class FormGenLauncherHelper
                 {
                     using var proc = Process.GetProcessById(pid);
                     logger?.LogInfo($"Closing FormGen process PID {pid}...");
-                    proc.Kill();
-                    proc.WaitForExit(3000);
+                    proc.Kill(entireProcessTree: true);
+                    proc.WaitForExit(5000);
                 }
                 catch { }
             }
@@ -763,29 +763,56 @@ public static class FormGenLauncherHelper
             // 2. Restore NewFormGen.bat to clean vanilla state
             RestoreVanillaBatch(batPath, logger);
 
-            // 3. Delete any agent JARs and backup files from the FormGen directory
+            // 3. Delete any agent JARs and backup files from the FormGen directory (protecting NewFormGen.bat itself)
             var dir = Path.GetDirectoryName(batPath);
             if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             {
                 var filesToDelete = new DirectoryInfo(dir)
                     .GetFiles("*agent*.jar")
-                    .Concat(new DirectoryInfo(dir).GetFiles("NewFormGen.bat.*"))
+                    .Concat(new DirectoryInfo(dir).GetFiles("NewFormGen.bat.vanilla"))
+                    .Concat(new DirectoryInfo(dir).GetFiles("NewFormGen.bat.bak"))
+                    .Where(f => !string.Equals(f.FullName, batPath, StringComparison.OrdinalIgnoreCase) &&
+                                !string.Equals(f.Name, "NewFormGen.bat", StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
                 foreach (var file in filesToDelete)
                 {
-                    for (int i = 0; i < 10 && file.Exists; i++)
+                    if (string.Equals(file.FullName, batPath, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(file.Name, "NewFormGen.bat", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    bool deleted = false;
+                    for (int i = 0; i < 25 && file.Exists; i++)
                     {
                         try
                         {
                             file.Delete();
                             logger?.LogInfo($"Deleted '{file.FullName}'.");
+                            deleted = true;
                             break;
                         }
                         catch
                         {
                             System.Threading.Thread.Sleep(200);
                             file.Refresh();
+                        }
+                    }
+
+                    if (!deleted && file.Exists)
+                    {
+                        // File still locked by a stubborn process; retry process kill and final deletion attempt
+                        CloseFormGenProcesses(logger);
+                        System.Threading.Thread.Sleep(500);
+                        try
+                        {
+                            file.Delete();
+                            logger?.LogInfo($"Deleted '{file.FullName}' on second pass.");
+                        }
+                        catch (Exception ex)
+                        {
+                            logger?.LogWarning($"Could not delete '{file.FullName}': {ex.Message}");
                         }
                     }
                 }
@@ -801,17 +828,6 @@ public static class FormGenLauncherHelper
                 }
                 catch { }
             }
-
-            // Also clean up any leftover FormGenPort_* directories in temp
-            try
-            {
-                var tempDir = Path.GetTempPath();
-                foreach (var d in Directory.GetDirectories(tempDir, "FormGenPort_*"))
-                {
-                    try { Directory.Delete(d, true); } catch { }
-                }
-            }
-            catch { }
 
             // 5. Relaunch vanilla FormGen if requested
             if (relaunchFormGen)
@@ -1013,7 +1029,13 @@ public static class FormGenLauncherHelper
                 {
                     foreach (var f in Directory.GetFiles(dir, pattern))
                     {
-                        for (int i = 0; i < 5 && File.Exists(f); i++)
+                        if (string.Equals(f, batPath, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(Path.GetFileName(f), "NewFormGen.bat", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        for (int i = 0; i < 15 && File.Exists(f); i++)
                         {
                             try
                             {

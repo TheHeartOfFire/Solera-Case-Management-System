@@ -101,7 +101,10 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
             bool hasFormGen = !string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath);
             if (hasFormGen)
             {
-                FormGenLauncherHelper.EnsureAgentDeployedAndPatched(resolvedPath!, _logger);
+                if (FormGenLauncherHelper.IsPatchingAllowed)
+                {
+                    FormGenLauncherHelper.EnsureAgentDeployedAndPatched(resolvedPath!, _logger);
+                }
                 string formGenCommand = !string.IsNullOrWhiteSpace(appExePath)
                     ? $"\"{appExePath}\" --open-in-formgen \"%1\""
                     : FormatLaunchCommand(resolvedPath!);
@@ -340,7 +343,10 @@ public class WindowsExplorerContextMenuService : IWindowsExplorerContextMenuServ
                 appExePath = Process.GetCurrentProcess().MainModule?.FileName;
             }
 
-            FormGenLauncherHelper.EnsureAgentDeployedAndPatched(targetPath, _logger);
+            if (FormGenLauncherHelper.IsPatchingAllowed)
+            {
+                FormGenLauncherHelper.EnsureAgentDeployedAndPatched(targetPath, _logger);
+            }
             string launchCommand = !string.IsNullOrWhiteSpace(appExePath)
                 ? $"\"{appExePath}\" --open-in-formgen \"%1\""
                 : FormatLaunchCommand(targetPath);

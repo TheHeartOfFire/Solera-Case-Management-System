@@ -262,6 +262,14 @@ public partial class App : Application
             return;
         }
 
+        // Initialize FormGen patch state early from user settings
+        try
+        {
+            var earlySupportTool = GetRequiredService<ISupportTool>();
+            FormGenLauncherHelper.IsPatchingAllowed = earlySupportTool.Settings.UserSettings.IsFormGenPatched;
+        }
+        catch { }
+
         // 1. Explicit --open-formgen: Direct to SCMT Formgen Utilities (bypasses FormGen)
         string? directScmtFile = null;
         for (int i = 0; i < e.Args.Length; i++)
@@ -345,8 +353,11 @@ public partial class App : Application
         {
             var supportTool = GetRequiredService<ISupportTool>();
             var logger = GetRequiredService<ILogService>();
+
+            FormGenLauncherHelper.IsPatchingAllowed = supportTool.Settings.UserSettings.IsFormGenPatched;
+
             var batPath = FormGenLauncherHelper.ResolveFormGenBatchPath(supportTool.Settings.UserSettings.FormGenExecutablePath);
-            if (!string.IsNullOrWhiteSpace(batPath))
+            if (supportTool.Settings.UserSettings.IsFormGenPatched && !string.IsNullOrWhiteSpace(batPath))
             {
                 FormGenLauncherHelper.EnsureAgentDeployedAndPatched(batPath, logger);
             }
