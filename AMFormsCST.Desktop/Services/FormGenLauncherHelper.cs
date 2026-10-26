@@ -54,6 +54,41 @@ public static class FormGenLauncherHelper
     public static string GetLogFilePath() => Path.Combine(GetTempDir(), LogFileName);
 
     /// <summary>
+    /// Standard pristine content of NewFormGen.bat as installed by FormGen.
+    /// Used as fallback to recreate NewFormGen.bat if it was lost or accidentally deleted.
+    /// </summary>
+    public const string DefaultVanillaBatchContent =
+@"REM This is the NewFormGen launching script.
+
+md %LOCALAPPDATA%\NewFormGen
+
+REM Now we begin the java switch-a-roo
+REM Declare the magic java installation folder
+set javaIndexFolder=C:\ProgramData\automate\java\
+REM Declare our prefered java version folder and initialize to something reasonable.
+set javaVersionFolder=NONEFOUND
+REM Search the magic java folder for things that look like 64 bit java sorted lexigraphically backwards.
+dir %javaIndexFolder%*_x64 /B /ON > javaGuesses.txt
+REM Go through all those in reverse order setting them to our folder variable.
+REM because I'm not sure how arrays or loop control works in bat files.
+for /f ""delims="" %%j in (javaGuesses.txt) DO (
+    echo %%j
+    set javaVersionFolder=%%j
+)
+echo Best Version %javaVersionFolder%
+set javaBinPath=%javaIndexFolder%%javaVersionFolder%\bin
+set PATH=%javaBinPath%;%PATH%
+
+echo ""Path is now %PATH%""
+
+if ""%~1""=="""" (
+    java -Xms1024m -cp * -ea com.automate.formgen.NewFormGen %*
+) else (
+    java -Xms1024m -cp * -ea com.automate.formgen.NewFormGen %*
+)
+";
+
+    /// <summary>
     /// Writes the user's individual FormGen feature toggle states to %TEMP%\formgen_agent.properties
     /// so FormGenAgent can read them at startup and live at runtime.
     /// </summary>
@@ -740,10 +775,21 @@ public static class FormGenLauncherHelper
         try
         {
             var batPath = ResolveFormGenBatchPath(explicitBatPath);
-            if (string.IsNullOrWhiteSpace(batPath) || !File.Exists(batPath))
+            if (string.IsNullOrWhiteSpace(batPath))
             {
-                logger?.LogWarning("UnpatchAndReloadFormGen: Could not locate NewFormGen.bat.");
+                logger?.LogWarning("UnpatchAndReloadFormGen: Could not resolve NewFormGen directory or batch path.");
                 return false;
+            }
+
+            if (!File.Exists(batPath))
+            {
+                // If NewFormGen.bat is missing on disk (e.g. wiped by an earlier unpatch), restore/recreate it now
+                RestoreVanillaBatch(batPath, logger);
+                if (!File.Exists(batPath))
+                {
+                    logger?.LogWarning($"UnpatchAndReloadFormGen: Could not locate or restore NewFormGen.bat at '{batPath}'.");
+                    return false;
+                }
             }
 
             var formsToReopen = openFormsToRestore?.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
@@ -858,17 +904,37 @@ public static class FormGenLauncherHelper
     /// </summary>
     public static string? ResolveFormGenBatchPath(string? explicitPath = null)
     {
-        if (!string.IsNullOrWhiteSpace(explicitPath) && File.Exists(explicitPath))
+        if (!string.IsNullOrWhiteSpace(explicitPath))
         {
-            var ext = Path.GetExtension(explicitPath);
-            if (ext.Equals(".bat", StringComparison.OrdinalIgnoreCase) || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
-                return explicitPath;
+            var cleanExplicit = explicitPath.Trim().Trim('"');
+            if (File.Exists(cleanExplicit))
+            {
+                var ext = Path.GetExtension(cleanExplicit);
+                if (ext.Equals(".bat", StringComparison.OrdinalIgnoreCase) || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
+                    return cleanExplicit;
+            }
 
-            var dir = Path.GetDirectoryName(explicitPath);
-            if (!string.IsNullOrWhiteSpace(dir))
+            var explicitExt = Path.GetExtension(cleanExplicit);
+            if (explicitExt.Equals(".bat", StringComparison.OrdinalIgnoreCase) || explicitExt.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
+            {
+                var explicitDir = Path.GetDirectoryName(cleanExplicit);
+                if (!string.IsNullOrWhiteSpace(explicitDir) && Directory.Exists(explicitDir))
+                {
+                    return Path.GetFullPath(cleanExplicit);
+                }
+            }
+
+            var dir = Directory.Exists(cleanExplicit) ? cleanExplicit : Path.GetDirectoryName(cleanExplicit);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             {
                 var candidate = Path.Combine(dir, "NewFormGen.bat");
-                if (File.Exists(candidate)) return candidate;
+                if (File.Exists(candidate) ||
+                    File.Exists(candidate + ".vanilla") ||
+                    File.Exists(candidate + ".bak") ||
+                    File.Exists(Path.Combine(dir, "NewFormGen.jar")))
+                {
+                    return Path.GetFullPath(candidate);
+                }
             }
         }
 
@@ -888,6 +954,15 @@ public static class FormGenLauncherHelper
             {
                 if (File.Exists(c))
                     return Path.GetFullPath(c);
+
+                var cDir = Path.GetDirectoryName(c);
+                if (!string.IsNullOrWhiteSpace(cDir) && Directory.Exists(cDir))
+                {
+                    if (File.Exists(c + ".vanilla") || File.Exists(c + ".bak") || File.Exists(Path.Combine(cDir, "NewFormGen.jar")))
+                    {
+                        return Path.GetFullPath(c);
+                    }
+                }
             }
             catch { }
         }
@@ -968,9 +1043,6 @@ public static class FormGenLauncherHelper
     {
         try
         {
-            if (!File.Exists(batPath))
-                return;
-
             var vanillaBackup = batPath + ".vanilla";
             var bakBackup = batPath + ".bak";
 
@@ -988,6 +1060,38 @@ public static class FormGenLauncherHelper
                     logger?.LogWarning($"Could not restore vanilla backup '{vanillaBackup}': {ex.Message}");
                 }
             }
+            else if (File.Exists(bakBackup))
+            {
+                try
+                {
+                    File.Copy(bakBackup, batPath, overwrite: true);
+                    File.Delete(bakBackup);
+                    logger?.LogInfo($"Restored NewFormGen.bat from backup '{bakBackup}'.");
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning($"Could not restore backup '{bakBackup}': {ex.Message}");
+                }
+            }
+            else if (!File.Exists(batPath))
+            {
+                try
+                {
+                    var parentDir = Path.GetDirectoryName(batPath);
+                    if (!string.IsNullOrWhiteSpace(parentDir) && Directory.Exists(parentDir))
+                    {
+                        File.WriteAllText(batPath, DefaultVanillaBatchContent, new UTF8Encoding(false));
+                        logger?.LogInfo($"Recreated missing NewFormGen.bat with standard vanilla launch script at '{batPath}'.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning($"Could not recreate vanilla NewFormGen.bat at '{batPath}': {ex.Message}");
+                }
+            }
+
+            if (!File.Exists(batPath))
+                return;
 
             var content = File.ReadAllText(batPath);
             var updated = content;

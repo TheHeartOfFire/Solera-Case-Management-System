@@ -422,7 +422,8 @@ public partial class SettingsViewModel : ViewModel
         try
         {
             var batPath = FormGenLauncherHelper.ResolveFormGenBatchPath(FormGenExecutablePath);
-            if (string.IsNullOrWhiteSpace(batPath) || !File.Exists(batPath))
+            var batDir = !string.IsNullOrWhiteSpace(batPath) ? Path.GetDirectoryName(batPath) : null;
+            if (string.IsNullOrWhiteSpace(batPath) || (!File.Exists(batPath) && (string.IsNullOrWhiteSpace(batDir) || !Directory.Exists(batDir))))
             {
                 _snackbarService?.Show(
                     "FormGen Not Found",

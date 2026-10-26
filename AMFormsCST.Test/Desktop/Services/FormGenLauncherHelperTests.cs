@@ -399,6 +399,56 @@ public class FormGenLauncherHelperTests
     }
 
     [Fact]
+    public void RestoreVanillaBatch_WhenBatDoesNotExist_RecreatesDefaultVanillaBatch()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "FormGenRecreate_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
+
+        try
+        {
+            Assert.False(File.Exists(tempBat));
+            FormGenLauncherHelper.RestoreVanillaBatch(tempBat);
+
+            Assert.True(File.Exists(tempBat), "RestoreVanillaBatch did not recreate missing NewFormGen.bat!");
+            var content = File.ReadAllText(tempBat);
+            Assert.Contains("com.automate.formgen.NewFormGen", content);
+            Assert.DoesNotContain("FormGenAgent", content);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void UnpatchAndReloadFormGen_WhenBatWasMissing_RecreatesVanillaBatchAndReturnsTrue()
+    {
+        var tempPortFile = UsePrivatePortFile();
+        var tempDir = Path.GetDirectoryName(tempPortFile)!;
+        var tempBat = Path.Combine(tempDir, "NewFormGen.bat");
+
+        try
+        {
+            Assert.False(File.Exists(tempBat));
+            bool ok = FormGenLauncherHelper.UnpatchAndReloadFormGen(
+                tempBat,
+                userSettings: null,
+                relaunchFormGen: false);
+
+            Assert.True(ok);
+            Assert.True(File.Exists(tempBat), "UnpatchAndReloadFormGen did not restore missing NewFormGen.bat!");
+            var content = File.ReadAllText(tempBat);
+            Assert.Contains("com.automate.formgen.NewFormGen", content);
+            Assert.DoesNotContain("FormGenAgent", content);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public void BrowserIntegrationService_EnsureManifestUpdated_NeverWritesTestHostExe()
     {
         var resolvedExe = BrowserIntegrationService.ResolveDesktopExecutablePath();
