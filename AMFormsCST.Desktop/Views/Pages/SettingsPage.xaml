@@ -18,6 +18,11 @@
         <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter" />
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
+        <!-- Default TextBlock Style for Dynamic Theme Mode Reactivity -->
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        </Style>
+
         <!-- Segmented Tab Button Style -->
         <Style x:Key="SettingsTabButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="Transparent" />
@@ -31,11 +36,15 @@
         </Style>
     </Page.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="24,16,24,32" MaxWidth="1100" HorizontalAlignment="Stretch">
+    <ScrollViewer
+        x:Name="SettingsScrollViewer"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Disabled"
+        PreviewMouseWheel="SettingsScrollViewer_PreviewMouseWheel">
+        <StackPanel Margin="16,8,16,24" HorizontalAlignment="Stretch">
 
             <!-- Page Title & Role Badge Header -->
-            <Grid Margin="0,0,0,16">
+            <Grid Margin="0,4,0,16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -44,6 +53,7 @@
                     <TextBlock
                         FontSize="24"
                         FontWeight="Bold"
+                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                         Text="Settings" />
                     <TextBlock
                         Margin="0,4,0,0"

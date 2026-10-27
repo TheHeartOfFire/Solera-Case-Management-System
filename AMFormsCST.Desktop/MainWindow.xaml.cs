@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Desktop.Interfaces;
 using AMFormsCST.Desktop.Services;
 using AMFormsCST.Desktop.ViewModels;
@@ -70,6 +70,7 @@ public partial class MainWindow : IWindow
         NavigationView.SetCurrentValue(
             NavigationView.HeaderVisibilityProperty,
             navigationView.SelectedItem?.TargetPageType != typeof(DashboardPage)
+            && navigationView.SelectedItem?.TargetPageType != typeof(SettingsPage)
                 ? Visibility.Visible
                 : Visibility.Collapsed
         );
