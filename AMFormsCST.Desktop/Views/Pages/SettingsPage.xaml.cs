@@ -20,22 +20,47 @@ public partial class SettingsPage : Page, INavigableView<SettingsViewModel>
         _logger?.LogInfo("SettingsPage initialized.");
     }
 
-    private void SettingsScrollViewer_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    private void OnPagePreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
     {
-        if (sender is ScrollViewer scv && scv.ScrollableHeight > 0)
+        var scrollViewer = (SettingsScrollViewer != null && SettingsScrollViewer.ScrollableHeight > 0)
+            ? SettingsScrollViewer
+            : FindParentScrollViewer(this);
+
+        if (scrollViewer != null && scrollViewer.ScrollableHeight > 0)
         {
-            var targetOffset = scv.VerticalOffset - (e.Delta * 0.6);
+            var targetOffset = scrollViewer.VerticalOffset - (e.Delta * 0.6);
             if (targetOffset < 0)
             {
                 targetOffset = 0;
             }
-            else if (targetOffset > scv.ScrollableHeight)
+            else if (targetOffset > scrollViewer.ScrollableHeight)
             {
-                targetOffset = scv.ScrollableHeight;
+                targetOffset = scrollViewer.ScrollableHeight;
             }
 
-            scv.ScrollToVerticalOffset(targetOffset);
+            scrollViewer.ScrollToVerticalOffset(targetOffset);
             e.Handled = true;
         }
     }
-}
+
+    private static ScrollViewer? FindParentScrollViewer(System.Windows.DependencyObject? child)
+    {
+        while (child != null)
+        {
+            if (child is not System.Windows.Media.Visual && child is not System.Windows.Media.Media3D.Visual3D)
+            {
+                child = System.Windows.LogicalTreeHelper.GetParent(child);
+            }
+            else
+            {
+                child = System.Windows.Media.VisualTreeHelper.GetParent(child) ?? System.Windows.LogicalTreeHelper.GetParent(child);
+            }
+
+            if (child is ScrollViewer sv && sv.ScrollableHeight > 0)
+            {
+                return sv;
+            }
+        }
+        return null;
+    }
+}

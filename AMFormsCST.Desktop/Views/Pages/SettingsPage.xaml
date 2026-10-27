@@ -13,6 +13,8 @@
                                      IsDesignTimeCreatable=False}"
     d:DesignHeight="850"
     d:DesignWidth="900"
+    ScrollViewer.CanContentScroll="False"
+    PreviewMouseWheel="OnPagePreviewMouseWheel"
     mc:Ignorable="d">
     <Page.Resources>
         <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter" />
@@ -40,7 +42,7 @@
         x:Name="SettingsScrollViewer"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled"
-        PreviewMouseWheel="SettingsScrollViewer_PreviewMouseWheel">
+        PreviewMouseWheel="OnPagePreviewMouseWheel">
         <StackPanel Margin="16,8,16,24" HorizontalAlignment="Stretch">
 
             <!-- Page Title & Role Badge Header -->
