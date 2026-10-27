@@ -34,19 +34,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.action === "EXTRACT_CASE_DATA") {
-        // Prevent child iframes from executing heavy scraping and API lookups
+        // Prevent child iframes from executing scraping
         if (window !== window.top) {
             sendResponse({ success: false, reason: "subframe" });
             return false;
         }
 
-        extractSalesforceCaseAsync().then(caseData => {
+        try {
+            const caseData = extractSalesforceCase();
             sendResponse({ success: true, caseData: caseData });
-        }).catch(err => {
-            console.warn("extractSalesforceCaseAsync error:", err);
-            sendResponse({ success: true, caseData: extractSalesforceCase() });
-        });
-        return true;
+        } catch (err) {
+            console.warn("extractSalesforceCase error:", err);
+            sendResponse({ success: false, error: err ? err.message : String(err) });
+        }
+        return false;
     }
 
     if (message.action === "SHOW_TOAST") {
@@ -573,194 +574,9 @@ function extractSalesforceCase() {
     return data;
 }
 
-function findAccountLinkElement(accountId) {
-    if (accountId) {
-        const byId = document.querySelector(`a[data-recordid="${accountId}"], a[data-id="${accountId}"], a[href*="${accountId}"]`);
-        if (byId && isElementVisible(byId)) return byId;
-        if (byId) return byId;
-    }
-
-    const selectors = [
-        '[data-target-selection-name="sfdc:RecordField.Case.AccountId"] a',
-        'records-record-layout-item[field-label*="Account" i] a',
-        '[data-field-name="AccountId"] a',
-        'a[data-refid="recordId"][href*="Account"]',
-        'a[data-recordid^="001"]',
-        'a[href*="/001"]'
-    ];
-    for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        if (el && isElementVisible(el)) return el;
-    }
-    for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        if (el) return el;
-    }
-    return null;
-}
-
-function triggerHoverOnElement(el) {
-    if (!el) return;
-    const opts = { bubbles: true, cancelable: true, view: window };
-    el.dispatchEvent(new MouseEvent('mouseover', opts));
-    el.dispatchEvent(new MouseEvent('mouseenter', opts));
-    const parent = el.closest('records-hoverable-link, [data-target-selection-name], [data-field-name]');
-    if (parent && parent !== el) {
-        parent.dispatchEvent(new MouseEvent('mouseover', opts));
-        parent.dispatchEvent(new MouseEvent('mouseenter', opts));
-    }
-}
-
-function triggerUnhoverOnElement(el) {
-    if (!el) return;
-    const opts = { bubbles: true, cancelable: true, view: window };
-    el.dispatchEvent(new MouseEvent('mouseleave', opts));
-    el.dispatchEvent(new MouseEvent('mouseout', opts));
-    const parent = el.closest('records-hoverable-link, [data-target-selection-name], [data-field-name]');
-    if (parent && parent !== el) {
-        parent.dispatchEvent(new MouseEvent('mouseleave', opts));
-        parent.dispatchEvent(new MouseEvent('mouseout', opts));
-    }
-}
-
-async function fetchServerCodeViaHover(accountId) {
-    const accLink = findAccountLinkElement(accountId);
-    if (!accLink) return null;
-
-    const patterns = [
-        /automate\s*server/i, /auto\/mate\s*server/i, /server\s*code/i, /server\s*id/i,
-        /server__c/i, /dms.*server/i, "Automate Server Code", "Auto/Mate Server Code",
-        "Server Code", "Server ID", "AM Server Code"
-    ];
-
-    try {
-        triggerHoverOnElement(accLink);
-
-        // Wait 300ms for Lightning popover to mount
-        await new Promise(r => setTimeout(r, 300));
-
-        let code = findFieldInPopovers(patterns);
-        if (!code) {
-            await new Promise(r => setTimeout(r, 200));
-            code = findFieldInPopovers(patterns);
-        }
-
-        triggerUnhoverOnElement(accLink);
-        return isValidServerCode(code) ? code : null;
-    } catch (e) {
-        triggerUnhoverOnElement(accLink);
-        return null;
-    }
-}
-
-function extractServerCodeFromJson(obj) {
-    if (!obj || typeof obj !== "object") return null;
-
-    // Check fields directly (Salesforce UI API record format)
-    if (obj.fields && typeof obj.fields === "object") {
-        for (const [k, f] of Object.entries(obj.fields)) {
-            if (/server.*code|automate.*server|server.*id|server__c|dms.*server|^server$|am.*server/i.test(k)) {
-                const val = f?.displayValue || f?.value;
-                if (val != null) {
-                    const str = String(val).trim();
-                    if (isValidServerCode(str)) return str;
-                }
-            }
-        }
-    }
-
-    // Traverse recursively
-    for (const [k, v] of Object.entries(obj)) {
-        if (/server.*code|automate.*server|server.*id|server__c|dms.*server|^server$|am.*server/i.test(k)) {
-            if (v != null && (typeof v === "string" || typeof v === "number")) {
-                const str = String(v).trim();
-                if (isValidServerCode(str)) return str;
-            } else if (v && typeof v === "object" && (v.displayValue != null || v.value != null)) {
-                const str = String(v.displayValue || v.value).trim();
-                if (isValidServerCode(str)) return str;
-            }
-        }
-        if (v && typeof v === "object") {
-            const nested = extractServerCodeFromJson(v);
-            if (nested) return nested;
-        }
-    }
-    return null;
-}
-
-async function fetchServerCodeViaUiApi(accountId) {
-    if (!accountId) return null;
-    const endpoints = [
-        `/services/data/v59.0/ui-api/records/${accountId}?layoutTypes=Compact`,
-        `/services/data/v59.0/ui-api/record-ui/${accountId}`,
-        `/services/data/v59.0/ui-api/records/${accountId}?optionalFields=Account.Automate_Server_Code__c,Account.Server_ID__c,Account.Server_Code__c,Account.Server__c,Account.DMS_Server__c,Account.System_ID__c`
-    ];
-
-    for (const ep of endpoints) {
-        try {
-            const resp = await fetch(ep, {
-                method: "GET",
-                credentials: "include",
-                headers: { "Accept": "application/json" }
-            });
-            if (resp.ok) {
-                const json = await resp.json();
-                const code = extractServerCodeFromJson(json);
-                if (isValidServerCode(code)) return code;
-            }
-        } catch (e) {}
-    }
-    return null;
-}
-
-function extractServerCodeFromText(text) {
-    if (!text) return "";
-    const lines = text.split(/\r?\n/);
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        const m = line.match(/(?:automate\s*server\s*code|auto\/mate\s*server\s*code|server\s*code|server\s*id)[ \t:]+([A-Za-z0-9_-]{2,15})/i);
-        if (m && m[1] && isValidServerCode(m[1])) {
-            return m[1].trim();
-        }
-    }
-    return "";
-}
-
 async function extractSalesforceCaseAsync() {
-    const data = extractSalesforceCase();
-    if (isValidServerCode(data.serverCode)) {
-        return data;
-    }
-    data.serverCode = "";
-
-    if (data.accountId) {
-        // Step 1: Synthetic hover popover lookup (triggers Compact Layout render as shown in screenshot)
-        try {
-            const hoverCode = await fetchServerCodeViaHover(data.accountId);
-            if (isValidServerCode(hoverCode)) {
-                data.serverCode = hoverCode;
-                return data;
-            }
-        } catch (e) {}
-
-        // Step 2: Same-origin UI API fetch
-        try {
-            const uiApiCode = await fetchServerCodeViaUiApi(data.accountId);
-            if (isValidServerCode(uiApiCode)) {
-                data.serverCode = uiApiCode;
-                return data;
-            }
-        } catch (e) {}
-    }
-
-    // Step 3: Check document text on same line as last resort
-    const textCode = extractServerCodeFromText(document.body ? document.body.innerText : "");
-    if (isValidServerCode(textCode)) {
-        data.serverCode = textCode;
-        return data;
-    }
-
-    return data;
+    return extractSalesforceCase();
 }
+
 
 

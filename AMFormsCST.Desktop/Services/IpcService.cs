@@ -342,6 +342,27 @@ public class IpcService : IHostedService, IAsyncDisposable
                 note.NotesXaml = XamlWriter.Save(doc);
                 break;
 
+            case "formtitle":
+            case "formname":
+            case "form":
+                var activeForm = note.Forms.SelectedItem ?? note.Forms.FirstOrDefault();
+                if (activeForm != null && string.IsNullOrWhiteSpace(activeForm.Name))
+                {
+                    activeForm.Name = value.Trim();
+                    activeForm.Select();
+                }
+                else if (activeForm != null && activeForm.Name.Trim().Equals(value.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    activeForm.Select();
+                }
+                else
+                {
+                    var newForm = new Form(note, _logger) { Name = value.Trim() };
+                    note.Forms.Add(newForm);
+                    newForm.Select();
+                }
+                break;
+
             default:
                 return IpcResponse.Fail($"Unknown field '{field}'.");
         }
@@ -626,6 +647,30 @@ public class IpcService : IHostedService, IAsyncDisposable
         catch (Exception ex)
         {
             _logger?.LogError("Error opening Code Snippets Dialog.", ex);
+        }
+    }
+
+    public void SetFormTitle(string formTitle)
+    {
+        if (string.IsNullOrWhiteSpace(formTitle)) return;
+
+        var message = new IpcMessage
+        {
+            Action = IpcActions.SetDashboardField,
+            Payload = new Dictionary<string, string>
+            {
+                { "field", "formtitle" },
+                { "value", formTitle.Trim() }
+            }
+        };
+
+        if (Application.Current?.Dispatcher?.CheckAccess() == true)
+        {
+            SetDashboardField(message);
+        }
+        else
+        {
+            Application.Current?.Dispatcher?.Invoke(() => SetDashboardField(message));
         }
     }
 

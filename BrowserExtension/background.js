@@ -70,6 +70,13 @@ function setupContextMenus() {
         });
 
         chrome.contextMenus.create({
+            id: "send_set_formtitle",
+            parentId: "solera_send_parent",
+            title: "Set Form Title",
+            contexts: ["selection"]
+        });
+
+        chrome.contextMenus.create({
             id: "send_parse_codeblock",
             title: "Send to Code Snippets",
             contexts: ["selection"]
@@ -198,6 +205,14 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             }, null, tabId, "✓ Contact Phone updated in Solera");
             break;
 
+        case "send_set_formtitle":
+            sendIpcMessage({
+                target: "SoleraCMS",
+                action: "SetDashboardField",
+                payload: { field: "formtitle", value: selection }
+            }, null, tabId, "✓ Form title updated in Solera");
+            break;
+
         case "send_parse_codeblock":
             sendIpcMessage({
                 target: "SoleraCMS",
@@ -313,14 +328,18 @@ function sendTabMessageWithAutoInject(tabId, message, callback, frameId) {
 
     chrome.tabs.sendMessage(tabId, message, sendOptions, (res) => {
         const err = chrome.runtime.lastError;
-        if (!err) {
+        if (!err && res) {
             if (callback) callback(res);
             return;
         }
-        // Content script not injected yet (e.g., tab was already open before extension load or non-Salesforce tab)
+        // Content script not injected yet, disconnected, or returned no response
         if (chrome.scripting) {
             chrome.scripting.executeScript({
-                target: { tabId: tabId, allFrames: true },
+                target: {
+                    tabId: tabId,
+                    frameIds: typeof frameId === "number" ? [frameId] : undefined,
+                    allFrames: typeof frameId !== "number"
+                },
                 files: ["content.js"]
             }, () => {
                 if (chrome.runtime.lastError) {

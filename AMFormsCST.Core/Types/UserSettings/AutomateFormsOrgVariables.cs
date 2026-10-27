@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces.BestPractices;
+using AMFormsCST.Core.Interfaces.BestPractices;
 using AMFormsCST.Core.Interfaces.UserSettings;
 using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Types.BestPractices.TextTemplates.Models;
@@ -12,7 +12,7 @@ public class AutomateFormsOrgVariables : IOrgVariables
     private readonly ILogService? _logger;
 
     private Func<ISupportTool?> _supportToolFactory;
-    private readonly Lazy<List<ITextTemplateVariable>> _variables;
+    private Lazy<List<ITextTemplateVariable>> _variables;
 
 
     public Dictionary<string, string> LooseVariables { get; set; } =
@@ -29,7 +29,12 @@ public class AutomateFormsOrgVariables : IOrgVariables
 
     [JsonIgnore]
     public List<ITextTemplateVariable> Variables => _variables.Value;
+
     [JsonConstructor]
+    public AutomateFormsOrgVariables() : this(() => null, (ILogService?)null)
+    {
+    }
+
     public AutomateFormsOrgVariables(Func<ISupportTool?> supportToolFactory)
     {
         _supportToolFactory = supportToolFactory;
@@ -53,7 +58,7 @@ public class AutomateFormsOrgVariables : IOrgVariables
             throw ex;
         }
         _supportToolFactory = () => supportTool;
-        // The Lazy instance will be re-evaluated on next access
+        _variables = new Lazy<List<ITextTemplateVariable>>(RegisterVariables);
         _logger?.LogInfo("Variables instantiated.");
     }
 

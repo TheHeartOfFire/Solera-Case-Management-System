@@ -18,6 +18,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Markup;
+using System.Windows.Threading;
 using Wpf.Ui;
 
 namespace AMFormsCST.Desktop.ViewModels.Pages;
@@ -748,17 +749,48 @@ public partial class DashboardViewModel : ViewModel
         }
     }
 
-    private void UpdateTemplatesVM()
+    private DispatcherTimer? _updateTemplatesTimer;
+
+    private void UpdateTemplatesVM(bool immediate = false)
     {
-        try
+        if (Application.Current == null || immediate)
         {
-            _templatesvm?.Refresh();
-            _logger?.LogInfo("TemplatesViewModel updated.");
+            _updateTemplatesTimer?.Stop();
+            try
+            {
+                _templatesvm?.Refresh();
+                _logger?.LogDebug("TemplatesViewModel updated immediately.");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError("Error updating TemplatesViewModel.", ex);
+            }
+            return;
         }
-        catch (Exception ex)
+
+        if (_updateTemplatesTimer == null)
         {
-            _logger?.LogError("Error updating TemplatesViewModel.", ex);
+            _updateTemplatesTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(75)
+            };
+            _updateTemplatesTimer.Tick += (s, e) =>
+            {
+                _updateTemplatesTimer.Stop();
+                try
+                {
+                    _templatesvm?.Refresh();
+                    _logger?.LogDebug("TemplatesViewModel updated.");
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError("Error updating TemplatesViewModel.", ex);
+                }
+            };
         }
+
+        _updateTemplatesTimer.Stop();
+        _updateTemplatesTimer.Start();
     }
 
     [RelayCommand]
@@ -856,46 +888,91 @@ public partial class DashboardViewModel : ViewModel
 
     public NoteModel? LoadCaseFromNote(NoteModel note)
     {
-        ApplyParsedNote(note);
-        var selected = Notes.LastOrDefault(n => n.IsBlank == false) ?? Notes.FirstOrDefault();
-        selected?.Select();
+        var targetNote = ApplyParsedNote(note);
+        targetNote.Select();
 
-        if (_supportTool is not null &&
-            _supportTool.Notebook.Notes.SelectedItem?.Id != SelectedNote?.CoreType?.Id)
-            _supportTool.Notebook.Notes.SelectedItem = SelectedNote?.CoreType;
+        if (targetNote.SelectedDealer == null)
+        {
+            var d = targetNote.Dealers.FirstOrDefault(d => !d.IsBlank) ?? targetNote.Dealers.FirstOrDefault();
+            d?.Select();
+        }
+        if (targetNote.SelectedDealer?.SelectedCompany == null)
+        {
+            var c = targetNote.SelectedDealer?.Companies.FirstOrDefault(comp => !comp.IsBlank) ?? targetNote.SelectedDealer?.Companies.FirstOrDefault();
+            c?.Select();
+        }
+        if (targetNote.SelectedContact == null)
+        {
+            var cont = targetNote.Contacts.FirstOrDefault(c => !c.IsBlank) ?? targetNote.Contacts.FirstOrDefault();
+            cont?.Select();
+        }
+        if (targetNote.SelectedForm == null)
+        {
+            var f = targetNote.Forms.FirstOrDefault(form => !form.IsBlank) ?? targetNote.Forms.FirstOrDefault();
+            f?.Select();
+        }
 
-        if (_supportTool is not null && _supportTool.Notebook.Notes.SelectedItem is not null &&
-            SelectedNote?.SelectedDealer is not null &&
-            _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem?.Id != SelectedNote.SelectedDealer.CoreType?.Id)
-            _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem = SelectedNote.SelectedDealer.CoreType;
+        if (_supportTool is not null)
+        {
+            if (targetNote.CoreType is not null && !_supportTool.Notebook.Notes.Contains(targetNote.CoreType))
+            {
+                _supportTool.Notebook.Notes.Add(targetNote.CoreType);
+            }
+            _supportTool.Notebook.Notes.SelectedItem = targetNote.CoreType;
 
-        if (_supportTool is not null &&
-            _supportTool.Notebook.Notes.SelectedItem is not null &&
-            _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem is not null &&
-            SelectedNote?.SelectedDealer?.SelectedCompany is not null &&
-            _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem!.Companies.SelectedItem?.Id != SelectedNote.SelectedDealer.SelectedCompany.CoreType?.Id)
-            _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem!.Companies.SelectedItem = SelectedNote.SelectedDealer.SelectedCompany.CoreType;
+            if (_supportTool.Notebook.Notes.SelectedItem is not null && targetNote.SelectedDealer is not null)
+            {
+                if (targetNote.SelectedDealer.CoreType is not null && !_supportTool.Notebook.Notes.SelectedItem.Dealers.Contains(targetNote.SelectedDealer.CoreType))
+                {
+                    _supportTool.Notebook.Notes.SelectedItem.Dealers.Add(targetNote.SelectedDealer.CoreType);
+                }
+                _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem = targetNote.SelectedDealer.CoreType;
 
-        if (_supportTool is not null &&
-            _supportTool.Notebook.Notes.SelectedItem is not null &&
-            SelectedNote?.SelectedContact is not null &&
-            _supportTool.Notebook.Notes.SelectedItem.Contacts.SelectedItem?.Id != SelectedNote.SelectedContact.CoreType?.Id)
-            _supportTool.Notebook.Notes.SelectedItem.Contacts.SelectedItem = SelectedNote.SelectedContact.CoreType;
+                if (targetNote.SelectedDealer.SelectedCompany is not null)
+                {
+                    if (targetNote.SelectedDealer.SelectedCompany.CoreType is not null && !_supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem.Companies.Contains(targetNote.SelectedDealer.SelectedCompany.CoreType))
+                    {
+                        _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem.Companies.Add(targetNote.SelectedDealer.SelectedCompany.CoreType);
+                    }
+                    _supportTool.Notebook.Notes.SelectedItem.Dealers.SelectedItem.Companies.SelectedItem = targetNote.SelectedDealer.SelectedCompany.CoreType;
+                }
+            }
 
-        if (_supportTool is not null &&
-            _supportTool.Notebook.Notes.SelectedItem is not null &&
-            SelectedNote?.SelectedForm is not null &&
-            _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem?.Id != SelectedNote.SelectedForm.CoreType?.Id)
-            _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem = SelectedNote.SelectedForm.CoreType;
+            if (_supportTool.Notebook.Notes.SelectedItem is not null && targetNote.SelectedContact is not null)
+            {
+                if (targetNote.SelectedContact.CoreType is not null && !_supportTool.Notebook.Notes.SelectedItem.Contacts.Contains(targetNote.SelectedContact.CoreType))
+                {
+                    _supportTool.Notebook.Notes.SelectedItem.Contacts.Add(targetNote.SelectedContact.CoreType);
+                }
+                _supportTool.Notebook.Notes.SelectedItem.Contacts.SelectedItem = targetNote.SelectedContact.CoreType;
+            }
 
-        if (_supportTool is not null &&
-            _supportTool.Notebook.Notes.SelectedItem is not null &&
-            _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem is not null &&
-            SelectedNote?.SelectedForm?.SelectedTestDeal is not null &&
-            _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem!.TestDeals.SelectedItem?.Id != SelectedNote.SelectedForm.SelectedTestDeal.CoreType?.Id)
-            _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem!.TestDeals.SelectedItem = SelectedNote.SelectedForm.SelectedTestDeal.CoreType;
+            if (_supportTool.Notebook.Notes.SelectedItem is not null && targetNote.SelectedForm is not null)
+            {
+                if (targetNote.SelectedForm.CoreType is not null && !_supportTool.Notebook.Notes.SelectedItem.Forms.Contains(targetNote.SelectedForm.CoreType))
+                {
+                    _supportTool.Notebook.Notes.SelectedItem.Forms.Add(targetNote.SelectedForm.CoreType);
+                }
+                _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem = targetNote.SelectedForm.CoreType;
+            }
 
-        UpdateTemplatesVM();
+            if (_supportTool.Notebook.Notes.SelectedItem is not null && targetNote.SelectedForm?.SelectedTestDeal is not null)
+            {
+                if (_supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem is not null &&
+                    targetNote.SelectedForm.SelectedTestDeal.CoreType is not null &&
+                    !_supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem.TestDeals.Contains(targetNote.SelectedForm.SelectedTestDeal.CoreType))
+                {
+                    _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem.TestDeals.Add(targetNote.SelectedForm.SelectedTestDeal.CoreType);
+                }
+                if (_supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem is not null)
+                {
+                    _supportTool.Notebook.Notes.SelectedItem.Forms.SelectedItem.TestDeals.SelectedItem = targetNote.SelectedForm.SelectedTestDeal.CoreType;
+                }
+            }
+        }
+
+        UiRefreshCounter++;
+        UpdateTemplatesVM(immediate: true);
         return SelectedNote;
     }
 
@@ -1093,13 +1170,14 @@ public partial class DashboardViewModel : ViewModel
         return note;
     }
 
-    private void ApplyParsedNote(NoteModel newNote)
+    private NoteModel ApplyParsedNote(NoteModel newNote)
     {
         var recipient = Notes.LastOrDefault(n => n.IsBlank);
         if (recipient is null)
         {
             Notes.Add(newNote);
-            return;
+            newNote.UpdateCore();
+            return newNote;
         }
 
         recipient.CaseNumber = newNote.CaseNumber;
@@ -1133,5 +1211,18 @@ public partial class DashboardViewModel : ViewModel
             }
             recipientDealer.Select();
         }
+
+        var recipientForm = recipient.Forms.FirstOrDefault(f => f.IsBlank) ?? recipient.Forms.FirstOrDefault();
+        var sourceForm = newNote.Forms.FirstOrDefault();
+        if (recipientForm is not null && sourceForm is not null)
+        {
+            recipientForm.Name = sourceForm.Name;
+            recipientForm.Notes = sourceForm.Notes;
+            recipientForm.Format = sourceForm.Format;
+            recipientForm.Select();
+        }
+
+        recipient.UpdateCore();
+        return recipient;
     }
 }
