@@ -1270,7 +1270,7 @@ public partial class CodeSnippetsViewModel : ViewModel
             ? $"Custom snippet based on {targetRoot.Title}"
             : NewCustomSnippetDescription.Trim();
 
-        var customSnippet = new CustomSnippetCode(name, desc, rootCodeBase);
+        var customSnippet = new CustomSnippetCode(name, desc, rootCodeBase, exposeVariableIdentifiers: true);
         _codeBlocks.CustomBlocks?.Add(customSnippet);
         _codeBlocks.SaveCustomBlocks();
 

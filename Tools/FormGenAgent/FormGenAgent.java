@@ -22,6 +22,7 @@ public class FormGenAgent {
     private static volatile int lastUdfTabIndex = -1;
     private static volatile int lastMenuDetectX = -1;
     private static volatile int lastMenuDetectY = -1;
+    private static volatile Object lastRmbControl = null;
     private static volatile long lastConfigModified = 0L;
     private static volatile boolean sessionRestoreCompleted = false;
     private static final String PORT_FILE = System.getProperty("java.io.tmpdir") + File.separator + "formgen_agent.port";
@@ -2152,6 +2153,7 @@ public class FormGenAgent {
                     attachUndoManagersRecursively(widget);
                 }
             } else if (eventType == SWT_MenuDetect) {
+                lastRmbControl = widget;
                 if (controlClass.isInstance(widget)) {
                     String clsName = widget.getClass().getName();
                     if (clsName.contains("PdfViewer")) {
@@ -2678,7 +2680,13 @@ public class FormGenAgent {
                                 int.class,
                                 boolean.class
                             );
-                            Object createdField = dropWorker.invoke(formViewer, expr, format, ptX, ptY, false);
+                            Object createdField = dropWorker.invoke(formViewer, expr, format, ptX, ptY, true);
+                            try {
+                                Method redrawMethod = formViewer.getClass().getMethod("redraw");
+                                redrawMethod.invoke(formViewer);
+                                Method updateMethod = formViewer.getClass().getMethod("update");
+                                updateMethod.invoke(formViewer);
+                            } catch (Throwable ignored) {}
                             log("Dropped code block field at (" + ptX + ", " + ptY + ") as "
                                 + ("NUMERIC".equalsIgnoreCase(outputType) ? "NUMERIC" : "TEXT")
                                 + " with expr: " + expr + " -> " + createdField);
@@ -3488,7 +3496,17 @@ public class FormGenAgent {
         try {
             Method getFocusMethod = display.getClass().getMethod("getFocusControl");
             Object control = getFocusMethod.invoke(display);
+            if (control == null && lastRmbControl != null && !isDisposed(lastRmbControl)) {
+                control = lastRmbControl;
+            }
             if (control == null) return;
+
+            String clsName = control.getClass().getName();
+            if (clsName.contains("PdfViewer") || clsName.contains("Canvas")) {
+                int[] dropPt = extractDropPointFromMenu(null, display);
+                dropCodeBlockFieldAtPT(display, dropPt[0], dropPt[1]);
+                return;
+            }
 
             try {
                 Method insertMethod = control.getClass().getMethod("insert", String.class);

@@ -436,6 +436,7 @@ public class BrowserIntegrationService : IBrowserIntegrationService
 
         if (!string.IsNullOrWhiteSpace(processPath) &&
             processPath.EndsWith("AMFormsCST.Desktop.exe", StringComparison.OrdinalIgnoreCase) &&
+            !processPath.Contains("AMFormsCST.Test", StringComparison.OrdinalIgnoreCase) &&
             File.Exists(processPath))
         {
             return processPath;
@@ -444,14 +445,14 @@ public class BrowserIntegrationService : IBrowserIntegrationService
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var candidates = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "AMFormsCST.Desktop.exe"),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "AMFormsCST.Desktop", "bin", "Debug", "net9.0-windows", "AMFormsCST.Desktop.exe")),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "AMFormsCST.Desktop", "bin", "Release", "net9.0-windows", "AMFormsCST.Desktop.exe")),
             Path.Combine(localAppData, "AMFormsCST", "current", "AMFormsCST.Desktop.exe"),
-            Path.Combine(localAppData, "SoleraCaseManagement", "current", "AMFormsCST.Desktop.exe")
+            Path.Combine(localAppData, "SoleraCaseManagement", "current", "AMFormsCST.Desktop.exe"),
+            Path.Combine(AppContext.BaseDirectory, "AMFormsCST.Desktop.exe")
         };
 
-        return candidates.FirstOrDefault(File.Exists);
+        return candidates.FirstOrDefault(c => !c.Contains("AMFormsCST.Test", StringComparison.OrdinalIgnoreCase) && File.Exists(c));
     }
 
     public static string? GetExtensionDirectory()

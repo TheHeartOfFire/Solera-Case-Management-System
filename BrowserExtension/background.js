@@ -56,6 +56,20 @@ function setupContextMenus() {
         });
 
         chrome.contextMenus.create({
+            id: "send_set_email",
+            parentId: "solera_send_parent",
+            title: "Set Contact Email",
+            contexts: ["selection"]
+        });
+
+        chrome.contextMenus.create({
+            id: "send_set_phone",
+            parentId: "solera_send_parent",
+            title: "Set Contact Phone",
+            contexts: ["selection"]
+        });
+
+        chrome.contextMenus.create({
             id: "send_parse_codeblock",
             title: "Send to Code Snippets",
             contexts: ["selection"]
@@ -97,6 +111,20 @@ function setupContextMenus() {
         });
 
         chrome.contextMenus.create({
+            id: "paste_contact_email",
+            parentId: "solera_paste_parent",
+            title: "Contact Email",
+            contexts: ["editable"]
+        });
+
+        chrome.contextMenus.create({
+            id: "paste_contact_phone",
+            parentId: "solera_paste_parent",
+            title: "Contact Phone",
+            contexts: ["editable"]
+        });
+
+        chrome.contextMenus.create({
             id: "paste_template",
             parentId: "solera_paste_parent",
             title: "Active Template",
@@ -115,6 +143,7 @@ function setupContextMenus() {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
     const selection = (info.selectionText || "").trim();
     const tabId = tab && tab.id ? tab.id : null;
+    const frameId = typeof info.frameId === "number" ? info.frameId : null;
 
     switch (info.menuItemId) {
         case "send_parse_case":
@@ -150,7 +179,23 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 target: "SoleraCMS",
                 action: "SetDashboardField",
                 payload: { field: "contactname", value: selection }
-            }, null, tabId, "✓ Contact updated in Solera");
+            }, null, tabId, "✓ Contact Name updated in Solera");
+            break;
+
+        case "send_set_email":
+            sendIpcMessage({
+                target: "SoleraCMS",
+                action: "SetDashboardField",
+                payload: { field: "contactemail", value: selection }
+            }, null, tabId, "✓ Contact Email updated in Solera");
+            break;
+
+        case "send_set_phone":
+            sendIpcMessage({
+                target: "SoleraCMS",
+                action: "SetDashboardField",
+                payload: { field: "contactphone", value: selection }
+            }, null, tabId, "✓ Contact Phone updated in Solera");
             break;
 
         case "send_parse_codeblock":
@@ -165,8 +210,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         case "paste_dealership":
         case "paste_case_number":
         case "paste_contact_name":
+        case "paste_contact_email":
+        case "paste_contact_phone":
         case "paste_template":
-            handlePasteFromSolera(info.menuItemId, tab);
+            handlePasteFromSolera(info.menuItemId, tab, frameId);
             break;
 
         case "solera_parse_full_case":
@@ -175,8 +222,16 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
 });
 
+let lastExtractTime = 0;
 function extractAndParseFullCase(tabId, successMessage) {
     if (!tabId) return;
+    const now = Date.now();
+    if (now - lastExtractTime < 2000) {
+        console.warn("extractAndParseFullCase debounced to prevent duplicate trigger.");
+        return;
+    }
+    lastExtractTime = now;
+
     sendTabMessageWithAutoInject(tabId, { action: "EXTRACT_CASE_DATA" }, (res) => {
         if (res && res.caseData) {
             const d = res.caseData;
@@ -199,10 +254,10 @@ function extractAndParseFullCase(tabId, successMessage) {
         } else {
             notifyTabToast(tabId, "⚠ Could not read page content for case extraction.", true);
         }
-    });
+    }, 0); // Always extract from frameId 0 (top-level window)
 }
 
-function handlePasteFromSolera(menuItemId, tab) {
+function handlePasteFromSolera(menuItemId, tab, frameId) {
     if (!tab || !tab.id) return;
 
     sendIpcMessage({
@@ -230,6 +285,12 @@ function handlePasteFromSolera(menuItemId, tab) {
             case "paste_contact_name":
                 textToInsert = data.ContactName || "";
                 break;
+            case "paste_contact_email":
+                textToInsert = data.ContactEmail || "";
+                break;
+            case "paste_contact_phone":
+                textToInsert = data.ContactPhone || "";
+                break;
             case "paste_template":
                 textToInsert = data.ActiveTemplateText || "";
                 break;
@@ -239,16 +300,18 @@ function handlePasteFromSolera(menuItemId, tab) {
             sendTabMessageWithAutoInject(tab.id, {
                 action: "INSERT_TEXT",
                 text: textToInsert
-            });
+            }, null, frameId);
         } else {
             notifyTabToast(tab.id, "⚠ This field is currently empty in Solera.", true);
         }
     }, tab.id);
 }
 
-function sendTabMessageWithAutoInject(tabId, message, callback) {
+function sendTabMessageWithAutoInject(tabId, message, callback, frameId) {
     if (!tabId) return;
-    chrome.tabs.sendMessage(tabId, message, (res) => {
+    const sendOptions = typeof frameId === "number" ? { frameId: frameId } : {};
+
+    chrome.tabs.sendMessage(tabId, message, sendOptions, (res) => {
         const err = chrome.runtime.lastError;
         if (!err) {
             if (callback) callback(res);
@@ -257,7 +320,7 @@ function sendTabMessageWithAutoInject(tabId, message, callback) {
         // Content script not injected yet (e.g., tab was already open before extension load or non-Salesforce tab)
         if (chrome.scripting) {
             chrome.scripting.executeScript({
-                target: { tabId: tabId },
+                target: { tabId: tabId, allFrames: true },
                 files: ["content.js"]
             }, () => {
                 if (chrome.runtime.lastError) {
@@ -265,7 +328,7 @@ function sendTabMessageWithAutoInject(tabId, message, callback) {
                     if (callback) callback(null);
                     return;
                 }
-                chrome.tabs.sendMessage(tabId, message, (retryRes) => {
+                chrome.tabs.sendMessage(tabId, message, sendOptions, (retryRes) => {
                     const retryErr = chrome.runtime.lastError;
                     if (callback) callback(retryErr ? null : retryRes);
                 });

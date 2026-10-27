@@ -30,6 +30,8 @@ public class IpcService : IHostedService, IAsyncDisposable
     private readonly ILogService _logger;
 
     private NamedPipeIpcServer? _server;
+    private string? _lastLoadedCaseKey;
+    private DateTime _lastLoadedCaseTime = DateTime.MinValue;
 
     public IpcService(
         DashboardViewModel dashboardViewModel,
@@ -352,6 +354,22 @@ public class IpcService : IHostedService, IAsyncDisposable
 
     private IpcResponse LoadCase(IpcMessage message)
     {
+        message.Payload.TryGetValue("caseNumber", out var incomingCaseNum);
+        string dedupeKey = !string.IsNullOrWhiteSpace(incomingCaseNum)
+            ? incomingCaseNum.Trim()
+            : (!string.IsNullOrWhiteSpace(message.RawData) ? message.RawData.Trim() : message.Action);
+
+        if (string.Equals(_lastLoadedCaseKey, dedupeKey, StringComparison.OrdinalIgnoreCase) &&
+            (DateTime.UtcNow - _lastLoadedCaseTime).TotalSeconds < 4.0)
+        {
+            _logger.LogInfo($"Duplicate LoadCase request ignored for '{dedupeKey}'.");
+            BringWindowToFront();
+            return IpcResponse.Ok("Duplicate case request ignored.");
+        }
+
+        _lastLoadedCaseKey = dedupeKey;
+        _lastLoadedCaseTime = DateTime.UtcNow;
+
         NoteModel newNote;
         if (!string.IsNullOrWhiteSpace(message.RawData))
         {

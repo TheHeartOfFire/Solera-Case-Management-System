@@ -65,12 +65,36 @@ Keep these goals in mind across all development tasks until marked complete.
 
 #### 8. Architecture & External
 - [x] Finalize MVVM/DI Container stability
-- [ ] Establish Named Pipe server for Project Citadel communication
+- [ ] Establish Named Pipe server for external app communication
 - [x] Create Variable Registration System (Server ID, Dealership, Case #, etc.)
 - [x] Finalize Azure Function Proxy for GitHub API / Bug Reporting
 - [x] Configure VeloPack build tasks and GitHub Actions CI/CD pipeline
 - [ ] Add ability to pull information from outside sources:
-  - [ ] Salesforce Page (Browser extension / Citadel integration)
+  - [x] Salesforce Page (Browser extension integration)
   - [ ] CST / Server list
-- [ ] Inject context menu items into Windows RMB menu for FGA copy/pasting
+- [x] Inject context menu items into Windows RMB menu for FGA copy/pasting
+
+#### 9. Future Explorations & Backlog
+- [ ] PDF Form Reader & Field Suggestion Tool: Read PDF forms, analyze visual fields/pages, and suggest needed FormGen fields
+- [ ] Modern Reactive UI Mod for FormGen
+- [ ] Smart Fields & Specialty Prompts in Code Blocks:
+  - [ ] Support FormGen smart fields (specialty prompts and exposed prompt data)
+  - [ ] Multi-drop tool for bulk smart prompts (e.g. Accessory prompts 1-7, 1-15)
+- [ ] Dealership & Server Info Lookup Tool:
+  - [ ] Cross-reference Name DB (Name, server ID, company #s) shared with CST and dev board
+  - [ ] Multi-company selection checkboxes on Dashboard to parse cases across multiple companies
+- [ ] Automatic Line Adjustment Simulation:
+  - [ ] Compare impact FormGen file with scanned print photocopy
+  - [ ] Scale, align with original .jpg, and simulate field movements for automated line adjustments
+- [ ] Form Search via Elasticsearch
+- [ ] Form Publishing & Multi-dealer Republishing:
+  - [ ] Republish forms to all dealers/companies that currently have the form
+  - [ ] Option to fork multi-dealer published forms so each dealer gets their own copy (UUID)
+  - [ ] Form history revision revert with copy deployment to specific dealers
+- [ ] Proposal & Proposal Logo Management Dashboard
+- [ ] Rental Forms Wizard
+- [ ] Custom Field Groups (e.g. bulk dropping `ACCESSORY01_POSPRICE` through `ACCESSORY15_POSPRICE`)
+- [ ] Form Testing with Customer Data: Insert server/company/deal# to test live calculations
+- [ ] Code Blocks Testing with Customer Data
+
 

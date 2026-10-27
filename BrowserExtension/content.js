@@ -19,13 +19,10 @@ document.addEventListener("contextmenu", (e) => {
 function isEditable(el) {
     if (!el) return false;
     const tagName = el.tagName ? el.tagName.toUpperCase() : "";
-    return (
-        tagName === "INPUT" ||
-        tagName === "TEXTAREA" ||
-        el.isContentEditable ||
-        el.getAttribute("contenteditable") === "true" ||
-        el.getAttribute("role") === "textbox"
-    );
+    if (tagName === "INPUT" || tagName === "TEXTAREA") return true;
+    if (el.isContentEditable || el.getAttribute("contenteditable") === "true" || el.getAttribute("role") === "textbox") return true;
+    if (el.closest && (el.closest('[contenteditable="true"]') || el.closest('.ql-editor') || el.closest('.slds-rich-text-area__content') || el.closest('[role="textbox"]'))) return true;
+    return false;
 }
 
 // Listen for messages from background script
@@ -37,6 +34,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.action === "EXTRACT_CASE_DATA") {
+        // Prevent child iframes from executing heavy scraping and API lookups
+        if (window !== window.top) {
+            sendResponse({ success: false, reason: "subframe" });
+            return false;
+        }
+
         extractSalesforceCaseAsync().then(caseData => {
             sendResponse({ success: true, caseData: caseData });
         }).catch(err => {
@@ -87,11 +90,40 @@ function showSoleraToast(text, isError) {
 }
 
 function insertTextIntoElement(target, text) {
+    if (!target) {
+        target = document.activeElement;
+        if (!isEditable(target)) {
+            target = document.querySelector('.ql-editor, [contenteditable="true"], textarea, input[type="text"]');
+        }
+    }
     if (!target) return;
-    target.focus();
 
-    if (target.isContentEditable || target.getAttribute("contenteditable") === "true") {
-        document.execCommand("insertText", false, text);
+    // Resolve parent container if target is a child text node or paragraph inside a rich text editor (e.g. Quill / Salesforce email window)
+    const editableParent = (target.isContentEditable || target.getAttribute("contenteditable") === "true")
+        ? target
+        : (target.closest ? (target.closest('[contenteditable="true"]') || target.closest('.ql-editor') || target) : target);
+
+    editableParent.focus();
+
+    if (editableParent.isContentEditable || editableParent.getAttribute("contenteditable") === "true" || editableParent.classList.contains("ql-editor")) {
+        let success = false;
+        try {
+            success = document.execCommand("insertText", false, text);
+        } catch (e) {}
+
+        if (!success) {
+            try {
+                const html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, "<br>");
+                success = document.execCommand("insertHTML", false, html);
+            } catch (e) {}
+        }
+
+        if (!success) {
+            editableParent.innerText = (editableParent.innerText ? editableParent.innerText + "\n" : "") + text;
+        }
+
+        editableParent.dispatchEvent(new Event("input", { bubbles: true }));
+        editableParent.dispatchEvent(new Event("change", { bubbles: true }));
         return;
     }
 
