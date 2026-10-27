@@ -1,4 +1,5 @@
 using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Types.UserSettings;
 using AMFormsCST.Desktop.Models.UserSettings;
 using AMFormsCST.Desktop.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -99,6 +100,67 @@ public partial class SettingsViewModel : ViewModel
     [ObservableProperty]
     private bool _isBrowserBridgeRegistered;
 
+    [ObservableProperty]
+    private string _userName = string.Empty;
+
+    [ObservableProperty]
+    private string _userEmail = string.Empty;
+
+    [ObservableProperty]
+    private string _userPhone = string.Empty;
+
+    [ObservableProperty]
+    private string _userTitle = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFormsRoleActive))]
+    private UserRole _selectedRole = UserRole.AutomateForms;
+
+    [ObservableProperty]
+    private string _supportEmail = "automate-support@solera.com";
+
+    [ObservableProperty]
+    private string _supportPhone = "800-xxx-xxxx";
+
+    [ObservableProperty]
+    private string _formsMailingName = "Attn: A/M Forms (Sue)";
+
+    [ObservableProperty]
+    private string _formsStreetAddress = "131 Griffis Rd";
+
+    [ObservableProperty]
+    private string _formsCity = "Gloversville";
+
+    [ObservableProperty]
+    private string _formsState = "NY";
+
+    [ObservableProperty]
+    private string _formsZip = "12078";
+
+    [ObservableProperty]
+    private string _formsMailingAddressPreview = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGeneralTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsAppearanceTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsFormsTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsIntegrationsTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsAboutTabSelected))]
+    private int _selectedCategoryIndex = 0;
+
+    public bool IsFormsRoleActive => SelectedRole == UserRole.AutomateForms;
+    public bool IsGeneralTabSelected => SelectedCategoryIndex == 0;
+    public bool IsAppearanceTabSelected => SelectedCategoryIndex == 1;
+    public bool IsFormsTabSelected => SelectedCategoryIndex == 2;
+    public bool IsIntegrationsTabSelected => SelectedCategoryIndex == 3;
+    public bool IsAboutTabSelected => SelectedCategoryIndex == 4;
+
+    public IReadOnlyList<UserRole> AvailableRoles { get; } = [
+        UserRole.AutomateForms,
+        UserRole.CustomerSupport,
+        UserRole.General
+    ];
+
     public SettingsViewModel(
         IUpdateManagerService updateManagerService,
         ISupportTool supportTool,
@@ -148,19 +210,36 @@ public partial class SettingsViewModel : ViewModel
         if (formCodeSetting != null) CapitalizeFormCode = formCodeSetting.CapitalizeFormCode;
 
         var userSettings = _supportTool.Settings.UserSettings;
-        ExtSeparator = userSettings.ExtSeparator;
-        EnableExplorerContextMenu = userSettings.EnableExplorerContextMenu;
-        FormGenExecutablePath = userSettings.FormGenExecutablePath;
+        var formsSettings = userSettings.FormsSettings ?? new AutomateFormsSettings();
 
-        IsFormGenPatched = userSettings.IsFormGenPatched;
-        FormGenPreserveUdfTab = userSettings.FormGenPreserveUdfTab;
-        FormGenCanvasPasteField = userSettings.FormGenCanvasPasteField;
-        FormGenAlreadyOpenToast = userSettings.FormGenAlreadyOpenToast;
-        FormGenContextMenus = userSettings.FormGenContextMenus;
-        FormGenEditorUndoRedo = userSettings.FormGenEditorUndoRedo;
-        FormGenDialogAutoFill = userSettings.FormGenDialogAutoFill;
-        FormGenAutoRestoreForms = userSettings.FormGenAutoRestoreForms;
-        EnableShiftRightClickFlyout = userSettings.EnableShiftRightClickFlyout;
+        UserName = userSettings.Name ?? string.Empty;
+        UserEmail = userSettings.Email ?? string.Empty;
+        UserPhone = userSettings.Phone ?? string.Empty;
+        UserTitle = userSettings.Title ?? string.Empty;
+        SelectedRole = userSettings.Role;
+        SupportEmail = string.IsNullOrWhiteSpace(userSettings.SupportEmail) ? "automate-support@solera.com" : userSettings.SupportEmail;
+        SupportPhone = string.IsNullOrWhiteSpace(userSettings.SupportPhone) ? "800-xxx-xxxx" : userSettings.SupportPhone;
+
+        ExtSeparator = userSettings.ExtSeparator ?? string.Empty;
+        EnableExplorerContextMenu = userSettings.EnableExplorerContextMenu;
+        FormGenExecutablePath = formsSettings.FormGenExecutablePath ?? string.Empty;
+
+        IsFormGenPatched = formsSettings.IsFormGenPatched;
+        FormGenPreserveUdfTab = formsSettings.FormGenPreserveUdfTab;
+        FormGenCanvasPasteField = formsSettings.FormGenCanvasPasteField;
+        FormGenAlreadyOpenToast = formsSettings.FormGenAlreadyOpenToast;
+        FormGenContextMenus = formsSettings.FormGenContextMenus;
+        FormGenEditorUndoRedo = formsSettings.FormGenEditorUndoRedo;
+        FormGenDialogAutoFill = formsSettings.FormGenDialogAutoFill;
+        FormGenAutoRestoreForms = formsSettings.FormGenAutoRestoreForms;
+        EnableShiftRightClickFlyout = formsSettings.EnableShiftRightClickFlyout;
+
+        FormsMailingName = string.IsNullOrWhiteSpace(formsSettings.MailingName) ? "Attn: A/M Forms (Sue)" : formsSettings.MailingName;
+        FormsStreetAddress = string.IsNullOrWhiteSpace(formsSettings.StreetAddress) ? "131 Griffis Rd" : formsSettings.StreetAddress;
+        FormsCity = string.IsNullOrWhiteSpace(formsSettings.City) ? "Gloversville" : formsSettings.City;
+        FormsState = string.IsNullOrWhiteSpace(formsSettings.State) ? "NY" : formsSettings.State;
+        FormsZip = string.IsNullOrWhiteSpace(formsSettings.Zip) ? "12078" : formsSettings.Zip;
+        UpdateFormsMailingAddressPreview();
 
         FormGenLauncherHelper.WriteAgentConfig(userSettings, _logger);
 
@@ -172,12 +251,97 @@ public partial class SettingsViewModel : ViewModel
         _logger?.LogInfo("SettingsViewModel initialized and settings loaded.");
     }
 
+    [RelayCommand]
+    public void SwitchToGeneralTab() => SelectedCategoryIndex = 0;
+
+    [RelayCommand]
+    public void SwitchToAppearanceTab() => SelectedCategoryIndex = 1;
+
+    [RelayCommand]
+    public void SwitchToFormsTab() => SelectedCategoryIndex = 2;
+
+    [RelayCommand]
+    public void SwitchToIntegrationsTab() => SelectedCategoryIndex = 3;
+
+    [RelayCommand]
+    public void SwitchToAboutTab() => SelectedCategoryIndex = 4;
+
+    private void UpdateFormsMailingAddressPreview()
+    {
+        FormsMailingAddressPreview = string.IsNullOrWhiteSpace(FormsStreetAddress)
+            ? FormsMailingName
+            : $"{FormsMailingName}\n{FormsStreetAddress}\n{FormsCity}, {FormsState} {FormsZip}".Trim();
+    }
+
     private void OnSettingsViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         try
         {
             switch (e.PropertyName)
             {
+                case nameof(UserName):
+                    _supportTool.Settings.UserSettings.Name = UserName;
+                    _logger?.LogInfo($"UserName changed: {UserName}");
+                    break;
+
+                case nameof(UserEmail):
+                    _supportTool.Settings.UserSettings.Email = UserEmail;
+                    _logger?.LogInfo($"UserEmail changed: {UserEmail}");
+                    break;
+
+                case nameof(UserPhone):
+                    _supportTool.Settings.UserSettings.Phone = UserPhone;
+                    _logger?.LogInfo($"UserPhone changed: {UserPhone}");
+                    break;
+
+                case nameof(UserTitle):
+                    _supportTool.Settings.UserSettings.Title = UserTitle;
+                    _logger?.LogInfo($"UserTitle changed: {UserTitle}");
+                    break;
+
+                case nameof(SelectedRole):
+                    _supportTool.Settings.UserSettings.Role = SelectedRole;
+                    OnPropertyChanged(nameof(IsFormsRoleActive));
+                    _logger?.LogInfo($"Role changed: {SelectedRole}");
+                    break;
+
+                case nameof(SupportEmail):
+                    _supportTool.Settings.UserSettings.SupportEmail = SupportEmail;
+                    _logger?.LogInfo($"SupportEmail changed: {SupportEmail}");
+                    break;
+
+                case nameof(SupportPhone):
+                    _supportTool.Settings.UserSettings.SupportPhone = SupportPhone;
+                    _logger?.LogInfo($"SupportPhone changed: {SupportPhone}");
+                    break;
+
+                case nameof(FormsMailingName):
+                case nameof(FormsStreetAddress):
+                case nameof(FormsCity):
+                case nameof(FormsState):
+                case nameof(FormsZip):
+                    var fs = _supportTool.Settings.UserSettings.FormsSettings ??= new AutomateFormsSettings();
+                    fs.MailingName = FormsMailingName;
+                    fs.StreetAddress = FormsStreetAddress;
+                    fs.City = FormsCity;
+                    fs.State = FormsState;
+                    fs.Zip = FormsZip;
+                    UpdateFormsMailingAddressPreview();
+
+                    var loose = _supportTool.Settings.UserSettings.Organization?.LooseVariables;
+                    if (loose != null)
+                    {
+                        loose["AMMailingName"] = FormsMailingName;
+                        loose["AMStreetAddress"] = FormsStreetAddress;
+                        loose["AMCity"] = FormsCity;
+                        loose["AMState"] = FormsState;
+                        loose["AMZip"] = FormsZip;
+                        loose["AMCityStateZip"] = $"{FormsCity}, {FormsState} {FormsZip}".Trim();
+                        loose["AMMailingAddress"] = $"{FormsMailingName}\n{FormsStreetAddress}\n{FormsCity}, {FormsState} {FormsZip}".Trim();
+                    }
+                    _logger?.LogInfo("AM Forms mailing address updated.");
+                    break;
+
                 case nameof(CurrentTheme):
                     var themeSetting = _supportTool.Settings.UiSettings.Settings.OfType<ThemeSetting>().FirstOrDefault();
                     if (themeSetting != null && themeSetting.Theme != CurrentTheme)
@@ -223,6 +387,8 @@ public partial class SettingsViewModel : ViewModel
                 case nameof(EnableExplorerContextMenu):
                 case nameof(FormGenExecutablePath):
                     _supportTool.Settings.UserSettings.EnableExplorerContextMenu = EnableExplorerContextMenu;
+                    var formsSet = _supportTool.Settings.UserSettings.FormsSettings ??= new AutomateFormsSettings();
+                    formsSet.FormGenExecutablePath = FormGenExecutablePath;
                     _supportTool.Settings.UserSettings.FormGenExecutablePath = FormGenExecutablePath;
                     _explorerContextMenuService?.SyncWithSettings(EnableExplorerContextMenu, FormGenExecutablePath);
                     UpdateFormgenAssociationStatus();
@@ -240,15 +406,16 @@ public partial class SettingsViewModel : ViewModel
                 case nameof(FormGenAutoRestoreForms):
                 case nameof(EnableShiftRightClickFlyout):
                     var us = _supportTool.Settings.UserSettings;
-                    us.IsFormGenPatched = IsFormGenPatched;
-                    us.FormGenPreserveUdfTab = FormGenPreserveUdfTab;
-                    us.FormGenCanvasPasteField = FormGenCanvasPasteField;
-                    us.FormGenAlreadyOpenToast = FormGenAlreadyOpenToast;
-                    us.FormGenContextMenus = FormGenContextMenus;
-                    us.FormGenEditorUndoRedo = FormGenEditorUndoRedo;
-                    us.FormGenDialogAutoFill = FormGenDialogAutoFill;
-                    us.FormGenAutoRestoreForms = FormGenAutoRestoreForms;
-                    us.EnableShiftRightClickFlyout = EnableShiftRightClickFlyout;
+                    var forms = us.FormsSettings ??= new AutomateFormsSettings();
+                    forms.IsFormGenPatched = IsFormGenPatched;
+                    forms.FormGenPreserveUdfTab = FormGenPreserveUdfTab;
+                    forms.FormGenCanvasPasteField = FormGenCanvasPasteField;
+                    forms.FormGenAlreadyOpenToast = FormGenAlreadyOpenToast;
+                    forms.FormGenContextMenus = FormGenContextMenus;
+                    forms.FormGenEditorUndoRedo = FormGenEditorUndoRedo;
+                    forms.FormGenDialogAutoFill = FormGenDialogAutoFill;
+                    forms.FormGenAutoRestoreForms = FormGenAutoRestoreForms;
+                    forms.EnableShiftRightClickFlyout = EnableShiftRightClickFlyout;
 
                     FormGenLauncherHelper.WriteAgentConfig(us, _logger);
                     SyncFeatureTogglesToAgent();
@@ -730,6 +897,82 @@ public partial class SettingsViewModel : ViewModel
                 ControlAppearance.Danger,
                 new SymbolIcon(SymbolRegular.ErrorCircle24),
                 TimeSpan.FromSeconds(5));
+        }
+    }
+
+    [RelayCommand]
+    private void OpenLogs()
+    {
+        try
+        {
+            var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+            if (!Directory.Exists(logDir))
+            {
+                Directory.CreateDirectory(logDir);
+            }
+
+            var latestLog = Directory.GetFiles(logDir, "app*.log")
+                .OrderByDescending(File.GetLastWriteTime)
+                .FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(latestLog) && File.Exists(latestLog))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = latestLog,
+                    UseShellExecute = true
+                });
+                _logger?.LogInfo($"Opened latest application log file: {latestLog}");
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = logDir,
+                    UseShellExecute = true
+                });
+                _logger?.LogInfo($"No log files found; opened log directory: {logDir}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Failed to open application logs.", ex);
+            _snackbarService?.Show(
+                "Logs Error",
+                $"Could not open logs: {ex.Message}",
+                ControlAppearance.Danger,
+                new SymbolIcon(SymbolRegular.ErrorCircle24),
+                TimeSpan.FromSeconds(4));
+        }
+    }
+
+    [RelayCommand]
+    private void OpenLogsFolder()
+    {
+        try
+        {
+            var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+            if (!Directory.Exists(logDir))
+            {
+                Directory.CreateDirectory(logDir);
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = logDir,
+                UseShellExecute = true
+            });
+            _logger?.LogInfo($"Opened application logs directory: {logDir}");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Failed to open logs folder.", ex);
+            _snackbarService?.Show(
+                "Logs Error",
+                $"Could not open logs folder: {ex.Message}",
+                ControlAppearance.Danger,
+                new SymbolIcon(SymbolRegular.ErrorCircle24),
+                TimeSpan.FromSeconds(4));
         }
     }
 

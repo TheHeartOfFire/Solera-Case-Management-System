@@ -82,18 +82,27 @@ public partial class App : Application
                     System.IO.Directory.CreateDirectory(logDir);
                     var logPath = System.IO.Path.Combine(logDir, "app.log");
 
+                    const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
+
                     var logger = new LoggerConfiguration()
                         .MinimumLevel.Debug()
-                        .WriteTo.Console()
+                        .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
                         .WriteTo.File(
-                        path: logPath, 
-                        formatter: new CompactJsonFormatter(), 
-                        rollingInterval: RollingInterval.Day,
-                        shared: true)
+                            path: logPath,
+                            outputTemplate: outputTemplate,
+                            rollingInterval: RollingInterval.Day,
+                            shared: true)
                         .Enrich.FromLogContext()
                         .CreateLogger();
 
-                    return new SerilogService(logger);
+                    var serilogService = new SerilogService(logger);
+                    var appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "2.7.0";
+                    serilogService.LogInfo("================================================================================");
+                    serilogService.LogInfo($"Solera Case Management Tool v{appVersion} - Session Started");
+                    serilogService.LogInfo($"OS: {Environment.OSVersion} ({(Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit")}) | .NET: {Environment.Version}");
+                    serilogService.LogInfo("================================================================================");
+
+                    return serilogService;
                 });
                 _ = services.AddTransient<IDebounceService, DebounceService>();
 
@@ -161,6 +170,7 @@ public partial class App : Application
                 });
                 _ = services.AddSingleton<IUpdateManagerService, UpdateManagerService>();
                 _ = services.AddSingleton<IUiSettings, UiSettings>();
+                _ = services.AddSingleton<IAutomateFormsSettings, AutomateFormsSettings>();
                 _ = services.AddSingleton<IUserSettings, UserSettings>();
                 _ = services.AddSingleton<ISettings, Settings>();
                 _ = services.AddSingleton<Services.ILinksService, LinksService>();
@@ -199,6 +209,16 @@ public partial class App : Application
             };
         }
 
+        if (jsonTypeInfo.Type == typeof(IAutomateFormsSettings))
+        {
+            jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions
+            {
+                TypeDiscriminatorPropertyName = "$type",
+                UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
+                DerivedTypes = { new(typeof(AutomateFormsSettings), "automateformssettings") }
+            };
+        }
+
         if (jsonTypeInfo.Type == typeof(IUiSettings))
         {
             jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions
@@ -218,6 +238,7 @@ public partial class App : Application
                 DerivedTypes =
                 {
                     new(typeof(UserSettings), "usersettings"),
+                    new(typeof(AutomateFormsSettings), "automateformssettings"),
                     new(typeof(UiSettings), "uisettings"),
                     new(typeof(AutomateFormsOrgVariables), "orgvars"),
 

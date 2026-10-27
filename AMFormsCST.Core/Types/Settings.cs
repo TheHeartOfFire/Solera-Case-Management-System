@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces.UserSettings;
+using AMFormsCST.Core.Interfaces.UserSettings;
 using AMFormsCST.Core.Interfaces;
 using System.Text.Json.Serialization;
 

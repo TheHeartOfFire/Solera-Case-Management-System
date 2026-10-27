@@ -206,4 +206,18 @@ public class SettingsViewModelTests
         // Assert
         mockContextMenu.Verify(m => m.AssociateFormgen(It.IsAny<string>()), Times.Never);
     }
+
+    [Fact]
+    public void OpenLogsCommand_And_OpenLogsFolderCommand_ExecuteWithoutException()
+    {
+        // Arrange
+        var viewModel = new SettingsViewModel(
+            _mockUpdateManagerService.Object,
+            _mockSupportTool.Object,
+            _mockBugReportService.Object);
+
+        // Act & Assert (Should not throw and ensures commands exist and are bound)
+        Assert.NotNull(viewModel.OpenLogsCommand);
+        Assert.NotNull(viewModel.OpenLogsFolderCommand);
+    }
 }

@@ -9,164 +9,225 @@ public class UserSettings : IUserSettings
     private readonly ILogService? _logger;
 
     private IOrgVariables _organization;
+    private IAutomateFormsSettings _formsSettings;
+
     private string _name = string.Empty;
+    private string _email = string.Empty;
+    private string _phone = string.Empty;
+    private string _title = string.Empty;
+    private UserRole _role = UserRole.AutomateForms;
+
+    private string _supportEmail = "automate-support@solera.com";
+    private string _supportPhone = "800-xxx-xxxx";
+
     private string _applicationFilesPath = string.Empty;
     private string _extSeparator = "x";
-    private bool _enableExplorerContextMenu = true;
-    private string _formGenExecutablePath = string.Empty;
-    private bool _isFormGenPatched = true;
-    private bool _formGenPreserveUdfTab = true;
-    private bool _formGenCanvasPasteField = true;
-    private bool _formGenAlreadyOpenToast = true;
-    private bool _formGenContextMenus = true;
-    private bool _formGenEditorUndoRedo = true;
-    private bool _formGenDialogAutoFill = true;
-    private bool _formGenAutoRestoreForms = true;
-    private bool _enableShiftRightClickFlyout = true;
 
-    public bool IsFormGenPatched
+    [JsonInclude]
+    public IAutomateFormsSettings FormsSettings
     {
-        get => _isFormGenPatched;
+        get => _formsSettings;
         set
         {
-            if (_isFormGenPatched != value)
+            _formsSettings = value ?? new AutomateFormsSettings(_logger);
+            _logger?.LogInfo("FormsSettings property updated.");
+        }
+    }
+
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            value ??= string.Empty;
+            if (_name != value)
             {
-                _isFormGenPatched = value;
-                _logger?.LogInfo($"IsFormGenPatched property set to '{value}'.");
+                _name = value;
+                _logger?.LogInfo($"Name property set to '{value}'.");
             }
         }
     }
 
-    public bool FormGenPreserveUdfTab
+    public string Email
     {
-        get => _formGenPreserveUdfTab;
+        get => _email;
         set
         {
-            if (_formGenPreserveUdfTab != value)
+            value ??= string.Empty;
+            if (_email != value)
             {
-                _formGenPreserveUdfTab = value;
-                _logger?.LogInfo($"FormGenPreserveUdfTab property set to '{value}'.");
+                _email = value;
+                _logger?.LogInfo($"Email property set to '{value}'.");
             }
         }
     }
 
-    public bool FormGenCanvasPasteField
+    public string Phone
     {
-        get => _formGenCanvasPasteField;
+        get => _phone;
         set
         {
-            if (_formGenCanvasPasteField != value)
+            value ??= string.Empty;
+            if (_phone != value)
             {
-                _formGenCanvasPasteField = value;
-                _logger?.LogInfo($"FormGenCanvasPasteField property set to '{value}'.");
+                _phone = value;
+                _logger?.LogInfo($"Phone property set to '{value}'.");
             }
         }
     }
 
-    public bool FormGenAlreadyOpenToast
+    public string Title
     {
-        get => _formGenAlreadyOpenToast;
+        get => _title;
         set
         {
-            if (_formGenAlreadyOpenToast != value)
+            value ??= string.Empty;
+            if (_title != value)
             {
-                _formGenAlreadyOpenToast = value;
-                _logger?.LogInfo($"FormGenAlreadyOpenToast property set to '{value}'.");
+                _title = value;
+                _logger?.LogInfo($"Title property set to '{value}'.");
             }
         }
     }
 
-    public bool FormGenContextMenus
+    public UserRole Role
     {
-        get => _formGenContextMenus;
+        get => _role;
         set
         {
-            if (_formGenContextMenus != value)
+            if (_role != value)
             {
-                _formGenContextMenus = value;
-                _logger?.LogInfo($"FormGenContextMenus property set to '{value}'.");
+                _role = value;
+                _logger?.LogInfo($"Role property set to '{value}'.");
             }
         }
     }
 
-    public bool FormGenEditorUndoRedo
+    public string SupportEmail
     {
-        get => _formGenEditorUndoRedo;
+        get => _supportEmail;
         set
         {
-            if (_formGenEditorUndoRedo != value)
+            value ??= string.Empty;
+            if (_supportEmail != value)
             {
-                _formGenEditorUndoRedo = value;
-                _logger?.LogInfo($"FormGenEditorUndoRedo property set to '{value}'.");
+                _supportEmail = value;
+                _logger?.LogInfo($"SupportEmail property set to '{value}'.");
             }
         }
     }
 
-    public bool FormGenDialogAutoFill
+    public string SupportPhone
     {
-        get => _formGenDialogAutoFill;
+        get => _supportPhone;
         set
         {
-            if (_formGenDialogAutoFill != value)
+            value ??= string.Empty;
+            if (_supportPhone != value)
             {
-                _formGenDialogAutoFill = value;
-                _logger?.LogInfo($"FormGenDialogAutoFill property set to '{value}'.");
+                _supportPhone = value;
+                _logger?.LogInfo($"SupportPhone property set to '{value}'.");
             }
         }
     }
 
-    public bool FormGenAutoRestoreForms
+    public string ApplicationFilesPath
     {
-        get => _formGenAutoRestoreForms;
+        get => _applicationFilesPath;
         set
         {
-            if (_formGenAutoRestoreForms != value)
+            value ??= string.Empty;
+            if (_applicationFilesPath != value)
             {
-                _formGenAutoRestoreForms = value;
-                _logger?.LogInfo($"FormGenAutoRestoreForms property set to '{value}'.");
+                _applicationFilesPath = value;
+                _logger?.LogInfo($"ApplicationFilesPath property set to '{value}'.");
             }
         }
     }
 
-    public bool EnableShiftRightClickFlyout
+    public string ExtSeparator
     {
-        get => _enableShiftRightClickFlyout;
+        get => _extSeparator;
         set
         {
-            if (_enableShiftRightClickFlyout != value)
+            value ??= string.Empty;
+            if (_extSeparator != value)
             {
-                _enableShiftRightClickFlyout = value;
-                _logger?.LogInfo($"EnableShiftRightClickFlyout property set to '{value}'.");
+                _extSeparator = value;
+                _logger?.LogInfo($"ExtSeparator property set to '{value}'.");
             }
         }
     }
 
     public bool EnableExplorerContextMenu
     {
-        get => _enableExplorerContextMenu;
-        set
-        {
-            if (_enableExplorerContextMenu != value)
-            {
-                _enableExplorerContextMenu = value;
-                _logger?.LogInfo($"EnableExplorerContextMenu property set to '{value}'.");
-            }
-        }
+        get => _formsSettings.EnableExplorerContextMenu;
+        set => _formsSettings.EnableExplorerContextMenu = value;
+    }
+
+    #region Delegated Forms / FormGen Settings (Stored in FormsSettings)
+
+    public bool IsFormGenPatched
+    {
+        get => _formsSettings.IsFormGenPatched;
+        set => _formsSettings.IsFormGenPatched = value;
+    }
+
+    public bool FormGenPreserveUdfTab
+    {
+        get => _formsSettings.FormGenPreserveUdfTab;
+        set => _formsSettings.FormGenPreserveUdfTab = value;
+    }
+
+    public bool FormGenCanvasPasteField
+    {
+        get => _formsSettings.FormGenCanvasPasteField;
+        set => _formsSettings.FormGenCanvasPasteField = value;
+    }
+
+    public bool FormGenAlreadyOpenToast
+    {
+        get => _formsSettings.FormGenAlreadyOpenToast;
+        set => _formsSettings.FormGenAlreadyOpenToast = value;
+    }
+
+    public bool FormGenContextMenus
+    {
+        get => _formsSettings.FormGenContextMenus;
+        set => _formsSettings.FormGenContextMenus = value;
+    }
+
+    public bool FormGenEditorUndoRedo
+    {
+        get => _formsSettings.FormGenEditorUndoRedo;
+        set => _formsSettings.FormGenEditorUndoRedo = value;
+    }
+
+    public bool FormGenDialogAutoFill
+    {
+        get => _formsSettings.FormGenDialogAutoFill;
+        set => _formsSettings.FormGenDialogAutoFill = value;
+    }
+
+    public bool FormGenAutoRestoreForms
+    {
+        get => _formsSettings.FormGenAutoRestoreForms;
+        set => _formsSettings.FormGenAutoRestoreForms = value;
+    }
+
+    public bool EnableShiftRightClickFlyout
+    {
+        get => _formsSettings.EnableShiftRightClickFlyout;
+        set => _formsSettings.EnableShiftRightClickFlyout = value;
     }
 
     public string FormGenExecutablePath
     {
-        get => _formGenExecutablePath;
-        set
-        {
-            value ??= string.Empty;
-            if (_formGenExecutablePath != value)
-            {
-                _formGenExecutablePath = value;
-                _logger?.LogInfo($"FormGenExecutablePath property set to '{value}'.");
-            }
-        }
+        get => _formsSettings.FormGenExecutablePath;
+        set => _formsSettings.FormGenExecutablePath = value;
     }
+
+    #endregion
 
     public IOrgVariables Organization
     {
@@ -187,68 +248,14 @@ public class UserSettings : IUserSettings
         }
     }
 
-    public string Name
-    {
-        get => _name;
-        set
-        {
-            if (value is null)
-            {
-                var ex = new ArgumentNullException(nameof(value), "Name cannot be null.");
-                _logger?.LogError("Attempted to set Name to null.", ex);
-                throw ex;
-            }
-            if (_name != value)
-            {
-                _name = value;
-                _logger?.LogInfo($"Name property set to '{value}'.");
-            }
-        }
-    }
-
-    public string ApplicationFilesPath
-    {
-        get => _applicationFilesPath;
-        set
-        {
-            if (value is null)
-            {
-                var ex = new ArgumentNullException(nameof(value), "ApplicationFilesPath cannot be null.");
-                _logger?.LogError("Attempted to set ApplicationFilesPath to null.", ex);
-                throw ex;
-            }
-            if (_applicationFilesPath != value)
-            {
-                _applicationFilesPath = value;
-                _logger?.LogInfo($"ApplicationFilesPath property set to '{value}'.");
-            }
-        }
-    }
-
-    public string ExtSeparator
-    {
-        get => _extSeparator;
-        set
-        {
-            if (value is null)
-            {
-                var ex = new ArgumentNullException(nameof(value), "ExtSeparator cannot be null.");
-                _logger?.LogError("Attempted to set ExtSeparator to null.", ex);
-                throw ex;
-            }
-            if (_extSeparator != value)
-            {
-                _extSeparator = value;
-                _logger?.LogInfo($"ExtSeparator property set to '{value}'.");
-            }
-        }
-    }
-
     [JsonConstructor]
     public UserSettings(IOrgVariables organization)
-        : this(organization, null) { }
+        : this(organization, (ILogService?)null) { }
 
     public UserSettings(IOrgVariables organization, ILogService? logger = null)
+        : this(organization, new AutomateFormsSettings(logger), logger) { }
+
+    public UserSettings(IOrgVariables organization, IAutomateFormsSettings formsSettings, ILogService? logger = null)
     {
         _logger = logger;
         if (organization is null)
@@ -258,6 +265,8 @@ public class UserSettings : IUserSettings
             throw ex;
         }
         _organization = organization;
+        _formsSettings = formsSettings ?? new AutomateFormsSettings(logger);
         _logger?.LogInfo("UserSettings initialized.");
     }
 }
+
