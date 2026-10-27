@@ -67,21 +67,31 @@ public static class NativeMessagingBridge
 
                 message ??= new IpcMessage { Action = IpcActions.Ping };
 
-                var response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 2500).ConfigureAwait(false);
+                int timeoutMs = string.Equals(message.Action, "LoadCase", StringComparison.OrdinalIgnoreCase) ? 10000 : 3500;
+                var response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: timeoutMs).ConfigureAwait(false);
                 if (!response.Success &&
                     string.Equals(message.Target, "SoleraCMS", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(Environment.GetEnvironmentVariable("SOLERA_NO_AUTOLAUNCH"), "1", StringComparison.OrdinalIgnoreCase))
                 {
-                    LogBridge($"Initial pipe send failed ({response.Message}). Attempting to launch SoleraCMS desktop app...");
-                    if (TryLaunchDesktopApp())
+                    bool isAppRunning = System.Diagnostics.Process.GetProcessesByName("AMFormsCST.Desktop").Length > 0;
+                    if (!isAppRunning)
                     {
-                        for (int attempt = 0; attempt < 12; attempt++)
+                        LogBridge($"Desktop app not running. Attempting to launch SoleraCMS desktop app...");
+                        if (TryLaunchDesktopApp())
                         {
-                            await Task.Delay(500).ConfigureAwait(false);
-                            response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 1500).ConfigureAwait(false);
-                            if (response.Success)
-                                break;
+                            // Wait for the desktop app to start its IPC server
+                            for (int attempt = 0; attempt < 8; attempt++)
+                            {
+                                await Task.Delay(750).ConfigureAwait(false);
+                                response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: 3000).ConfigureAwait(false);
+                                if (response.Success)
+                                    break;
+                            }
                         }
+                    }
+                    else
+                    {
+                        LogBridge($"Desktop app is already running but pipe call timed out or failed ({response.Message}). Not launching another instance or retrying to prevent duplicates.");
                     }
                 }
 

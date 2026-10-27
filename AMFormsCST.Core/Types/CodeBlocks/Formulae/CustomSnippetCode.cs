@@ -56,13 +56,11 @@ public class CustomSnippetCode : CodeBase
                 if (existingIdx >= 0)
                 {
                     groupedEntries[existingIdx].Paths.Add(path);
-                    input.SetValue(string.Empty);
                     continue;
                 }
             }
 
             groupedEntries.Add(([path], label, strVal, groupKey));
-            input.SetValue(string.Empty);
         }
 
         foreach (var entry in groupedEntries)
@@ -192,7 +190,15 @@ public class CustomSnippetCode : CodeBase
             Name = Name ?? "Custom Snippet",
             Description = Description ?? string.Empty,
             ExposeVariableIdentifiers = _exposeVariableIdentifiers,
-            TemplateRoot = ToNodeDto(_templateRoot)
+            TemplateRoot = ToNodeDto(_templateRoot),
+            ExposedInputs = Inputs.Select(inp => new SavedCodeInputDto
+            {
+                Index = inp.Index,
+                Description = inp.Description,
+                IsExposedInput = inp.IsExposedInput,
+                ExposedGroupKey = inp.ExposedGroupKey,
+                StringValue = inp.Value?.ToString() ?? string.Empty
+            }).ToList()
         };
     }
 
@@ -202,7 +208,21 @@ public class CustomSnippetCode : CodeBase
     {
         if (dto?.TemplateRoot == null) return null;
         var root = FromNodeDto(dto.TemplateRoot, knownBlocks ?? []);
-        return new CustomSnippetCode(dto.Name, dto.Description, root, dto.ExposeVariableIdentifiers);
+        var snippet = new CustomSnippetCode(dto.Name, dto.Description, root, dto.ExposeVariableIdentifiers);
+
+        if (dto.ExposedInputs != null && dto.ExposedInputs.Count > 0)
+        {
+            for (int i = 0; i < dto.ExposedInputs.Count && i < snippet.Inputs.Count; i++)
+            {
+                var savedInp = dto.ExposedInputs[i];
+                if (savedInp.StringValue != null)
+                {
+                    snippet.SetInputValue(i, savedInp.StringValue);
+                }
+            }
+        }
+
+        return snippet;
     }
 
     private static SavedCodeBlockNodeDto ToNodeDto(CodeBase node)
@@ -311,6 +331,7 @@ public sealed class SavedCustomSnippetDto
     public string Description { get; set; } = string.Empty;
     public bool ExposeVariableIdentifiers { get; set; }
     public SavedCodeBlockNodeDto? TemplateRoot { get; set; }
+    public List<SavedCodeInputDto> ExposedInputs { get; set; } = [];
 }
 
 public sealed class SavedCodeBlockNodeDto

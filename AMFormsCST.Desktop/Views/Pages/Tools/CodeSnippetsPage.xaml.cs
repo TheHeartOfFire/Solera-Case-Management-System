@@ -165,6 +165,24 @@ public partial class CodeSnippetsPage : Page
         {
             return;
         }
+
+        if (e.ClickCount == 2 && sender is FrameworkElement fe)
+        {
+            ICodeBase? template = fe.DataContext switch
+            {
+                CodeSnippetItemViewModel itemVm => itemVm.CodeBase,
+                ICodeBase cb => cb,
+                _ => null
+            };
+
+            if (template != null)
+            {
+                ViewModel.AddNode(template);
+                e.Handled = true;
+                return;
+            }
+        }
+
         _dragStartPoint = e.GetPosition(this);
         _isDraggingPossible = true;
     }
