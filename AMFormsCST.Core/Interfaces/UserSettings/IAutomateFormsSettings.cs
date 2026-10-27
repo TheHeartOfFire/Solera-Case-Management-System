@@ -16,6 +16,7 @@ public interface IAutomateFormsSettings : ISetting
     bool FormGenDialogAutoFill { get; set; }
     bool FormGenAutoRestoreForms { get; set; }
     bool EnableShiftRightClickFlyout { get; set; }
+    bool EnableExplorerContextMenu { get; set; }
 
     // Forms team mailing address
     string MailingName { get; set; }

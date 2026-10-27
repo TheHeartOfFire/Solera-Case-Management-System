@@ -21,6 +21,7 @@ public class AutomateFormsSettingsTests
         Assert.True(formsSettings.FormGenDialogAutoFill);
         Assert.True(formsSettings.FormGenAutoRestoreForms);
         Assert.True(formsSettings.EnableShiftRightClickFlyout);
+        Assert.True(formsSettings.EnableExplorerContextMenu);
         Assert.Equal(string.Empty, formsSettings.FormGenExecutablePath);
         Assert.Equal("Attn: A/M Forms (Sue)", formsSettings.MailingName);
         Assert.Equal("131 Griffis Rd", formsSettings.StreetAddress);
@@ -44,15 +45,19 @@ public class AutomateFormsSettingsTests
         userSettings.IsFormGenPatched = false;
         userSettings.FormGenExecutablePath = @"C:\Formgen\NewFormGen.bat";
         userSettings.FormGenCanvasPasteField = false;
+        userSettings.EnableExplorerContextMenu = false;
 
         // Verifying direct FormsSettings reflects mutations
         Assert.False(userSettings.FormsSettings.IsFormGenPatched);
         Assert.Equal(@"C:\Formgen\NewFormGen.bat", userSettings.FormsSettings.FormGenExecutablePath);
         Assert.False(userSettings.FormsSettings.FormGenCanvasPasteField);
+        Assert.False(userSettings.FormsSettings.EnableExplorerContextMenu);
 
         // Mutating FormsSettings directly
         userSettings.FormsSettings.FormGenPreserveUdfTab = false;
         Assert.False(userSettings.FormGenPreserveUdfTab);
+        userSettings.FormsSettings.EnableExplorerContextMenu = true;
+        Assert.True(userSettings.EnableExplorerContextMenu);
     }
 
     [Fact]

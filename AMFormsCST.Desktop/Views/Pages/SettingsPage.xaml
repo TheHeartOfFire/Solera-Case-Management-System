@@ -141,7 +141,7 @@
                         </StackPanel>
                     </Button>
 
-                    <!-- Tab 4: Integrations & Windows -->
+                    <!-- Tab 4: Browser Integration -->
                     <Button Command="{Binding SwitchToIntegrationsTabCommand}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource SettingsTabButtonStyle}">
@@ -155,8 +155,8 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <ui:SymbolIcon Symbol="Apps24" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center" />
-                            <TextBlock Text="Integrations &amp; Windows" VerticalAlignment="Center" />
+                            <ui:SymbolIcon Symbol="Globe24" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Browser Integration" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
 
@@ -435,6 +435,30 @@
                     </StackPanel>
                 </ui:Card>
 
+                <!-- Windows Explorer Shell Integration Card (.formgen / .fga) -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Folder24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Windows Explorer Shell Integration (.formgen)" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Manage right-click context menu integration for .formgen and .fga files in Windows Explorer." />
+
+                        <ui:ToggleSwitch
+                            Content="Enable Windows Explorer right-click context menu ('Open in Solera Formgen Utilities')"
+                            IsChecked="{Binding EnableExplorerContextMenu, Mode=TwoWay}"
+                            Margin="0,0,0,4" />
+
+                        <TextBlock
+                            Margin="0,0,0,8"
+                            FontSize="12"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Injects 'Open in Solera Formgen Utilities' into the Windows Explorer shell context menu for .formgen files."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </ui:Card>
+
                 <!-- FormGen Modifications & Patching Status Card -->
                 <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <StackPanel>
@@ -592,33 +616,9 @@
             </StackPanel>
 
             <!-- ============================================================ -->
-            <!-- TAB 4: INTEGRATIONS & WINDOWS                                -->
+            <!-- TAB 4: BROWSER INTEGRATION                                   -->
             <!-- ============================================================ -->
             <StackPanel Visibility="{Binding IsIntegrationsTabSelected, Converter={StaticResource BoolToVis}}">
-
-                <!-- Windows Explorer Integration Card -->
-                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <ui:SymbolIcon Symbol="Folder24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
-                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Windows Explorer Integration" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <TextBlock Margin="0,0,0,12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                   Text="Manage shell context menu integration for right-clicking files directly in Windows Explorer." />
-
-                        <ui:ToggleSwitch
-                            Content="Enable Windows Explorer right-click context menu for .formgen files"
-                            IsChecked="{Binding EnableExplorerContextMenu, Mode=TwoWay}"
-                            Margin="0,0,0,4" />
-
-                        <TextBlock
-                            Margin="0,0,0,8"
-                            FontSize="12"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="Adds 'Open in Solera Formgen Utilities' to the right-click menu of .formgen files."
-                            TextWrapping="Wrap" />
-                    </StackPanel>
-                </ui:Card>
 
                 <!-- Browser Integration Section -->
                 <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">

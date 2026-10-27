@@ -18,6 +18,7 @@ public class AutomateFormsSettings : IAutomateFormsSettings
     private bool _formGenDialogAutoFill = true;
     private bool _formGenAutoRestoreForms = true;
     private bool _enableShiftRightClickFlyout = true;
+    private bool _enableExplorerContextMenu = true;
 
     private string _mailingName = "Attn: A/M Forms (Sue)";
     private string _streetAddress = "131 Griffis Rd";
@@ -152,6 +153,19 @@ public class AutomateFormsSettings : IAutomateFormsSettings
             {
                 _enableShiftRightClickFlyout = value;
                 _logger?.LogInfo($"EnableShiftRightClickFlyout set to '{value}'.");
+            }
+        }
+    }
+
+    public bool EnableExplorerContextMenu
+    {
+        get => _enableExplorerContextMenu;
+        set
+        {
+            if (_enableExplorerContextMenu != value)
+            {
+                _enableExplorerContextMenu = value;
+                _logger?.LogInfo($"EnableExplorerContextMenu set to '{value}'.");
             }
         }
     }

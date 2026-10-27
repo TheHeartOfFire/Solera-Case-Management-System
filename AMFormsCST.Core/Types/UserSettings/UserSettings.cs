@@ -22,7 +22,6 @@ public class UserSettings : IUserSettings
 
     private string _applicationFilesPath = string.Empty;
     private string _extSeparator = "x";
-    private bool _enableExplorerContextMenu = true;
 
     [JsonInclude]
     public IAutomateFormsSettings FormsSettings
@@ -162,15 +161,8 @@ public class UserSettings : IUserSettings
 
     public bool EnableExplorerContextMenu
     {
-        get => _enableExplorerContextMenu;
-        set
-        {
-            if (_enableExplorerContextMenu != value)
-            {
-                _enableExplorerContextMenu = value;
-                _logger?.LogInfo($"EnableExplorerContextMenu property set to '{value}'.");
-            }
-        }
+        get => _formsSettings.EnableExplorerContextMenu;
+        set => _formsSettings.EnableExplorerContextMenu = value;
     }
 
     #region Delegated Forms / FormGen Settings (Stored in FormsSettings)
