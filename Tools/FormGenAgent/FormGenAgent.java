@@ -2297,6 +2297,20 @@ public class FormGenAgent {
             });
             addListenerMethod.invoke(itemPasteFormula, SWT_Selection, listenerPasteFormula);
 
+            // 3b. Set as Form Title in SCMT
+            Object itemSetTitleDirect = itemCons.newInstance(menu, SWT_PUSH);
+            itemSetTitleDirect.getClass().getMethod("setText", String.class).invoke(itemSetTitleDirect, "Set as Form Title in SCMT");
+            Object listenerSetTitleDirect = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                @Override
+                public void run() {
+                    String title = resolveCandidateFormTitle(display);
+                    if (!title.isEmpty()) {
+                        notifyScmtSetFormTitle(title);
+                    }
+                }
+            });
+            addListenerMethod.invoke(itemSetTitleDirect, SWT_Selection, listenerSetTitleDirect);
+
             // 4. Inject Solera Tools & variables cleanly without duplicating
             injectSoleraMenuItems(display, menu);
 
@@ -2337,6 +2351,29 @@ public class FormGenAgent {
                 addTextActionItem(display, newMenu, control, "Copy", "copy");
                 addTextActionItem(display, newMenu, control, "Paste", "paste");
                 addTextActionItem(display, newMenu, control, "Select All", "selectAll");
+
+                Class<?> menuItemClass = Class.forName("org.eclipse.swt.widgets.MenuItem");
+                Class<?> listenerClass = Class.forName("org.eclipse.swt.widgets.Listener");
+                Constructor<?> itemCons = menuItemClass.getConstructor(menuClass, int.class);
+                Method addListenerMethod = menuItemClass.getMethod("addListener", int.class, listenerClass);
+                Method setDataMethod = menuItemClass.getMethod("setData", String.class, Object.class);
+
+                Object sep = itemCons.newInstance(newMenu, SWT_SEPARATOR);
+                setDataMethod.invoke(sep, "SoleraItem", Boolean.TRUE);
+
+                Object itemSetTitle = itemCons.newInstance(newMenu, SWT_PUSH);
+                itemSetTitle.getClass().getMethod("setText", String.class).invoke(itemSetTitle, "Set as Form Title in SCMT");
+                setDataMethod.invoke(itemSetTitle, "SoleraItem", Boolean.TRUE);
+                Object listenerSetTitle = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                    @Override
+                    public void run() {
+                        String title = resolveCandidateFormTitle(display);
+                        if (!title.isEmpty()) {
+                            notifyScmtSetFormTitle(title);
+                        }
+                    }
+                });
+                addListenerMethod.invoke(itemSetTitle, SWT_Selection, listenerSetTitle);
             }
 
             injectSoleraMenuItems(display, newMenu);
@@ -2498,6 +2535,20 @@ public class FormGenAgent {
                     }
                 });
                 addListenerMethod.invoke(itemParseCode, SWT_Selection, listenerParseCode);
+
+                // Sub-item 3: Set as Form Title in SCMT
+                Object itemSetTitle = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
+                itemSetTitle.getClass().getMethod("setText", String.class).invoke(itemSetTitle, "Set as Form Title in SCMT");
+                Object listenerSetTitle = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                    @Override
+                    public void run() {
+                        String title = resolveCandidateFormTitle(display);
+                        if (!title.isEmpty()) {
+                            notifyScmtSetFormTitle(title);
+                        }
+                    }
+                });
+                addListenerMethod.invoke(itemSetTitle, SWT_Selection, listenerSetTitle);
 
                 // Separator inside Solera Tools
                 itemCons.newInstance(soleraSubMenu, SWT_SEPARATOR);
@@ -3472,21 +3523,147 @@ public class FormGenAgent {
         try {
             Method getFocusMethod = display.getClass().getMethod("getFocusControl");
             Object control = getFocusMethod.invoke(display);
-            if (control == null) return "";
+            if ((control == null || isDisposed(control)) && lastRmbControl != null && !isDisposed(lastRmbControl)) {
+                control = lastRmbControl;
+            }
+            if (control == null || isDisposed(control)) return "";
 
+            // 1. Try getSelectionText() (e.g. StyledText)
             try {
                 Method m = control.getClass().getMethod("getSelectionText");
                 String text = (String) m.invoke(control);
-                if (text != null && !text.trim().isEmpty()) return text;
+                if (text != null && !text.trim().isEmpty()) return text.trim();
             } catch (Throwable ignored) {}
 
+            // 2. Try getSelection() -> Point (x, y) for SWT Text
+            try {
+                Method getSelMethod = control.getClass().getMethod("getSelection");
+                Object pt = getSelMethod.invoke(control);
+                if (pt != null) {
+                    Field xField = pt.getClass().getField("x");
+                    Field yField = pt.getClass().getField("y");
+                    int x = xField.getInt(pt);
+                    int y = yField.getInt(pt);
+                    if (y > x) {
+                        Method getTextMethod = control.getClass().getMethod("getText");
+                        String fullText = (String) getTextMethod.invoke(control);
+                        if (fullText != null && y <= fullText.length()) {
+                            String sub = fullText.substring(x, y).trim();
+                            if (!sub.isEmpty()) return sub;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+
+            // 3. Fallback to getText() if full control text is short and meaningful (like a title input field)
             try {
                 Method m = control.getClass().getMethod("getText");
                 String text = (String) m.invoke(control);
-                if (text != null && !text.trim().isEmpty()) return text;
+                if (text != null && !text.trim().isEmpty() && text.trim().length() < 120 && !text.contains("\n")) {
+                    return text.trim();
+                }
             } catch (Throwable ignored) {}
         } catch (Throwable t) {
             log("Error getting text from focus control: " + t.getMessage());
+        }
+        return "";
+    }
+
+    public static String getActiveFormName() {
+        // 1. Try active tab in mainTabFolder
+        if (formGenInstance != null) {
+            try {
+                Field f = formGenInstance.getClass().getDeclaredField("mainTabFolder");
+                f.setAccessible(true);
+                Object mainTabFolder = f.get(formGenInstance);
+                if (mainTabFolder != null && !isDisposed(mainTabFolder)) {
+                    Method getSelectionMethod = mainTabFolder.getClass().getMethod("getSelection");
+                    Object selectedTab = getSelectionMethod.invoke(mainTabFolder);
+                    if (selectedTab != null && !isDisposed(selectedTab)) {
+                        Method getTextMethod = selectedTab.getClass().getMethod("getText");
+                        String tabText = (String) getTextMethod.invoke(selectedTab);
+                        if (tabText != null) {
+                            tabText = tabText.trim();
+                            if (tabText.endsWith("*")) tabText = tabText.substring(0, tabText.length() - 1).trim();
+                            if (tabText.toLowerCase().endsWith(".formgen")) tabText = tabText.substring(0, tabText.length() - 8).trim();
+                            if (tabText.toLowerCase().endsWith(".fga")) tabText = tabText.substring(0, tabText.length() - 4).trim();
+                            if (!tabText.isEmpty()) return tabText;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 2. Try getActiveFormFilePath()
+        String path = getActiveFormFilePath();
+        if (path != null && !path.trim().isEmpty()) {
+            try {
+                File f = new File(path);
+                String name = f.getName();
+                if (name != null) {
+                    name = name.trim();
+                    if (name.toLowerCase().endsWith(".formgen")) name = name.substring(0, name.length() - 8).trim();
+                    if (name.toLowerCase().endsWith(".fga")) name = name.substring(0, name.length() - 4).trim();
+                    if (!name.isEmpty()) return name;
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 3. Try FormDef methods (getName, getTitle, getFormName, etc.)
+        if (formGenInstance != null) {
+            try {
+                Method m = formGenInstance.getClass().getDeclaredMethod("getFormDef");
+                m.setAccessible(true);
+                Object formDef = m.invoke(formGenInstance);
+                if (formDef != null) {
+                    for (String mName : new String[]{"getName", "getTitle", "getFormName", "getFormTitle", "getDescription"}) {
+                        try {
+                            Method dm = formDef.getClass().getMethod(mName);
+                            Object res = dm.invoke(formDef);
+                            if (res instanceof String && !((String) res).trim().isEmpty()) {
+                                String str = ((String) res).trim();
+                                if (str.toLowerCase().endsWith(".formgen")) str = str.substring(0, str.length() - 8).trim();
+                                if (str.toLowerCase().endsWith(".fga")) str = str.substring(0, str.length() - 4).trim();
+                                if (!str.isEmpty()) return str;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 4. Try Main shell title
+        if (mainShell != null && !isDisposed(mainShell)) {
+            try {
+                String shellTitle = (String) mainShell.getClass().getMethod("getText").invoke(mainShell);
+                if (shellTitle != null) {
+                    Pattern p = Pattern.compile("\\[([^\\]]+)\\]");
+                    Matcher m = p.matcher(shellTitle);
+                    if (m.find()) {
+                        String candidate = m.group(1).trim();
+                        if (candidate.toLowerCase().endsWith(".formgen")) candidate = candidate.substring(0, candidate.length() - 8).trim();
+                        if (candidate.toLowerCase().endsWith(".fga")) candidate = candidate.substring(0, candidate.length() - 4).trim();
+                        if (!candidate.isEmpty()) return candidate;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        return "";
+    }
+
+    public static String resolveCandidateFormTitle(Object display) {
+        String selected = getSelectedTextFromFocusControl(display);
+        if (selected != null && !selected.trim().isEmpty()) {
+            return selected.trim();
+        }
+        String activeName = getActiveFormName();
+        if (activeName != null && !activeName.trim().isEmpty()) {
+            return activeName.trim();
+        }
+        String clip = getClipboardText();
+        if (clip != null && !clip.trim().isEmpty() && clip.trim().length() < 120 && !clip.contains("\n") && !clip.contains("\r")) {
+            return clip.trim();
         }
         return "";
     }
@@ -3629,6 +3806,15 @@ public class FormGenAgent {
             payload.put("code", codeText);
         }
         sendIpcMessageToScmt("ParseCodeBlock", payload, codeText);
+    }
+
+    public static void notifyScmtSetFormTitle(String title) {
+        if (title == null || title.trim().isEmpty()) return;
+        Map<String, String> payload = new LinkedHashMap<String, String>();
+        payload.put("field", "formtitle");
+        payload.put("value", title.trim());
+        log("Sending SetDashboardField (formtitle: " + title.trim() + ") to SCMT");
+        sendIpcMessageToScmt("SetDashboardField", payload, title.trim());
     }
 
     public static boolean sendIpcMessageToScmt(String action, Map<String, String> payload, String rawData) {

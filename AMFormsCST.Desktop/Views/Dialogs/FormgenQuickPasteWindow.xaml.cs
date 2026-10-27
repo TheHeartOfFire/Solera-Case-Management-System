@@ -21,6 +21,9 @@ public partial class FormgenQuickPasteWindow : Window
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
@@ -253,6 +256,117 @@ public partial class FormgenQuickPasteWindow : Window
         catch { }
     }
 
+    private void OnSetFormTitleClicked(object sender, RoutedEventArgs e)
+    {
+        ExecuteSetFormTitle();
+    }
+
+    public async void ExecuteSetFormTitle()
+    {
+        Hide();
+
+        string? capturedTitle = null;
+
+        if (_targetHwnd != IntPtr.Zero)
+        {
+            SetForegroundWindow(_targetHwnd);
+            await Task.Delay(60);
+
+            // Synthesize Ctrl+C to copy selected text in target window
+            keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_C, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_C, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+            await Task.Delay(100);
+
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    var text = Clipboard.GetText()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text) && text.Length < 150 && !text.Contains('\n') && !text.Contains('\r'))
+                    {
+                        capturedTitle = text;
+                    }
+                }
+            }
+            catch { }
+
+            // If no text was captured from selection, attempt extracting form name from target window title
+            if (string.IsNullOrWhiteSpace(capturedTitle))
+            {
+                try
+                {
+                    var titleBuilder = new System.Text.StringBuilder(256);
+                    GetWindowText(_targetHwnd, titleBuilder, titleBuilder.Capacity);
+                    var windowTitle = titleBuilder.ToString();
+                    capturedTitle = ExtractFormNameFromWindowTitle(windowTitle);
+                }
+                catch { }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(capturedTitle))
+        {
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    var text = Clipboard.GetText()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text) && text.Length < 150 && !text.Contains('\n') && !text.Contains('\r'))
+                    {
+                        capturedTitle = text;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        if (!string.IsNullOrWhiteSpace(capturedTitle))
+        {
+            try
+            {
+                var ipc = App.GetRequiredService<Services.IpcService>();
+                ipc.SetFormTitle(capturedTitle);
+            }
+            catch { }
+        }
+    }
+
+    public static string? ExtractFormNameFromWindowTitle(string windowTitle)
+    {
+        if (string.IsNullOrWhiteSpace(windowTitle)) return null;
+
+        var matchBracket = System.Text.RegularExpressions.Regex.Match(windowTitle, @"\[([^\]]+)\]");
+        if (matchBracket.Success)
+        {
+            var name = matchBracket.Groups[1].Value.Trim();
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"\.(fga|formgen)$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!string.IsNullOrWhiteSpace(name)) return name;
+        }
+
+        // Suffix: "FileName - FormGen"
+        var matchSuffix = System.Text.RegularExpressions.Regex.Match(windowTitle, @"^(.+?)\s*-\s*Formgen.*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (matchSuffix.Success)
+        {
+            var name = matchSuffix.Groups[1].Value.Trim();
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"\.(fga|formgen)$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!string.IsNullOrWhiteSpace(name)) return name;
+        }
+
+        // Prefix: "FormGen - FileName"
+        var matchPrefix = System.Text.RegularExpressions.Regex.Match(windowTitle, @"^.*Formgen\s*-\s*(.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (matchPrefix.Success)
+        {
+            var name = matchPrefix.Groups[1].Value.Trim();
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"\.(fga|formgen)$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!string.IsNullOrWhiteSpace(name)) return name;
+        }
+
+        return null;
+    }
+
     protected override void OnDeactivated(EventArgs e)
     {
         base.OnDeactivated(e);
@@ -270,6 +384,11 @@ public partial class FormgenQuickPasteWindow : Window
         else if (e.Key == Key.P)
         {
             ExecuteParseInCodeSnippets();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.T)
+        {
+            ExecuteSetFormTitle();
             e.Handled = true;
         }
         else if (e.Key >= Key.D1 && e.Key <= Key.D9)

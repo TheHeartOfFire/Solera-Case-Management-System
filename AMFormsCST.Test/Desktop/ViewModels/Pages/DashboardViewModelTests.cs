@@ -652,4 +652,16 @@ Web Browser: 11
         Assert.Equal(CollectionMemberState.NotSelected, item1.State);
         Assert.Equal(CollectionMemberState.Selected, item2.State);
     }
+
+    [Fact]
+    public void ExtractFormNameFromWindowTitle_WithVariousFormats_ExtractsCleanFormName()
+    {
+        // Act & Assert
+        Assert.Equal("Buyers_Order_2026", AMFormsCST.Desktop.Views.Dialogs.FormgenQuickPasteWindow.ExtractFormNameFromWindowTitle("Automate FormGen - [Buyers_Order_2026.fga]"));
+        Assert.Equal("TX_Odometer", AMFormsCST.Desktop.Views.Dialogs.FormgenQuickPasteWindow.ExtractFormNameFromWindowTitle("FormGen - TX_Odometer.formgen"));
+        Assert.Equal("FL_Notice_Of_Sale", AMFormsCST.Desktop.Views.Dialogs.FormgenQuickPasteWindow.ExtractFormNameFromWindowTitle("FL_Notice_Of_Sale - FormGen"));
+        Assert.Equal("Special_Form", AMFormsCST.Desktop.Views.Dialogs.FormgenQuickPasteWindow.ExtractFormNameFromWindowTitle("[Special_Form]"));
+        Assert.Null(AMFormsCST.Desktop.Views.Dialogs.FormgenQuickPasteWindow.ExtractFormNameFromWindowTitle(""));
+        Assert.Null(AMFormsCST.Desktop.Views.Dialogs.FormgenQuickPasteWindow.ExtractFormNameFromWindowTitle("Notepad - Untitled"));
+    }
 }
