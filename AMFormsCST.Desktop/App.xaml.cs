@@ -161,6 +161,7 @@ public partial class App : Application
                 });
                 _ = services.AddSingleton<IUpdateManagerService, UpdateManagerService>();
                 _ = services.AddSingleton<IUiSettings, UiSettings>();
+                _ = services.AddSingleton<IAutomateFormsSettings, AutomateFormsSettings>();
                 _ = services.AddSingleton<IUserSettings, UserSettings>();
                 _ = services.AddSingleton<ISettings, Settings>();
                 _ = services.AddSingleton<Services.ILinksService, LinksService>();
@@ -199,6 +200,16 @@ public partial class App : Application
             };
         }
 
+        if (jsonTypeInfo.Type == typeof(IAutomateFormsSettings))
+        {
+            jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions
+            {
+                TypeDiscriminatorPropertyName = "$type",
+                UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
+                DerivedTypes = { new(typeof(AutomateFormsSettings), "automateformssettings") }
+            };
+        }
+
         if (jsonTypeInfo.Type == typeof(IUiSettings))
         {
             jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions
@@ -218,6 +229,7 @@ public partial class App : Application
                 DerivedTypes =
                 {
                     new(typeof(UserSettings), "usersettings"),
+                    new(typeof(AutomateFormsSettings), "automateformssettings"),
                     new(typeof(UiSettings), "uisettings"),
                     new(typeof(AutomateFormsOrgVariables), "orgvars"),
 

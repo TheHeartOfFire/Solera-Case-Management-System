@@ -45,15 +45,15 @@ Keep these goals in mind across all development tasks until marked complete.
 - [ ] Complete UI overhaul and improvement
 
 #### 6. Settings
-- [ ] Improve layout
+- [x] Improve layout
 - [ ] Add additional settings:
-  - [ ] User's Name, phone, title, and email address
-  - [ ] General Solera support info (support email & phone #)
-  - [ ] AM Forms mailing address
+  - [x] User's Name, phone, title, and email address
+  - [x] General Solera support info (support email & phone #)
+  - [x] AM Forms mailing address
   - [ ] Dashboard control visibility settings
 
 #### 7. General / Misc
-- [ ] Add User Roles that affect which features are available in the app
+- [x] Add User Roles that affect which features are available in the app
 - [ ] Create a secondary interface in the form of screen-edge toolbars:
   - [ ] Include access to templates
   - [ ] Include access to dashboard

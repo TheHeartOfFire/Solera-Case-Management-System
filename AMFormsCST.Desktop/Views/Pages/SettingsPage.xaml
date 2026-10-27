@@ -11,126 +11,420 @@
     Title="SettingsPage"
     d:DataContext="{d:DesignInstance viewmodels:SettingsViewModel,
                                      IsDesignTimeCreatable=False}"
-    d:DesignHeight="600"
-    d:DesignWidth="800"
+    d:DesignHeight="850"
+    d:DesignWidth="900"
     mc:Ignorable="d">
     <Page.Resources>
         <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!-- Segmented Tab Button Style -->
+        <Style x:Key="SettingsTabButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="Margin" Value="2,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
     </Page.Resources>
+
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="20">
+        <StackPanel Margin="24,16,24,32" MaxWidth="1100" HorizontalAlignment="Stretch">
 
-            <!--  Personalization Section  -->
-            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                <StackPanel>
+            <!-- Page Title & Role Badge Header -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
                     <TextBlock
-                        Margin="0,0,0,4"
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="Personalization" />
+                        FontSize="24"
+                        FontWeight="Bold"
+                        Text="Settings" />
                     <TextBlock
-                        Margin="0,0,0,12"
+                        Margin="0,4,0,0"
+                        FontSize="13"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="Customize the look and feel of the application."
-                        TextWrapping="Wrap" />
-
-                    <TextBlock FontWeight="Medium" Text="Application Theme" />
-                    <RadioButton
-                        Margin="0,4,0,0"
-                        Content="Light"
-                        GroupName="theme"
-                        IsChecked="{Binding CurrentTheme, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Light}" />
-                    <RadioButton
-                        Margin="0,4,0,0"
-                        Content="Dark"
-                        GroupName="theme"
-                        IsChecked="{Binding CurrentTheme, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Dark}" />
-
-                    <ui:ToggleSwitch
-                        Margin="0,12,0,0"
-                        Content="Always on Top"
-                        IsChecked="{Binding AlwaysOnTop, Mode=TwoWay}" />
+                        Text="Manage application preferences, user profile, and role-specific configurations." />
                 </StackPanel>
-            </ui:Card>
 
-            <!--  Behavior Section  -->
-            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                <StackPanel>
-                    <TextBlock
-                        Margin="0,0,0,12"
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="Behavior" />
+                <!-- Current Role Pill / Badge -->
+                <Border Grid.Column="1"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="16"
+                        Padding="12,5"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="ShieldCheckmark24" FontSize="14" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                        <TextBlock Text="Role: " FontSize="11.5" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding SelectedRole}" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
 
-                    <ui:ToggleSwitch
-                        Content="Automatically select new templates"
-                        IsChecked="{Binding SelectNewTemplate, Mode=TwoWay}"
-                        Margin="0,0,0,12" />
+            <!-- Category Tab Navigation Bar -->
+            <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="4"
+                    Margin="0,0,0,20">
+                <WrapPanel Orientation="Horizontal">
 
-                    <ui:ToggleSwitch
-                        Content="Capitalize form code in notes"
-                        IsChecked="{Binding CapitalizeFormCode, Mode=TwoWay}"
-                        Margin="0,0,0,12" />
+                    <!-- Tab 1: Profile & General -->
+                    <Button Command="{Binding SwitchToGeneralTabCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SettingsTabButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsGeneralTabSelected}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                        <Setter Property="Foreground" Value="White" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Person24" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Profile &amp; General" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
 
-                    <TextBlock Text="Phone Extension Separator" />
-                    <ui:TextBox
-                        Margin="0,4,0,0"
-                        PlaceholderText="e.g., x"
-                        Text="{Binding ExtSeparator, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                </StackPanel>
-            </ui:Card>
+                    <!-- Tab 2: Appearance & UI -->
+                    <Button Command="{Binding SwitchToAppearanceTabCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SettingsTabButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsAppearanceTabSelected}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                        <Setter Property="Foreground" Value="White" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Color24" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Appearance &amp; UI" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
 
-            <!--  Windows Integration Section  -->
-            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                <StackPanel>
-                    <TextBlock
-                        Margin="0,0,0,12"
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="Windows Integration" />
+                    <!-- Tab 3: Auto/Mate Forms (Role Specific) -->
+                    <Button Command="{Binding SwitchToFormsTabCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SettingsTabButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsFormsTabSelected}" Value="True">
+                                        <Setter Property="Background" Value="#FF8B5CF6" />
+                                        <Setter Property="Foreground" Value="White" />
+                                        <Setter Property="BorderBrush" Value="#FF8B5CF6" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="DocumentEdit24" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Auto/Mate Forms" VerticalAlignment="Center" />
+                            <Border Margin="6,0,0,0"
+                                    Background="#338B5CF6"
+                                    CornerRadius="4"
+                                    Padding="4,1"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="Forms Role" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </Border>
+                        </StackPanel>
+                    </Button>
 
-                    <ui:ToggleSwitch
-                        Content="Enable Windows Explorer context menu for .formgen files"
-                        IsChecked="{Binding EnableExplorerContextMenu, Mode=TwoWay}"
-                        Margin="0,0,0,4" />
+                    <!-- Tab 4: Integrations & Windows -->
+                    <Button Command="{Binding SwitchToIntegrationsTabCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SettingsTabButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsIntegrationsTabSelected}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                        <Setter Property="Foreground" Value="White" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Apps24" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Integrations &amp; Windows" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
 
-                    <TextBlock
-                        Margin="0,0,0,12"
-                        FontSize="12"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="Adds 'Open in Solera Formgen Utilities' to the right-click menu of .formgen files."
-                        TextWrapping="Wrap" />
+                    <!-- Tab 5: About & Updates -->
+                    <Button Command="{Binding SwitchToAboutTabCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SettingsTabButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsAboutTabSelected}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                        <Setter Property="Foreground" Value="White" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="Info24" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="About &amp; Updates" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
 
-                    <ui:ToggleSwitch
-                        Content="Enable Shift + Right-Click Quick-Paste Flyout across external apps (Applies immediately)"
-                        IsChecked="{Binding EnableShiftRightClickFlyout, Mode=TwoWay}"
-                        Margin="0,0,0,12" />
+                </WrapPanel>
+            </Border>
 
-                    <TextBlock Text="FormGen Executable / Batch Path (Optional)" Margin="0,4,0,0" />
-                    <Grid Margin="0,4,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+            <!-- ============================================================ -->
+            <!-- TAB 1: PROFILE & GENERAL                                     -->
+            <!-- ============================================================ -->
+            <StackPanel Visibility="{Binding IsGeneralTabSelected, Converter={StaticResource BoolToVis}}">
+
+                <!-- User Profile Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Person24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="User Profile" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Your personal contact details used across generated notes, case communications, and email templates." />
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Full Name" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="e.g. John Doe" Text="{Binding UserName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Job Title" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="e.g. Senior Forms Specialist" Text="{Binding UserTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Email Address" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="e.g. john.doe@solera.com" Text="{Binding UserEmail, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Direct Phone Number" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="e.g. 518-555-0199" Text="{Binding UserPhone, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ui:Card>
+
+                <!-- Application Role & Modularity Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="ShieldCheckmark24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Application Role &amp; Modularity" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Configures the active role persona. Switching roles tailors available features, settings tabs, and workspace defaults to your organizational workflow." />
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Active User Role" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ComboBox ItemsSource="{Binding AvailableRoles}"
+                                          SelectedItem="{Binding SelectedRole, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                            <Border Grid.Column="2"
+                                    Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12,8">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" FontSize="12" Text="Role Scope &amp; Permissions" />
+                                    <TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                                               Text="• AutomateForms: Full access to FormGen modifications, Code Blocks builder, FGA file utilities, and Auto/Mate template variables.&#x0a;• CustomerSupport: Case triage, dealership and server cross-referencing, and Salesforce Lightning integration.&#x0a;• General: Core case management and standard tools." />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </ui:Card>
+
+                <!-- Solera Support Contact Info Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Headset24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Solera Support Contacts" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="General Solera &amp; Auto/Mate support contact info used for default note headers and escalation instructions." />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Support Email" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="automate-support@solera.com" Text="{Binding SupportEmail, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Support Phone Number" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="800-xxx-xxxx" Text="{Binding SupportPhone, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ui:Card>
+
+            </StackPanel>
+
+            <!-- ============================================================ -->
+            <!-- TAB 2: APPEARANCE & UI                                       -->
+            <!-- ============================================================ -->
+            <StackPanel Visibility="{Binding IsAppearanceTabSelected, Converter={StaticResource BoolToVis}}">
+
+                <!-- Application Theme Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Color24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Application Theme" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Customize the look and feel of the user interface." />
+
+                        <WrapPanel Orientation="Horizontal" Margin="0,4,0,4">
+                            <RadioButton
+                                Margin="0,0,24,0"
+                                Content="Light"
+                                GroupName="theme"
+                                IsChecked="{Binding CurrentTheme, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Light}" />
+                            <RadioButton
+                                Content="Dark"
+                                GroupName="theme"
+                                IsChecked="{Binding CurrentTheme, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Dark}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ui:Card>
+
+                <!-- Window & Template Behavior Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Settings24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Window &amp; Editor Behavior" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Fine-tune workspace window docking, template selection, and text capitalization." />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,10"
+                            Content="Always on Top (Keep SCMT floating above other applications)"
+                            IsChecked="{Binding AlwaysOnTop, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,10"
+                            Content="Automatically select new templates upon creation"
+                            IsChecked="{Binding SelectNewTemplate, Mode=TwoWay}" />
+
+                        <ui:ToggleSwitch
+                            Margin="0,0,0,14"
+                            Content="Capitalize form code in notes automatically"
+                            IsChecked="{Binding CapitalizeFormCode, Mode=TwoWay}" />
+
+                        <TextBlock Text="Phone Extension Separator" FontWeight="Medium" Margin="0,4,0,4" />
+                        <TextBlock Text="Character or prefix inserted before phone extensions when formatting case contacts."
+                                   FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,6" />
                         <ui:TextBox
-                            Grid.Column="0"
-                            PlaceholderText="C:\Users\...\AppData\Roaming\NewFormGen\NewFormGen.bat"
-                            Text="{Binding FormGenExecutablePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                        <ui:Button
-                            Grid.Column="1"
-                            Margin="8,0,0,0"
-                            Content="Browse..."
-                            Command="{Binding BrowseFormGenExecutableCommand}" />
-                    </Grid>
+                            MaxWidth="200"
+                            HorizontalAlignment="Left"
+                            PlaceholderText="e.g., x"
+                            Text="{Binding ExtSeparator, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </ui:Card>
 
-                    <StackPanel Margin="0,14,0,0">
-                        <TextBlock FontWeight="Medium" Text="Default File Association (.formgen / .fga)" />
+            </StackPanel>
+
+            <!-- ============================================================ -->
+            <!-- TAB 3: AUTO/MATE FORMS (ROLE SPECIFIC)                       -->
+            <!-- ============================================================ -->
+            <StackPanel Visibility="{Binding IsFormsTabSelected, Converter={StaticResource BoolToVis}}">
+
+                <!-- Forms Modularity Banner -->
+                <Border Background="#1A8B5CF6"
+                        BorderBrush="#FF8B5CF6"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="12,10"
+                        Margin="0,0,0,14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ui:SymbolIcon Grid.Column="0" Symbol="DocumentEdit24" FontSize="20" Foreground="#FF8B5CF6" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock FontWeight="SemiBold" FontSize="13" Text="AutomateForms Configuration" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock FontSize="11.5" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="All settings below are managed under your dedicated AutomateFormsSettings configuration and adapt dynamically to your active role." />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- FormGen Installation & File Association Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="AppGeneric24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="FormGen Executable &amp; Association" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Specify the FormGen batch script or executable path and configure default Windows file associations." />
+
+                        <TextBlock Text="FormGen Executable / Batch Path" FontWeight="Medium" Margin="0,4,0,4" />
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ui:TextBox
+                                Grid.Column="0"
+                                PlaceholderText="C:\Users\...\AppData\Roaming\NewFormGen\NewFormGen.bat"
+                                Text="{Binding FormGenExecutablePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <ui:Button
+                                Grid.Column="1"
+                                Margin="8,0,0,0"
+                                Content="Browse..."
+                                Command="{Binding BrowseFormGenExecutableCommand}" />
+                        </Grid>
+
+                        <TextBlock Text="Default File Association (.formgen / .fga)" FontWeight="Medium" Margin="0,0,0,4" />
                         <TextBlock
-                            Margin="0,2,0,8"
+                            Margin="0,0,0,8"
                             FontSize="12"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding FormgenAssociationStatus}"
-                            TextWrapping="Wrap" />
+                            Text="{Binding FormgenAssociationStatus}" />
                         <WrapPanel Orientation="Horizontal">
                             <ui:Button
                                 Content="Associate with FormGen"
@@ -139,195 +433,298 @@
                                 Command="{Binding AssociateFormGenCommand}" />
                         </WrapPanel>
                     </StackPanel>
-                </StackPanel>
-            </ui:Card>
+                </ui:Card>
 
-            <!--  FormGen Modifications & Patching Section  -->
-            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                <StackPanel>
-                    <TextBlock
-                        Margin="0,0,0,4"
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="FormGen Modifications &amp; Patching" />
-                    <TextBlock
-                        Margin="0,0,0,12"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="Deploy or remove the Solera FormGen integration payload and toggle individual FormGen features. Unpatching removes all traces of modification while remembering your toggle preferences."
-                        TextWrapping="Wrap" />
+                <!-- FormGen Modifications & Patching Status Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Wrench24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="FormGen Payload &amp; Patch Status" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Deploy or remove the Solera FormGen integration payload. Unpatching completely restores vanilla FormGen with zero footprint while remembering your feature preferences."
+                                   TextWrapping="Wrap" />
 
-                    <StackPanel Margin="0,0,0,14">
-                        <TextBlock FontWeight="Medium" Text="FormGen Payload Status" />
+                        <TextBlock FontWeight="Medium" Text="Current Payload Status" Margin="0,0,0,4" />
                         <TextBlock
-                            Margin="0,2,0,8"
-                            FontSize="12"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Margin="0,0,0,10"
+                            FontSize="12.5"
+                            FontWeight="SemiBold"
+                            Foreground="{DynamicResource AccentFillColorDefaultBrush}"
                             Text="{Binding FormGenPatchStatus}"
                             TextWrapping="Wrap" />
+
                         <WrapPanel Orientation="Horizontal">
                             <ui:Button
-                                Margin="0,0,8,8"
+                                Margin="0,0,8,4"
                                 Content="Patch FormGen"
                                 Appearance="Primary"
                                 Icon="{ui:SymbolIcon Wrench24}"
                                 Command="{Binding PatchFormGenCommand}" />
                             <ui:Button
-                                Margin="0,0,8,8"
+                                Margin="0,0,8,4"
                                 Content="Unpatch FormGen"
                                 Appearance="Secondary"
                                 Icon="{ui:SymbolIcon ArrowUndo24}"
                                 Command="{Binding UnpatchFormGenCommand}" />
                         </WrapPanel>
                     </StackPanel>
+                </ui:Card>
 
-                    <TextBlock
-                        Margin="0,2,0,2"
-                        FontWeight="Medium"
-                        Text="Individual FormGen Feature Toggles" />
-                    <TextBlock
-                        Margin="0,0,0,10"
-                        FontSize="12"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="Toggling any feature below immediately enables or removes all traces of that feature in a running FormGen session without requiring a restart (except where noted)."
-                        TextWrapping="Wrap" />
+                <!-- Individual FormGen Feature Toggles Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Flash24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="FormGen Live Feature Toggles" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Toggling any feature immediately updates running FormGen sessions in real time via live agent sync without requiring a restart."
+                                   TextWrapping="Wrap" />
 
-                    <StackPanel IsEnabled="{Binding IsFormGenPatched}">
-                        <ui:ToggleSwitch
-                            Margin="0,0,0,8"
-                            Content="Preserve Code Window (UdfDlg) tab selection on Push &amp; form switch (Applies live)"
-                            IsChecked="{Binding FormGenPreserveUdfTab, Mode=TwoWay}" />
+                        <StackPanel IsEnabled="{Binding IsFormGenPatched}">
+                            <ui:ToggleSwitch
+                                Margin="0,0,0,10"
+                                Content="Preserve Code Window (UdfDlg) tab selection on Push &amp; form switch (Applies live)"
+                                IsChecked="{Binding FormGenPreserveUdfTab, Mode=TwoWay}" />
 
-                        <ui:ToggleSwitch
-                            Margin="0,0,0,8"
-                            Content="Right-click empty form canvas to paste Code Block as new Text / Numeric field (Applies live)"
-                            IsChecked="{Binding FormGenCanvasPasteField, Mode=TwoWay}" />
+                            <ui:ToggleSwitch
+                                Margin="0,0,0,10"
+                                Content="Right-click empty form canvas to paste Code Block as new Text / Numeric field (Applies live)"
+                                IsChecked="{Binding FormGenCanvasPasteField, Mode=TwoWay}" />
 
-                        <ui:ToggleSwitch
-                            Margin="0,0,0,8"
-                            Content="Focus existing tab &amp; show non-intrusive toast when opening an already-open file (Applies live)"
-                            IsChecked="{Binding FormGenAlreadyOpenToast, Mode=TwoWay}" />
+                            <ui:ToggleSwitch
+                                Margin="0,0,0,10"
+                                Content="Focus existing tab &amp; show toast when opening an already-open file (Applies live)"
+                                IsChecked="{Binding FormGenAlreadyOpenToast, Mode=TwoWay}" />
 
-                        <ui:ToggleSwitch
-                            Margin="0,0,0,8"
-                            Content="Inject Solera Tools &amp; Quick Paste into FormGen right-click menus (Applies live)"
-                            IsChecked="{Binding FormGenContextMenus, Mode=TwoWay}" />
+                            <ui:ToggleSwitch
+                                Margin="0,0,0,10"
+                                Content="Inject Solera Tools &amp; Quick Paste into FormGen right-click menus (Applies live)"
+                                IsChecked="{Binding FormGenContextMenus, Mode=TwoWay}" />
 
-                        <ui:ToggleSwitch
-                            Margin="0,0,0,8"
-                            Content="Enable multi-step Undo / Redo (Ctrl+Z / Ctrl+Y) in Code &amp; Prompt editors (Applies live)"
-                            IsChecked="{Binding FormGenEditorUndoRedo, Mode=TwoWay}" />
+                            <ui:ToggleSwitch
+                                Margin="0,0,0,10"
+                                Content="Enable multi-step Undo / Redo (Ctrl+Z / Ctrl+Y) in Code &amp; Prompt editors (Applies live)"
+                                IsChecked="{Binding FormGenEditorUndoRedo, Mode=TwoWay}" />
 
-                        <ui:ToggleSwitch
-                            Margin="0,0,0,8"
-                            Content="Add '⚡ Fill from Solera CMS' &amp; helper buttons to FormGen dialogs (Applies live — removes buttons immediately when off)"
-                            IsChecked="{Binding FormGenDialogAutoFill, Mode=TwoWay}" />
+                            <ui:ToggleSwitch
+                                Margin="0,0,0,10"
+                                Content="Add '⚡ Fill from Solera CMS' &amp; helper buttons to FormGen dialogs (Applies live)"
+                                IsChecked="{Binding FormGenDialogAutoFill, Mode=TwoWay}" />
 
-                        <ui:ToggleSwitch
-                            Margin="0,0,0,4"
-                            Content="Auto-restore previously open forms (Takes effect when FormGen starts or reloads; turning off clears saved session immediately)"
-                            IsChecked="{Binding FormGenAutoRestoreForms, Mode=TwoWay}" />
+                            <ui:ToggleSwitch
+                                Margin="0,0,0,10"
+                                Content="Auto-restore previously open forms session (Applies on FormGen startup)"
+                                IsChecked="{Binding FormGenAutoRestoreForms, Mode=TwoWay}" />
+
+                            <ui:ToggleSwitch
+                                Margin="0,0,0,4"
+                                Content="Enable Shift + Right-Click Quick-Paste Flyout across external apps (Applies immediately)"
+                                IsChecked="{Binding EnableShiftRightClickFlyout, Mode=TwoWay}" />
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
-            </ui:Card>
+                </ui:Card>
 
-            <!--  Browser Integration Section  -->
-            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                <StackPanel>
-                    <TextBlock
-                        Margin="0,0,0,4"
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="Browser Integration" />
-                    <TextBlock
-                        Margin="0,0,0,12"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="Integrate Solera CMS with Opera GX, Microsoft Edge, and Chrome for right-click FormGen code block parsing and live dashboard paste."
-                        TextWrapping="Wrap" />
+                <!-- AM Forms Mailing Address Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Mail24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="AM Forms Mailing Address" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Configures the physical mailing address used across dealer shipping templates (e.g. {AMMailingAddress}, {AMStreetAddress})." />
 
-                    <StackPanel Margin="0,0,0,12">
-                        <TextBlock FontWeight="Medium" Text="Native Messaging Bridge" />
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Attention / Recipient" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="Attn: A/M Forms (Sue)" Text="{Binding FormsMailingName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Street Address" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="131 Griffis Rd" Text="{Binding FormsStreetAddress, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="City" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="Gloversville" Text="{Binding FormsCity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="State" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="NY" Text="{Binding FormsState, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="Zip Code" FontWeight="Medium" Margin="0,0,0,4" />
+                                <ui:TextBox PlaceholderText="12078" Text="{Binding FormsZip, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Live Address Preview -->
+                        <Border Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,10">
+                            <StackPanel>
+                                <TextBlock Text="Formatted Template Output Preview ({AMMailingAddress}):" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBlock Text="{Binding FormsMailingAddressPreview}" FontSize="12.5" FontFamily="Consolas, Segoe UI" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ui:Card>
+
+            </StackPanel>
+
+            <!-- ============================================================ -->
+            <!-- TAB 4: INTEGRATIONS & WINDOWS                                -->
+            <!-- ============================================================ -->
+            <StackPanel Visibility="{Binding IsIntegrationsTabSelected, Converter={StaticResource BoolToVis}}">
+
+                <!-- Windows Explorer Integration Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Folder24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Windows Explorer Integration" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Manage shell context menu integration for right-clicking files directly in Windows Explorer." />
+
+                        <ui:ToggleSwitch
+                            Content="Enable Windows Explorer right-click context menu for .formgen files"
+                            IsChecked="{Binding EnableExplorerContextMenu, Mode=TwoWay}"
+                            Margin="0,0,0,4" />
+
                         <TextBlock
-                            Margin="0,2,0,8"
+                            Margin="0,0,0,8"
                             FontSize="12"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding BrowserBridgeStatus}"
+                            Text="Adds 'Open in Solera Formgen Utilities' to the right-click menu of .formgen files."
                             TextWrapping="Wrap" />
+                    </StackPanel>
+                </ui:Card>
+
+                <!-- Browser Integration Section -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Globe24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Browser Native Messaging &amp; Extension" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,0,12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Integrate Solera CMS with Opera GX, Microsoft Edge, and Chrome for right-click Salesforce case parsing, live dashboard paste, and rich-text email insertion."
+                                   TextWrapping="Wrap" />
+
+                        <StackPanel Margin="0,0,0,12">
+                            <TextBlock FontWeight="Medium" Text="Native Messaging Bridge Status" Margin="0,0,0,4" />
+                            <TextBlock
+                                Margin="0,0,0,8"
+                                FontSize="12.5"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource AccentFillColorDefaultBrush}"
+                                Text="{Binding BrowserBridgeStatus}"
+                                TextWrapping="Wrap" />
+                            <WrapPanel Orientation="Horizontal">
+                                <ui:Button
+                                    Margin="0,0,8,8"
+                                    Content="Register Bridge"
+                                    Appearance="Primary"
+                                    Icon="{ui:SymbolIcon CheckmarkCircle24}"
+                                    Command="{Binding RegisterBrowserBridgeCommand}" />
+                                <ui:Button
+                                    Margin="0,0,8,8"
+                                    Content="Remove Bridge"
+                                    Appearance="Secondary"
+                                    Icon="{ui:SymbolIcon Delete24}"
+                                    Command="{Binding RemoveBrowserBridgeCommand}" />
+                            </WrapPanel>
+                        </StackPanel>
+
+                        <TextBlock Margin="0,4,0,4" FontWeight="Medium" Text="One-Click Extension Setup" />
+                        <TextBlock
+                            Margin="0,0,0,10"
+                            FontSize="12"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Launches your browser directly with developer extension configuration:"
+                            TextWrapping="Wrap" />
+
                         <WrapPanel Orientation="Horizontal">
                             <ui:Button
                                 Margin="0,0,8,8"
-                                Content="Register Bridge"
-                                Appearance="Primary"
-                                Icon="{ui:SymbolIcon CheckmarkCircle24}"
-                                Command="{Binding RegisterBrowserBridgeCommand}" />
+                                Content="Install in Opera GX"
+                                Appearance="Secondary"
+                                Icon="{ui:SymbolIcon Globe24}"
+                                Command="{Binding LaunchOperaGXExtensionCommand}" />
                             <ui:Button
                                 Margin="0,0,8,8"
-                                Content="Remove Bridge"
+                                Content="Install in Microsoft Edge"
                                 Appearance="Secondary"
-                                Icon="{ui:SymbolIcon Delete24}"
-                                Command="{Binding RemoveBrowserBridgeCommand}" />
+                                Icon="{ui:SymbolIcon Globe24}"
+                                Command="{Binding LaunchEdgeExtensionCommand}" />
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Content="Install in Chrome"
+                                Appearance="Secondary"
+                                Icon="{ui:SymbolIcon Globe24}"
+                                Command="{Binding LaunchChromeExtensionCommand}" />
                         </WrapPanel>
                     </StackPanel>
+                </ui:Card>
 
-                    <TextBlock Margin="0,4,0,4" FontWeight="Medium" Text="Launch Browser with Extension" />
-                    <TextBlock
-                        Margin="0,0,0,10"
-                        FontSize="12"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="One-click setup: registers native messaging and launches your browser with the extension automatically loaded."
-                        TextWrapping="Wrap" />
+            </StackPanel>
 
-                    <WrapPanel Orientation="Horizontal">
-                        <ui:Button
-                            Margin="0,0,8,8"
-                            Content="Install in Opera GX"
-                            Appearance="Secondary"
-                            Icon="{ui:SymbolIcon Globe24}"
-                            Command="{Binding LaunchOperaGXExtensionCommand}" />
-                        <ui:Button
-                            Margin="0,0,8,8"
-                            Content="Install in Microsoft Edge"
-                            Appearance="Secondary"
-                            Icon="{ui:SymbolIcon Globe24}"
-                            Command="{Binding LaunchEdgeExtensionCommand}" />
-                        <ui:Button
-                            Margin="0,0,8,8"
-                            Content="Install in Chrome"
-                            Appearance="Secondary"
-                            Icon="{ui:SymbolIcon Globe24}"
-                            Command="{Binding LaunchChromeExtensionCommand}" />
-                    </WrapPanel>
-                </StackPanel>
-            </ui:Card>
+            <!-- ============================================================ -->
+            <!-- TAB 5: ABOUT & UPDATES                                       -->
+            <!-- ============================================================ -->
+            <StackPanel Visibility="{Binding IsAboutTabSelected, Converter={StaticResource BoolToVis}}">
 
-            <!--  About Section  -->
-            <ui:Card Margin="0,0,0,12" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                <StackPanel>
-                    <TextBlock
-                        Margin="0,0,0,8"
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="About" />
-                    <TextBlock
-                        Margin="0,0,0,12"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{Binding AppVersion}" />
+                <!-- About Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="Info24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="About Solera CMS" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock
+                            Margin="0,0,0,14"
+                            FontSize="13"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="{Binding AppVersion}" />
 
-                    <WrapPanel Orientation="Horizontal">
-                        <ui:Button
-                            Margin="0,0,8,8"
-                            Command="{Binding CheckForUpdatesCommand}"
-                            Appearance="Primary"
-                            Content="Check for updates"
-                            Icon="{ui:SymbolIcon ArrowDownload24}" />
+                        <WrapPanel Orientation="Horizontal">
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Command="{Binding CheckForUpdatesCommand}"
+                                Appearance="Primary"
+                                Content="Check for updates"
+                                Icon="{ui:SymbolIcon ArrowDownload24}" />
 
-                        <ui:Button
-                            Margin="0,0,8,8"
-                            Content="Report a Bug"
-                            Command="{Binding ReportBugCommand}"
-                            Icon="{ui:SymbolIcon Bug24}" />
-                    </WrapPanel>
-                </StackPanel>
-            </ui:Card>
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Content="Report a Bug"
+                                Command="{Binding ReportBugCommand}"
+                                Icon="{ui:SymbolIcon Bug24}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ui:Card>
+
+            </StackPanel>
 
         </StackPanel>
     </ScrollViewer>
