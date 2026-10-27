@@ -900,5 +900,81 @@ public partial class SettingsViewModel : ViewModel
         }
     }
 
+    [RelayCommand]
+    private void OpenLogs()
+    {
+        try
+        {
+            var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+            if (!Directory.Exists(logDir))
+            {
+                Directory.CreateDirectory(logDir);
+            }
+
+            var latestLog = Directory.GetFiles(logDir, "app*.log")
+                .OrderByDescending(File.GetLastWriteTime)
+                .FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(latestLog) && File.Exists(latestLog))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = latestLog,
+                    UseShellExecute = true
+                });
+                _logger?.LogInfo($"Opened latest application log file: {latestLog}");
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = logDir,
+                    UseShellExecute = true
+                });
+                _logger?.LogInfo($"No log files found; opened log directory: {logDir}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Failed to open application logs.", ex);
+            _snackbarService?.Show(
+                "Logs Error",
+                $"Could not open logs: {ex.Message}",
+                ControlAppearance.Danger,
+                new SymbolIcon(SymbolRegular.ErrorCircle24),
+                TimeSpan.FromSeconds(4));
+        }
+    }
+
+    [RelayCommand]
+    private void OpenLogsFolder()
+    {
+        try
+        {
+            var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+            if (!Directory.Exists(logDir))
+            {
+                Directory.CreateDirectory(logDir);
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = logDir,
+                UseShellExecute = true
+            });
+            _logger?.LogInfo($"Opened application logs directory: {logDir}");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Failed to open logs folder.", ex);
+            _snackbarService?.Show(
+                "Logs Error",
+                $"Could not open logs folder: {ex.Message}",
+                ControlAppearance.Danger,
+                new SymbolIcon(SymbolRegular.ErrorCircle24),
+                TimeSpan.FromSeconds(4));
+        }
+    }
+
     private static string GetAppVersion() => FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileVersion ?? "1.0.0";
 }

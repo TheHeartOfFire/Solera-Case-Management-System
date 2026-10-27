@@ -736,6 +736,37 @@
                     </StackPanel>
                 </ui:Card>
 
+                <!-- Diagnostics & Logs Card -->
+                <ui:Card Margin="0,0,0,14" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <ui:SymbolIcon Symbol="DocumentBulletList24" FontSize="18" Foreground="{DynamicResource AccentFillColorDefaultBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Application Diagnostics &amp; Logs" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock
+                            Margin="0,0,0,14"
+                            FontSize="13"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Inspect recent application events, diagnostic output, and system troubleshooting logs." />
+
+                        <WrapPanel Orientation="Horizontal">
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Content="Open Current Log"
+                                Appearance="Primary"
+                                Icon="{ui:SymbolIcon DocumentText24}"
+                                Command="{Binding OpenLogsCommand}" />
+
+                            <ui:Button
+                                Margin="0,0,8,8"
+                                Content="Open Logs Folder"
+                                Appearance="Secondary"
+                                Icon="{ui:SymbolIcon FolderOpen24}"
+                                Command="{Binding OpenLogsFolderCommand}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ui:Card>
+
             </StackPanel>
 
         </StackPanel>
