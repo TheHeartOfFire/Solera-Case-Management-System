@@ -342,6 +342,23 @@ public class IpcService : IHostedService, IAsyncDisposable
                 note.NotesXaml = XamlWriter.Save(doc);
                 break;
 
+            case "formtitle":
+            case "formname":
+            case "form":
+                var activeForm = note.Forms.SelectedItem ?? note.Forms.FirstOrDefault();
+                if (activeForm != null && string.IsNullOrWhiteSpace(activeForm.Name))
+                {
+                    activeForm.Name = value;
+                    activeForm.Select();
+                }
+                else
+                {
+                    var newForm = new Form(note, _logger) { Name = value };
+                    note.Forms.Add(newForm);
+                    newForm.Select();
+                }
+                break;
+
             default:
                 return IpcResponse.Fail($"Unknown field '{field}'.");
         }

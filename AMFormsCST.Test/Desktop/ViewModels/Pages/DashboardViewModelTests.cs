@@ -10,6 +10,7 @@ using Moq;
 using System;
 using CoreNote = AMFormsCST.Core.Types.Notebook.Note;
 using Assert = Xunit.Assert;
+using AMFormsCST.Desktop.Interfaces;
 using CollectionMemberState = AMFormsCST.Desktop.Interfaces.IManagedObservableCollectionItem.CollectionMemberState;
 using AMFormsCST.Core.Types.BestPractices.TextTemplates.Models;
 
@@ -582,5 +583,73 @@ Web Browser: 11
         Assert.Equal(expectedEmail, contact.Email);
         Assert.Equal(expectedPhone, contact.Phone);
         Assert.Equal(expectedPhoneExtension, contact.PhoneExtension);
+    }
+
+    [Fact]
+    public void LoadCaseFromNote_SelectsTargetNoteAndSynchronizesSupportTool()
+    {
+        // Arrange
+        var viewModel = new DashboardViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object, _mockDebounceService.Object);
+        var initialNote = viewModel.SelectedNote;
+        Assert.NotNull(initialNote);
+
+        var newNote = new NoteModel("x")
+        {
+            CaseNumber = "00998877"
+        };
+        var dealer = new Dealer { Name = "Parsed Dealership", ServerCode = "SVR99" };
+        var company = new Company { Name = "Parsed Dealership", CompanyCode = "1" };
+        dealer.Companies.Add(company);
+        newNote.Dealers.Add(dealer);
+        dealer.Select();
+
+        var contact = new Contact("x") { Name = "Bob Smith", Email = "bob@dealer.com" };
+        newNote.Contacts.Add(contact);
+        contact.Select();
+
+        var form = new Form(newNote) { Name = "Parsed Form 1" };
+        newNote.Forms.Add(form);
+        form.Select();
+
+        // Act
+        var result = viewModel.LoadCaseFromNote(newNote);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("00998877", result.CaseNumber);
+        Assert.Same(result, viewModel.SelectedNote);
+        Assert.Equal(CollectionMemberState.Selected, result.State);
+        Assert.Equal("SVR99", result.SelectedDealer?.ServerCode);
+        Assert.Equal("Parsed Form 1", result.SelectedForm?.Name);
+        Assert.True(viewModel.UiRefreshCounter > 0);
+    }
+
+    [Fact]
+    public void ManagedObservableCollectionItem_Select_RaisesPropertyChangedForStateOnDeselection()
+    {
+        // Arrange
+        var item1 = new NoteModel("x") { CaseNumber = "001" };
+        var item2 = new NoteModel("x") { CaseNumber = "002" };
+        var collection = new AMFormsCST.Desktop.Types.ManagedObservableCollection<NoteModel>(() => new NoteModel("x"), [item1, item2]);
+        item1.Select();
+        Assert.Equal(CollectionMemberState.Selected, item1.State);
+        Assert.Equal(CollectionMemberState.NotSelected, item2.State);
+
+        var stateChangedOnItem1 = false;
+        item1.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(IManagedObservableCollectionItem.State))
+            {
+                stateChangedOnItem1 = true;
+            }
+        };
+
+        // Act: Select item2 -> item1 should be deselected
+        item2.Select();
+
+        // Assert
+        Assert.True(stateChangedOnItem1, "Expected item1 to raise PropertyChanged for State upon deselection");
+        Assert.Equal(CollectionMemberState.NotSelected, item1.State);
+        Assert.Equal(CollectionMemberState.Selected, item2.State);
     }
 }

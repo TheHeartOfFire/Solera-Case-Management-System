@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Desktop.Interfaces;
 using AMFormsCST.Desktop.Types;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -72,7 +72,11 @@ namespace AMFormsCST.Desktop.BaseClasses
 
             if (guid != Id)
             {
-                State = CollectionMemberState.NotSelected;
+                if (State != CollectionMemberState.NotSelected)
+                {
+                    State = CollectionMemberState.NotSelected;
+                    OnPropertyChanged(nameof(State));
+                }
                 _logger?.LogDebug($"Item {Id} deselected (guid: {guid}).");
                 return;
             }

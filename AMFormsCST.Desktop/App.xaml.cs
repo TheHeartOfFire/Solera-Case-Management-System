@@ -229,6 +229,16 @@ public partial class App : Application
             };
         }
 
+        if (jsonTypeInfo.Type == typeof(IOrgVariables))
+        {
+            jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions
+            {
+                TypeDiscriminatorPropertyName = "$type",
+                UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
+                DerivedTypes = { new(typeof(AutomateFormsOrgVariables), "orgvars") }
+            };
+        }
+
         if (jsonTypeInfo.Type == typeof(ISetting))
         {
             jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions
