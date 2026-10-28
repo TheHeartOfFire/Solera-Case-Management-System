@@ -40,9 +40,9 @@ Keep these goals in mind across all development tasks until marked complete.
 - [x] Create a troubleshooter to detect common logical and syntactical issues
 
 #### 5. Quick Links
-- [ ] Allow custom links to get saved to disk
-- [ ] Enable ability to create custom links
-- [ ] Complete UI overhaul and improvement
+- [x] Allow custom links to get saved to disk
+- [x] Enable ability to create custom links
+- [x] Complete UI overhaul and improvement
 
 #### 6. Settings
 - [x] Improve layout

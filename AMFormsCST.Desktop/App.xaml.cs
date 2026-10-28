@@ -177,6 +177,7 @@ public partial class App : Application
 
                 _ = services.AddTransient<AddLinkDialogPage>();
                 _ = services.AddTransient<AddLinkDialogViewModel>();
+                _ = services.AddTransient<AddEditLinkWindow>();
                 _ = services.AddTransient<BugReportDialog>();
                 _ = services.AddTransient<BugReportDialogViewModel>();
 

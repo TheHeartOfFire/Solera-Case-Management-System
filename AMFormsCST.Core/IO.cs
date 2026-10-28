@@ -20,6 +20,7 @@ public static class IO
     public static readonly string BackupPath;
     private static readonly string _templatesPath;
     private static readonly string _configPath;
+    private static readonly string _quickLinksPath;
     private static JsonSerializerOptions _jsonOptions = new() { WriteIndented = true }; 
 
     public static ILogService? Logger { get; private set; }
@@ -41,6 +42,7 @@ public static class IO
         BackupPath = Path.Combine(_rootPath, "FormgenBackup");
         _templatesPath = Path.Combine(_rootPath, "TextTemplates.json");
         _configPath = Path.Combine(_rootPath, "Config.json");
+        _quickLinksPath = Path.Combine(_rootPath, "QuickLinks.json");
 
         try
         {
@@ -314,6 +316,39 @@ public static class IO
         catch (Exception ex)
         {
             Logger?.LogError("Error saving custom snippets.", ex);
+        }
+    }
+
+    public static void SaveQuickLinks(string json)
+    {
+        try
+        {
+            File.WriteAllText(_quickLinksPath, json);
+            Logger?.LogInfo("Quick links saved.");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError("Error saving Quick Links.", ex);
+        }
+    }
+
+    public static string? LoadQuickLinks()
+    {
+        if (!File.Exists(_quickLinksPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(_quickLinksPath);
+            Logger?.LogInfo("Quick links loaded from disk.");
+            return json;
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError("Error reading Quick Links from disk.", ex);
+            return null;
         }
     }
 }
