@@ -67,6 +67,7 @@ public partial class AddLinkDialogViewModel : ObservableObject
             new() { Symbol = SymbolRegular.Wrench24, DisplayName = "Tools / Utilities (CST)" },
             new() { Symbol = SymbolRegular.DocumentBulletList24, DisplayName = "FormGen Designer" },
             new() { Symbol = SymbolRegular.FolderOpen24, DisplayName = "Folder / Local Path" },
+            new() { Symbol = SymbolRegular.Bookmark24, DisplayName = "Bookmark" },
             new() { Symbol = SymbolRegular.Code24, DisplayName = "Code / Script" },
             new() { Symbol = SymbolRegular.BookQuestionMark24, DisplayName = "Documentation / Help" }
         ];
@@ -85,10 +86,12 @@ public partial class AddLinkDialogViewModel : ObservableObject
         Description = link.Description ?? string.Empty;
 
         var foundIcon = AvailableIcons.FirstOrDefault(i => i.Symbol == link.Icon);
-        if (foundIcon != null)
+        if (foundIcon == null)
         {
-            SelectedIcon = foundIcon;
+            foundIcon = new IconChoiceItem { Symbol = link.Icon, DisplayName = link.Icon.ToString() };
+            AvailableIcons.Add(foundIcon);
         }
+        SelectedIcon = foundIcon;
     }
 
     [RelayCommand]
