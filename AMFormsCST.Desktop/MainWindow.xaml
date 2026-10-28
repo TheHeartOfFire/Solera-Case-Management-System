@@ -22,6 +22,7 @@
     <Grid>
         <ui:NavigationView
     x:Name="NavigationView"
+    IsPaneOpen="False"
     Padding="42,0,42,0"
     BreadcrumbBar="{Binding ElementName=BreadcrumbBar}"
     EnableDebugMessages="True"

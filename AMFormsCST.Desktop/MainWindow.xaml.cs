@@ -51,6 +51,9 @@ public partial class MainWindow : IWindow
 
         InitializeComponent();
 
+        NavigationView.SetCurrentValue(NavigationView.IsPaneOpenProperty, false);
+        Loaded += (_, _) => NavigationView.SetCurrentValue(NavigationView.IsPaneOpenProperty, false);
+
         snackbarService.SetSnackbarPresenter(SnackbarPresenter);
         navigationService.SetNavigationControl(NavigationView);
         contentDialogService.SetDialogHost(RootContentDialog);
