@@ -18,9 +18,6 @@ public partial class MainWindow : IWindow
     public MainWindowViewModel ViewModel { get; }
     private readonly ILogService _logger;
 
-    private bool _isUserClosedPane;
-    private bool _isPaneOpenedOrClosedFromCode;
-
     public MainWindow(
         MainWindowViewModel viewModel,
         INavigationService navigationService,
@@ -77,38 +74,13 @@ public partial class MainWindow : IWindow
         _logger.LogInfo($"Navigation selection changed: {navigationView.SelectedItem?.TargetPageType}");
     }
 
-    private void MainWindow_OnSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (_isUserClosedPane)
-        {
-            return;
-        }
-
-        _isPaneOpenedOrClosedFromCode = true;
-        NavigationView.SetCurrentValue(NavigationView.IsPaneOpenProperty, e.NewSize.Width > 1200);
-        _isPaneOpenedOrClosedFromCode = false;
-        _logger.LogDebug($"MainWindow size changed: {e.NewSize}");
-    }
-
     private void NavigationView_OnPaneOpened(NavigationView sender, RoutedEventArgs args)
     {
-        if (_isPaneOpenedOrClosedFromCode)
-        {
-            return;
-        }
-
-        _isUserClosedPane = false;
         _logger.LogInfo("Navigation pane opened.");
     }
 
     private void NavigationView_OnPaneClosed(NavigationView sender, RoutedEventArgs args)
     {
-        if (_isPaneOpenedOrClosedFromCode)
-        {
-            return;
-        }
-
-        _isUserClosedPane = true;
         _logger.LogInfo("Navigation pane closed.");
     }
 }

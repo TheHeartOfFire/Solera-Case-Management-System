@@ -15,14 +15,21 @@
     ui:Design.Background="{DynamicResource ApplicationBackgroundBrush}"
     ui:Design.Foreground="{DynamicResource TextFillColorPrimaryBrush}"
     Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+    ScrollViewer.CanContentScroll="False"
+    PreviewMouseWheel="OnPagePreviewMouseWheel"
     mc:Ignorable="d">
 
-    <Grid Margin="24,16,24,20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <ScrollViewer
+        x:Name="LinksScrollViewer"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Disabled"
+        PreviewMouseWheel="OnPagePreviewMouseWheel">
+        <Grid Margin="24,16,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
         <!-- Header Row: Title & Action Controls -->
         <Grid Grid.Row="0" Margin="0,0,0,16">
@@ -126,8 +133,7 @@
         </Border>
 
         <!-- Main Content Area: Cards Grid & Empty State -->
-        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <Grid>
+        <Grid Grid.Row="2">
                 <!-- Empty Search Result State -->
                 <StackPanel
                     HorizontalAlignment="Center"
@@ -333,6 +339,6 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Grid>
-        </ScrollViewer>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </Page>
