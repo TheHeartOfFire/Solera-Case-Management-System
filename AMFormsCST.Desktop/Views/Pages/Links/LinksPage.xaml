@@ -7,49 +7,332 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="clr-namespace:AMFormsCST.Desktop.Models"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-    Title="LinksPage"
+    Title="Quick Links"
     d:DataContext="{d:DesignInstance local:LinksViewModel,
                                      IsDesignTimeCreatable=False}"
-    d:DesignHeight="450"
-    d:DesignWidth="800"
+    d:DesignHeight="700"
+    d:DesignWidth="1000"
     ui:Design.Background="{DynamicResource ApplicationBackgroundBrush}"
     ui:Design.Foreground="{DynamicResource TextFillColorPrimaryBrush}"
     Foreground="{DynamicResource TextFillColorPrimaryBrush}"
     mc:Ignorable="d">
 
-    <Grid Margin="10">
+    <Grid Margin="24,16,24,20">
         <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Links}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel HorizontalAlignment="Left" VerticalAlignment="Top" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type models:LinkModel}">
-                        <ui:Button
-                            Margin="5"
-                            Appearance="Primary"
-                            Command="{Binding DataContext.LinkClickCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
-                            CommandParameter="{Binding}"
-                            Content="{Binding DisplayName}" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+        <!-- Header Row: Title & Action Controls -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-        <!--<ui:Button
-            Grid.Row="1"
-            Margin="0,10,0,0"
-            HorizontalAlignment="Right"
-            Appearance="Secondary"
-            Command="{Binding AddLinkClickCommand}"
-            Content="Add New Link"
-            Icon="{ui:SymbolIcon Add24}" />-->
+            <!-- Page Title & Subtitle -->
+            <StackPanel VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:SymbolIcon
+                        Symbol="Link24"
+                        FontSize="24"
+                        Margin="0,0,10,0"
+                        Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                    <TextBlock
+                        Text="Quick Links"
+                        FontSize="24"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                </StackPanel>
+                <TextBlock
+                    Margin="34,4,0,0"
+                    Text="Launch frequently used Solera portals, compliance trackers, tools, and custom shortcuts."
+                    FontSize="13"
+                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+
+            <!-- Top Actions: Search, Add Link, Reset Defaults -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <ui:TextBox
+                    Width="280"
+                    Margin="0,0,10,0"
+                    PlaceholderText="Search links, URLs, descriptions..."
+                    Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                    Icon="{ui:SymbolIcon Search24}"
+                    ClearButtonEnabled="True" />
+
+                <ui:Button
+                    Appearance="Primary"
+                    Margin="0,0,8,0"
+                    Content="Add Link"
+                    Icon="{ui:SymbolIcon Add24}"
+                    Command="{Binding AddLinkClickCommand}" />
+
+                <ui:Button
+                    Appearance="Secondary"
+                    ToolTip="Restore default quick links"
+                    Icon="{ui:SymbolIcon ArrowReset24}"
+                    Command="{Binding ResetDefaultsCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Category Filter Pills -->
+        <Border Grid.Row="1" Margin="0,0,0,14" Padding="0,2">
+            <ListBox
+                ItemsSource="{Binding Categories}"
+                SelectedItem="{Binding SelectedCategory, Mode=TwoWay}"
+                BorderThickness="0"
+                Background="Transparent"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Margin" Value="0,0,8,6" />
+                        <Setter Property="Cursor" Value="Hand" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border
+                                        x:Name="PillBorder"
+                                        CornerRadius="16"
+                                        Padding="14,6"
+                                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="PillBorder" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="PillBorder" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                            <Setter TargetName="PillBorder" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
+        </Border>
+
+        <!-- Main Content Area: Cards Grid & Empty State -->
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <!-- Empty Search Result State -->
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Margin="0,50,0,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding FilteredLinks.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <ui:SymbolIcon
+                        Symbol="DocumentSearch24"
+                        FontSize="56"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        HorizontalAlignment="Center" />
+                    <TextBlock
+                        Text="No quick links found"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        Margin="0,12,0,4"
+                        HorizontalAlignment="Center"
+                        Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock
+                        Text="Try adjusting your search terms or category filter."
+                        FontSize="13"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        HorizontalAlignment="Center" />
+                    <ui:Button
+                        Margin="0,16,0,0"
+                        HorizontalAlignment="Center"
+                        Appearance="Secondary"
+                        Content="Clear Search"
+                        Icon="{ui:SymbolIcon Dismiss24}"
+                        Command="{Binding ClearSearchCommand}" />
+                </StackPanel>
+
+                <!-- Cards Grid -->
+                <ItemsControl ItemsSource="{Binding FilteredLinks}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:LinkModel}">
+                            <Border
+                                Width="340"
+                                MinHeight="136"
+                                Margin="6"
+                                CornerRadius="8"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Padding="14,12">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Effect">
+                                            <Setter.Value>
+                                                <DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.12" Color="Black" />
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource AccentControlElevationBorderBrush}" />
+                                                <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Top Row: Icon, Title, Category Badge, Action Menu -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Icon Container -->
+                                        <Border
+                                            Width="36"
+                                            Height="36"
+                                            CornerRadius="6"
+                                            Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                                            VerticalAlignment="Top"
+                                            Margin="0,0,10,0">
+                                            <ui:SymbolIcon
+                                                Symbol="{Binding Icon}"
+                                                FontSize="20"
+                                                Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center" />
+                                        </Border>
+
+                                        <!-- Title and Category Badge -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock
+                                                Text="{Binding DisplayName}"
+                                                FontSize="15"
+                                                FontWeight="SemiBold"
+                                                TextTrimming="CharacterEllipsis"
+                                                Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                            <Border
+                                                HorizontalAlignment="Left"
+                                                Margin="0,3,0,0"
+                                                Padding="6,1"
+                                                CornerRadius="4"
+                                                Background="{DynamicResource SubtleFillColorTertiaryBrush}"
+                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1">
+                                                <TextBlock
+                                                    Text="{Binding Category}"
+                                                    FontSize="10"
+                                                    FontWeight="Medium"
+                                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Top-Right Actions: Copy, Edit, Delete -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                                            <ui:Button
+                                                Appearance="Transparent"
+                                                Padding="5"
+                                                ToolTip="Copy link to clipboard"
+                                                Command="{Binding DataContext.CopyLinkCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                CommandParameter="{Binding}">
+                                                <ui:SymbolIcon Symbol="Copy24" FontSize="14" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                            </ui:Button>
+                                            <ui:Button
+                                                Appearance="Transparent"
+                                                Padding="5"
+                                                ToolTip="Edit quick link"
+                                                Command="{Binding DataContext.EditLinkCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                CommandParameter="{Binding}">
+                                                <ui:SymbolIcon Symbol="Edit24" FontSize="14" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                            </ui:Button>
+                                            <ui:Button
+                                                Appearance="Transparent"
+                                                Padding="5"
+                                                ToolTip="Delete quick link"
+                                                Command="{Binding DataContext.DeleteLinkCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                CommandParameter="{Binding}">
+                                                <ui:SymbolIcon Symbol="Delete24" FontSize="14" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                            </ui:Button>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Middle Row: Description -->
+                                    <TextBlock
+                                        Grid.Row="1"
+                                        Margin="0,8,0,10"
+                                        Text="{Binding Description}"
+                                        FontSize="12"
+                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap"
+                                        MaxHeight="36"
+                                        TextTrimming="CharacterEllipsis" />
+
+                                    <!-- Bottom Row: Target URL/Host preview + Launch Button -->
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ui:SymbolIcon
+                                                Symbol="Open24"
+                                                FontSize="11"
+                                                Margin="0,0,4,0"
+                                                Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                            <TextBlock
+                                                Text="{Binding DisplayHost}"
+                                                FontSize="11"
+                                                Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                                TextTrimming="CharacterEllipsis"
+                                                MaxWidth="200" />
+                                        </StackPanel>
+
+                                        <ui:Button
+                                            Grid.Column="1"
+                                            Appearance="Primary"
+                                            Padding="12,5"
+                                            Content="Open"
+                                            Icon="{ui:SymbolIcon ArrowUpRight24}"
+                                            Command="{Binding DataContext.LinkClickCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                            CommandParameter="{Binding}" />
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+        </ScrollViewer>
     </Grid>
 </Page>

@@ -44,7 +44,7 @@ public partial class MainWindow : IWindow
         [
             new NavigationViewItem("Dashboard", SymbolRegular.Home24, typeof(DashboardPage)),
             new NavigationViewItem("Tools", SymbolRegular.Wrench24, typeof(ToolsPage)),
-            new NavigationViewItem("Links", SymbolRegular.Globe24, typeof(LinksPage))
+            new NavigationViewItem("Quick Links", SymbolRegular.Link24, typeof(LinksPage))
         ];
 
         ViewModel.NavigationFooter =

@@ -1,6 +1,14 @@
-﻿namespace AMFormsCST.Desktop.Services;
+using AMFormsCST.Desktop.Models;
 
-public interface ILinksService
+namespace AMFormsCST.Desktop.Services
 {
-    public void OpenLink(string linkKey);
+    public interface ILinksService
+{
+    void OpenLink(string linkKey);
+    bool TryOpenLink(string target);
+    List<LinkModel> LoadLinks();
+    void SaveLinks(IEnumerable<LinkModel> links);
+    List<LinkModel> GetDefaultLinks();
+    string ResolvePath(string linkKey);
+}
 }

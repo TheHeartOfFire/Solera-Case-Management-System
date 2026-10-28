@@ -1,0 +1,122 @@
+<ui:FluentWindow
+    x:Class="AMFormsCST.Desktop.Views.Dialogs.AddEditLinkWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:viewmodels="clr-namespace:AMFormsCST.Desktop.ViewModels.Dialogs"
+    Title="{Binding DialogTitle}"
+    Width="520"
+    Height="540"
+    MinWidth="460"
+    MinHeight="480"
+    WindowStartupLocation="CenterOwner"
+    WindowStyle="ToolWindow"
+    Topmost="True"
+    WindowBackdropType="Mica"
+    ExtendsContentIntoTitleBar="True"
+    mc:Ignorable="d"
+    d:DataContext="{d:DesignInstance viewmodels:AddLinkDialogViewModel}">
+
+    <Grid Margin="24,12,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar drag area -->
+        <Grid Height="32" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <TextBlock
+                VerticalAlignment="Center"
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Text="{Binding DialogTitle}" />
+        </Grid>
+
+        <!-- Form fields in ScrollViewer -->
+        <ScrollViewer Grid.Row="1" Margin="0,10,0,16" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- Display Name -->
+                <StackPanel Margin="0,0,0,12">
+                    <Label Content="Display Name *" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <ui:TextBox
+                        PlaceholderText="e.g. Solera Knowledge Base, CST Support"
+                        Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <!-- URL or Path with Browse button -->
+                <StackPanel Margin="0,0,0,12">
+                    <Label Content="URL or File Path *" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox
+                            Margin="0,0,8,0"
+                            PlaceholderText="https://... or C:\Path\To\App.exe"
+                            Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}" />
+                        <ui:Button
+                            Grid.Column="1"
+                            Appearance="Secondary"
+                            Command="{Binding BrowseFileCommand}"
+                            Content="Browse..."
+                            Icon="{ui:SymbolIcon FolderOpen24}" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- Category -->
+                <StackPanel Margin="0,0,0,12">
+                    <Label Content="Category" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <ComboBox
+                        IsEditable="True"
+                        ItemsSource="{Binding AvailableCategories}"
+                        Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <!-- Description -->
+                <StackPanel Margin="0,0,0,12">
+                    <Label Content="Description" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <ui:TextBox
+                        PlaceholderText="Optional brief description of this resource"
+                        Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <!-- Icon Selector -->
+                <StackPanel Margin="0,0,0,12">
+                    <Label Content="Icon" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <ComboBox
+                        ItemsSource="{Binding AvailableIcons}"
+                        SelectedItem="{Binding SelectedIcon}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type viewmodels:IconChoiceItem}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ui:SymbolIcon Symbol="{Binding Symbol}" FontSize="18" Margin="0,0,8,0" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Action buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <ui:Button
+                Appearance="Primary"
+                Content="Save Link"
+                Click="OnSaveClicked"
+                Margin="0,0,10,0"
+                IsDefault="True" />
+            <ui:Button
+                Appearance="Secondary"
+                Content="Cancel"
+                IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>
+
