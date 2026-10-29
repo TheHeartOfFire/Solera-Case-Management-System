@@ -65,6 +65,11 @@ flowchart LR
 - [ ] Typography, spacing, button hierarchy, and scrollbar uniformity
 - [ ] Eliminate all compiler and XAML warnings
 - [ ] Add About Page and diagnostic versioning details
+- [ ] **Internationalization & Localization (i18n / l10n)**:
+  - [ ] Centralize hardcoded UI strings into Resource dictionaries / `.resx` architecture
+  - [ ] Add Language Selection setting in Settings Page (English default)
+  - [ ] Spanish translation (`es-ES` / `es-MX`)
+  - [ ] Prominent Indian language translations (Hindi `hi-IN`, Telugu `te-IN`, Tamil `ta-IN`)
 
 #### Phase 5: Scalable Role System & Modular Architecture
 - [ ] Define extensible Role Schema governing feature visibility, views, and toolbars
