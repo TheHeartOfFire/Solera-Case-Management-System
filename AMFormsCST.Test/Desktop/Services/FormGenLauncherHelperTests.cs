@@ -528,6 +528,43 @@ public class FormGenLauncherHelperTests
         }
     }
 
+    [Fact]
+    public void ReleaseFileLocksFromAgent_WhenNoPortFile_ReturnsFalse()
+    {
+        _ = UsePrivatePortFile();
+        var result = FormGenLauncherHelper.ReleaseFileLocksFromAgent();
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task ReleaseFileLocksFromAgent_WhenServerRespondsOk_ReturnsTrue()
+    {
+        var tempPortFile = UsePrivatePortFile();
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+
+        File.WriteAllText(tempPortFile, port.ToString());
+
+        var serverTask = System.Threading.Tasks.Task.Run(() =>
+        {
+            using var client = listener.AcceptTcpClient();
+            using var stream = client.GetStream();
+            using var reader = new StreamReader(stream, new System.Text.UTF8Encoding(false));
+            using var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)) { AutoFlush = true };
+
+            var line = reader.ReadLine();
+            if (line == "RELEASE_FILE_LOCKS")
+            {
+                writer.WriteLine("OK:1");
+            }
+        });
+
+        var result = FormGenLauncherHelper.ReleaseFileLocksFromAgent();
+        Assert.True(result);
+        await serverTask;
+    }
+
     /// <summary>
     /// Points the launcher helper at a private directory for the current test's async flow, so parallel tests
     /// and background sync calls never share (or delete) the real %TEMP%\formgen_agent.port.

@@ -35,6 +35,7 @@ public class FormGenAgent {
     private static final int SWT_SEPARATOR = 2;
     private static final int SWT_POP_UP = 8;
     private static final int SWT_PUSH = 8;
+    private static final int SWT_Dispose = 12;
     private static final int SWT_Selection = 13;
     private static final int SWT_FocusIn = 15;
     private static final int SWT_Show = 22;
@@ -43,6 +44,8 @@ public class FormGenAgent {
     private static final int SWT_CASCADE = 64;
     private static final int SWT_MOD1 = 262144;  // SWT.CONTROL
     private static final int SWT_SHIFT = 131072; // SWT.SHIFT
+
+    private static final Set<Object> allKnownViewers = Collections.newSetFromMap(new WeakHashMap<Object, Boolean>());
 
     public static void log(String msg) {
         try {
@@ -126,6 +129,14 @@ public class FormGenAgent {
                 public void run() {
                     try {
                         new File(PORT_FILE).delete();
+                    } catch (Throwable ignored) {}
+                    try {
+                        synchronized (allKnownViewers) {
+                            for (Object v : allKnownViewers) {
+                                releaseViewerSourceDocument(v);
+                            }
+                            allKnownViewers.clear();
+                        }
                     } catch (Throwable ignored) {}
                 }
             }));
@@ -872,7 +883,7 @@ public class FormGenAgent {
                 }
             }
 
-            // 2. Hook NewFormGen.mainTabFolder Selection event so switching open forms preserves UdfDlg's active tab
+            // 2. Hook NewFormGen.mainTabFolder Selection & Close events
             Field mtfField = formGenInstance.getClass().getDeclaredField("mainTabFolder");
             mtfField.setAccessible(true);
             final Object mainTabFolder = mtfField.get(formGenInstance);
@@ -901,8 +912,303 @@ public class FormGenAgent {
                     Method addListener = mainTabFolder.getClass().getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
                     addListener.invoke(mainTabFolder, SWT_Selection, listener);
                 }
+
+                // Hook CTabFolder2Listener on mainTabFolder to catch tab close box clicks
+                if (!Boolean.TRUE.equals(getData.invoke(mainTabFolder, "SoleraTabCloseHook"))) {
+                    Method setData = mainTabFolder.getClass().getMethod("setData", String.class, Object.class);
+                    setData.invoke(mainTabFolder, "SoleraTabCloseHook", Boolean.TRUE);
+
+                    try {
+                        Class<?> tab2Class = Class.forName("org.eclipse.swt.custom.CTabFolder2Listener");
+                        InvocationHandler tab2Handler = new InvocationHandler() {
+                            @Override
+                            public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                                String name = method.getName();
+                                if ("close".equals(name) && args != null && args.length > 0) {
+                                    Object ev = args[0];
+                                    if (ev != null) {
+                                        try {
+                                            Field itemF = ev.getClass().getField("item");
+                                            Object item = itemF.get(ev);
+                                            if (item != null) {
+                                                Method getCtrl = item.getClass().getMethod("getControl");
+                                                Object viewer = getCtrl.invoke(item);
+                                                log("CTabFolder2Listener.close fired for viewer: " + viewer);
+                                                releaseViewerSourceDocument(viewer);
+                                            }
+                                        } catch (Throwable t) {
+                                            log("Error in CTabFolder2Listener close handler: " + t.getMessage());
+                                        }
+                                    }
+                                } else if ("equals".equals(name)) {
+                                    return proxy == (args != null && args.length > 0 ? args[0] : null);
+                                } else if ("hashCode".equals(name)) {
+                                    return System.identityHashCode(proxy);
+                                } else if ("toString".equals(name)) {
+                                    return "CTabFolder2ListenerProxy@" + Integer.toHexString(System.identityHashCode(proxy));
+                                }
+                                return null;
+                            }
+                        };
+                        Object tab2Proxy = Proxy.newProxyInstance(display.getClass().getClassLoader(), new Class<?>[] { tab2Class }, tab2Handler);
+                        Method addTab2 = mainTabFolder.getClass().getMethod("addCTabFolder2Listener", tab2Class);
+                        addTab2.invoke(mainTabFolder, tab2Proxy);
+                        log("Attached CTabFolder2Listener to mainTabFolder.");
+                    } catch (Throwable t) {
+                        log("Could not attach CTabFolder2Listener: " + t.getMessage());
+                    }
+
+                    try {
+                        Class<?> tab1Class = Class.forName("org.eclipse.swt.custom.CTabFolderListener");
+                        InvocationHandler tab1Handler = new InvocationHandler() {
+                            @Override
+                            public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                                String name = method.getName();
+                                if ("itemClosed".equals(name) && args != null && args.length > 0) {
+                                    Object ev = args[0];
+                                    if (ev != null) {
+                                        try {
+                                            Field itemF = ev.getClass().getField("item");
+                                            Object item = itemF.get(ev);
+                                            if (item != null) {
+                                                Method getCtrl = item.getClass().getMethod("getControl");
+                                                Object viewer = getCtrl.invoke(item);
+                                                log("CTabFolderListener.itemClosed fired for viewer: " + viewer);
+                                                releaseViewerSourceDocument(viewer);
+                                            }
+                                        } catch (Throwable t) {
+                                            log("Error in CTabFolderListener itemClosed handler: " + t.getMessage());
+                                        }
+                                    }
+                                } else if ("equals".equals(name)) {
+                                    return proxy == (args != null && args.length > 0 ? args[0] : null);
+                                } else if ("hashCode".equals(name)) {
+                                    return System.identityHashCode(proxy);
+                                } else if ("toString".equals(name)) {
+                                    return "CTabFolderListenerProxy@" + Integer.toHexString(System.identityHashCode(proxy));
+                                }
+                                return null;
+                            }
+                        };
+                        Object tab1Proxy = Proxy.newProxyInstance(display.getClass().getClassLoader(), new Class<?>[] { tab1Class }, tab1Handler);
+                        Method addTab1 = mainTabFolder.getClass().getMethod("addCTabFolderListener", tab1Class);
+                        addTab1.invoke(mainTabFolder, tab1Proxy);
+                        log("Attached CTabFolderListener to mainTabFolder.");
+                    } catch (Throwable ignored) {}
+                }
+
+                // Register active tab items, attach dispose listeners, and clean up any closed/orphaned tabs
+                Method getItemsMethod = mainTabFolder.getClass().getMethod("getItems");
+                Object[] tabItems = (Object[]) getItemsMethod.invoke(mainTabFolder);
+                Set<Object> currentActiveViewers = new HashSet<Object>();
+                if (tabItems != null) {
+                    for (final Object tabItem : tabItems) {
+                        if (tabItem == null || isDisposed(tabItem)) continue;
+                        try {
+                            Method getControl = tabItem.getClass().getMethod("getControl");
+                            final Object viewer = getControl.invoke(tabItem);
+                            if (viewer != null) {
+                                currentActiveViewers.add(viewer);
+                                synchronized (allKnownViewers) {
+                                    allKnownViewers.add(viewer);
+                                }
+
+                                Method getViewerData = viewer.getClass().getMethod("getData", String.class);
+                                if (!Boolean.TRUE.equals(getViewerData.invoke(viewer, "SoleraViewerDisposeHook"))) {
+                                    Method setViewerData = viewer.getClass().getMethod("setData", String.class, Object.class);
+                                    setViewerData.invoke(viewer, "SoleraViewerDisposeHook", Boolean.TRUE);
+
+                                    Object viewerDisposeListener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            log("Viewer SWT.Dispose hook triggered for: " + viewer);
+                                            releaseViewerSourceDocument(viewer);
+                                        }
+                                    });
+                                    Method addListener = viewer.getClass().getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
+                                    addListener.invoke(viewer, SWT_Dispose, viewerDisposeListener);
+                                }
+                            }
+
+                            Method getTabItemData = tabItem.getClass().getMethod("getData", String.class);
+                            if (!Boolean.TRUE.equals(getTabItemData.invoke(tabItem, "SoleraTabItemDisposeHook"))) {
+                                Method setTabItemData = tabItem.getClass().getMethod("setData", String.class, Object.class);
+                                setTabItemData.invoke(tabItem, "SoleraTabItemDisposeHook", Boolean.TRUE);
+
+                                Object tabItemDisposeListener = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        try {
+                                            Object ctrl = tabItem.getClass().getMethod("getControl").invoke(tabItem);
+                                            if (ctrl == null) ctrl = viewer;
+                                            log("TabItem SWT.Dispose hook triggered for: " + tabItem + ", viewer: " + ctrl);
+                                            releaseViewerSourceDocument(ctrl);
+                                        } catch (Throwable ignored) {}
+                                    }
+                                });
+                                Method addListener = tabItem.getClass().getMethod("addListener", int.class, Class.forName("org.eclipse.swt.widgets.Listener"));
+                                addListener.invoke(tabItem, SWT_Dispose, tabItemDisposeListener);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                }
+
+                // Check for orphaned viewers (tabs that were closed)
+                List<Object> orphans = new ArrayList<Object>();
+                synchronized (allKnownViewers) {
+                    Iterator<Object> it = allKnownViewers.iterator();
+                    while (it.hasNext()) {
+                        Object v = it.next();
+                        if (v == null || isDisposed(v) || !currentActiveViewers.contains(v)) {
+                            orphans.add(v);
+                            it.remove();
+                        }
+                    }
+                }
+                for (Object orphan : orphans) {
+                    log("Cleaning up closed/orphaned viewer: " + orphan);
+                    releaseViewerSourceDocument(orphan);
+                }
             }
         } catch (Throwable ignored) {}
+    }
+
+    private static Field findFieldInHierarchy(Class<?> clazz, String fieldName) {
+        Class<?> curr = clazz;
+        while (curr != null && curr != Object.class) {
+            try {
+                Field f = curr.getDeclaredField(fieldName);
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException e) {
+                curr = curr.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    public static void releaseViewerSourceDocument(Object viewer) {
+        if (viewer == null) return;
+        try {
+            log("Releasing PDF source document for viewer: " + viewer.getClass().getName());
+
+            // 1. Try invoking viewer.onClose(true)
+            try {
+                Method onCloseMethod = null;
+                for (Method m : viewer.getClass().getMethods()) {
+                    if ("onClose".equals(m.getName()) && m.getParameterTypes().length == 1 &&
+                        m.getParameterTypes()[0] == boolean.class) {
+                        onCloseMethod = m;
+                        break;
+                    }
+                }
+                if (onCloseMethod == null) {
+                    for (Method m : viewer.getClass().getDeclaredMethods()) {
+                        if ("onClose".equals(m.getName()) && m.getParameterTypes().length == 1 &&
+                            m.getParameterTypes()[0] == boolean.class) {
+                            onCloseMethod = m;
+                            break;
+                        }
+                    }
+                }
+                if (onCloseMethod != null) {
+                    onCloseMethod.setAccessible(true);
+                    onCloseMethod.invoke(viewer, true);
+                    log("Successfully invoked viewer.onClose(true).");
+                }
+            } catch (Throwable t) {
+                log("viewer.onClose(true) notice: " + t.getMessage());
+            }
+
+            // 2. Direct inspection / fallback on sourceDocument field
+            try {
+                Field srcDocField = findFieldInHierarchy(viewer.getClass(), "sourceDocument");
+                if (srcDocField != null) {
+                    srcDocField.setAccessible(true);
+                    Object srcDoc = srcDocField.get(viewer);
+                    if (srcDoc != null) {
+                        // Call close() on PdfSourceDocument
+                        try {
+                            Method closeMethod = srcDoc.getClass().getMethod("close");
+                            closeMethod.setAccessible(true);
+                            closeMethod.invoke(srcDoc);
+                            log("Successfully invoked sourceDocument.close().");
+                        } catch (Throwable t) {
+                            log("sourceDocument.close() notice: " + t.getMessage());
+                        }
+
+                        // Also invoke PDDocument.close() directly if 'doc' field exists
+                        try {
+                            Field docField = findFieldInHierarchy(srcDoc.getClass(), "doc");
+                            if (docField != null) {
+                                docField.setAccessible(true);
+                                Object pdDoc = docField.get(srcDoc);
+                                if (pdDoc != null) {
+                                    Method pdClose = pdDoc.getClass().getMethod("close");
+                                    pdClose.setAccessible(true);
+                                    pdClose.invoke(pdDoc);
+                                    docField.set(srcDoc, null);
+                                    log("Successfully invoked PDDocument.close() directly.");
+                                }
+                            }
+                        } catch (Throwable ignored) {}
+
+                        srcDocField.set(viewer, null);
+                    }
+                }
+            } catch (Throwable t) {
+                log("Error accessing sourceDocument directly: " + t.getMessage());
+            }
+        } catch (Throwable t) {
+            log("Error in releaseViewerSourceDocument: " + t.getMessage());
+        }
+    }
+
+    public static int releaseOrphanedDocLocksOnUiThread() {
+        int count = 0;
+        try {
+            discoverFormGen();
+            if (formGenInstance == null) return 0;
+            Field f = formGenInstance.getClass().getDeclaredField("mainTabFolder");
+            f.setAccessible(true);
+            Object mainTabFolder = f.get(formGenInstance);
+            Set<Object> activeViewers = new HashSet<Object>();
+            if (mainTabFolder != null && !isDisposed(mainTabFolder)) {
+                Method getItems = mainTabFolder.getClass().getMethod("getItems");
+                Object[] items = (Object[]) getItems.invoke(mainTabFolder);
+                if (items != null) {
+                    for (Object item : items) {
+                        if (item != null && !isDisposed(item)) {
+                            Object v = item.getClass().getMethod("getControl").invoke(item);
+                            if (v != null) activeViewers.add(v);
+                        }
+                    }
+                }
+            }
+
+            List<Object> orphans = new ArrayList<Object>();
+            synchronized (allKnownViewers) {
+                Iterator<Object> it = allKnownViewers.iterator();
+                while (it.hasNext()) {
+                    Object v = it.next();
+                    if (v == null || isDisposed(v) || !activeViewers.contains(v)) {
+                        orphans.add(v);
+                        it.remove();
+                    }
+                }
+            }
+
+            for (Object orphan : orphans) {
+                releaseViewerSourceDocument(orphan);
+                count++;
+            }
+            if (count > 0) {
+                log("releaseOrphanedDocLocks released " + count + " orphaned/closed viewer(s).");
+            }
+        } catch (Throwable t) {
+            log("Error in releaseOrphanedDocLocksOnUiThread: " + t.getMessage());
+        }
+        return count;
     }
 
     public static boolean onPreOpenFormgenFile(Object nfgInstance, File file) {
@@ -1633,6 +1939,22 @@ public class FormGenAgent {
                     OutputStream out = socket.getOutputStream();
                     out.write((sb.toString() + "\n").getBytes("UTF-8"));
                     out.flush();
+                } else if (line.equalsIgnoreCase("RELEASE_FILE_LOCKS") ||
+                           line.equalsIgnoreCase("CLOSE_ORPHANED_DOCS") ||
+                           line.equalsIgnoreCase("CLOSE_UNUSED_DOCS")) {
+                    final int[] releasedCount = new int[1];
+                    Object display = getDisplay();
+                    if (display != null && !isDisposed(display)) {
+                        runOnDisplay(display, new Runnable() {
+                            @Override
+                            public void run() {
+                                releasedCount[0] = releaseOrphanedDocLocksOnUiThread();
+                            }
+                        });
+                    }
+                    OutputStream out = socket.getOutputStream();
+                    out.write(("OK:" + releasedCount[0] + "\n").getBytes("UTF-8"));
+                    out.flush();
                 } else if (line.equalsIgnoreCase("SHUTDOWN")) {
                     try {
                         if (isFeatureEnabled("FormGenAutoRestoreForms")) {
@@ -1954,13 +2276,14 @@ public class FormGenAgent {
 
             Method addFilterMethod = display.getClass().getMethod("addFilter", int.class, listenerClass);
             addFilterMethod.invoke(display, SWT_KeyDown, listenerProxy);     // SWT.KeyDown = 1
+            addFilterMethod.invoke(display, SWT_Dispose, listenerProxy);     // SWT.Dispose = 12
             addFilterMethod.invoke(display, SWT_Selection, listenerProxy);   // SWT.Selection = 13
             addFilterMethod.invoke(display, SWT_FocusIn, listenerProxy);     // SWT.FocusIn = 15
             addFilterMethod.invoke(display, SWT_Show, listenerProxy);        // SWT.Show = 22
             addFilterMethod.invoke(display, SWT_Activate, listenerProxy);    // SWT.Activate = 26
             addFilterMethod.invoke(display, SWT_MenuDetect, listenerProxy);  // SWT.MenuDetect = 35
 
-            log("SWT context menu & dialog filters installed (KeyDown=1, Selection=13, FocusIn=15, Show=22, Activate=26, MenuDetect=35).");
+            log("SWT context menu & dialog filters installed (KeyDown=1, Dispose=12, Selection=13, FocusIn=15, Show=22, Activate=26, MenuDetect=35).");
             startShellEnhanceWatcher(display);
         } catch (Throwable t) {
             log("Error installing SWT menu filters: " + t.getMessage());
@@ -2057,7 +2380,25 @@ public class FormGenAgent {
 
             Field widgetField = eventObj.getClass().getField("widget");
             Object widget = widgetField.get(eventObj);
-            if (widget == null || isDisposed(widget)) return;
+            if (widget == null) return;
+
+            if (eventType == SWT_Dispose) {
+                try {
+                    String cls = widget.getClass().getName();
+                    if (cls.contains("PdfViewer")) {
+                        log("Display filter intercepted SWT_Dispose on PdfViewer: " + widget);
+                        releaseViewerSourceDocument(widget);
+                    } else if (cls.contains("CTabItem")) {
+                        log("Display filter intercepted SWT_Dispose on CTabItem: " + widget);
+                        Method getControl = widget.getClass().getMethod("getControl");
+                        Object ctrl = getControl.invoke(widget);
+                        releaseViewerSourceDocument(ctrl);
+                    }
+                } catch (Throwable ignored) {}
+                return;
+            }
+
+            if (isDisposed(widget)) return;
 
             Class<?> menuClass = Class.forName("org.eclipse.swt.widgets.Menu");
             Class<?> controlClass = Class.forName("org.eclipse.swt.widgets.Control");

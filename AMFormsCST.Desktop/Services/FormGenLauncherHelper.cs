@@ -635,6 +635,42 @@ if ""%~1""=="""" (
     }
 
     /// <summary>
+    /// Commands FormGenAgent to release PDFBox and file handles for any closed or orphaned forms.
+    /// </summary>
+    public static bool ReleaseFileLocksFromAgent(ILogService? logger = null)
+    {
+        try
+        {
+            var portFilePath = GetPortFilePath();
+            if (!File.Exists(portFilePath)) return false;
+
+            var portText = File.ReadAllText(portFilePath).Trim();
+            if (!int.TryParse(portText, out int port) || port <= 0 || port > 65535) return false;
+
+            using var client = new TcpClient { ReceiveTimeout = IpcIoTimeoutMs, SendTimeout = IpcIoTimeoutMs };
+            if (!client.ConnectAsync("127.0.0.1", port).Wait(IpcConnectTimeoutMs))
+            {
+                client.Close();
+                return false;
+            }
+
+            using var stream = client.GetStream();
+            using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+            using var reader = new StreamReader(stream, new UTF8Encoding(false));
+
+            writer.WriteLine("RELEASE_FILE_LOCKS");
+            var response = reader.ReadLine();
+            logger?.LogInfo($"FormGenAgent RELEASE_FILE_LOCKS response: {response}");
+            return response?.StartsWith("OK", StringComparison.OrdinalIgnoreCase) == true;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning($"Failed to query RELEASE_FILE_LOCKS from FormGenAgent: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Gracefully requests FormGen shutdown or terminates running FormGen JVM instances and waits for file locks to release.
     /// </summary>
     public static void CloseFormGenProcesses(ILogService? logger = null)
