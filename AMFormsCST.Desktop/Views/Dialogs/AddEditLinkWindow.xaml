@@ -11,10 +11,11 @@
     Height="540"
     MinWidth="460"
     MinHeight="480"
-    WindowStartupLocation="CenterOwner"
+    WindowStartupLocation="CenterScreen"
     WindowStyle="ToolWindow"
     Topmost="True"
-    WindowBackdropType="Mica"
+    WindowBackdropType="None"
+    Background="{DynamicResource ApplicationBackgroundBrush}"
     ExtendsContentIntoTitleBar="True"
     mc:Ignorable="d"
     d:DataContext="{d:DesignInstance viewmodels:AddLinkDialogViewModel}">
@@ -34,6 +35,13 @@
                 FontWeight="SemiBold"
                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                 Text="{Binding DialogTitle}" />
+            <ui:Button
+                HorizontalAlignment="Right"
+                Appearance="Transparent"
+                Padding="6,4"
+                IsCancel="True">
+                <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+            </ui:Button>
         </Grid>
 
         <!-- Form fields in ScrollViewer -->
@@ -74,7 +82,7 @@
                     <ComboBox
                         IsEditable="True"
                         ItemsSource="{Binding AvailableCategories}"
-                        Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}" />
+                        Text="{Binding Category}" />
                 </StackPanel>
 
                 <!-- Description -->
