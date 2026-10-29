@@ -98,87 +98,74 @@ Keep these goals in mind across all development tasks until marked complete.
 - [ ] Code Blocks Testing with Customer Data
 
 #### 10. FormGen Mod Roadmap & Pre-NextGen Wishlist
-##### A. Prompt Management & Programming
-- [ ] Bulk Prompt Operations:
+
+##### A. Multi-App Capabilities (SCMT & FormGen Mod)
+- [ ] **Bulk Prompt Operations** `[Both SCMT & FormGen Mod]`:
   - [ ] Prompt cloning (duplicate an existing prompt with types, labels, and options)
   - [ ] Bulk prompt reordering (multi-select prompts and move up/down together)
   - [ ] Bulk prompt deletion (multi-select prompts to remove)
   - [ ] Delete prompts via `Delete` key on click/highlight (currently only `Alt+D`)
   - [ ] Bulk editing of common attributes across prompts
-- [ ] Prompt & Code Transfer:
+- [ ] **Prompt & Code Transfer** `[Both SCMT & FormGen Mod]`:
   - [ ] Copy Init / Prompts / Post screen programming between forms (via copy-paste or cross-form import dialog)
-- [ ] Dynamic Prompts:
-  - [ ] Enable/disable prompts dynamically based on selected state of other prompts
-  - [ ] Change prompt label dynamically based on state of other prompts
-- [ ] Required Prompts Expansion:
-  - [ ] Resolve validation for Date and Dropdown prompts (e.g. dropdown not equal to default value)
-  - [ ] Expanded requirement operators (Equal / Not Equal, Blank / Not Blank)
-  - [ ] Group requirement logic (OR relationships: Prompt A OR B OR C meets requirement)
-- [ ] Form Counters:
-  - [ ] Form print counter tracking (auto-incrementing per print for invoices, serials, and tracking)
-
-##### B. Field & Document Operations
-- [ ] Bulk Field Editing:
-  - [ ] Bulk operations across page fields (bold all, italic all, font size all, align all)
-- [x] Field Alignment & Distribution (Implemented in SCMT FormGen Utilities)
-- [ ] Extended Field Formatting:
-  - [ ] Italics font styling support
-  - [ ] Money fields option to omit forced `$` prefix
-  - [ ] Configurable numbers-as-words (include/exclude cents, "cents" suffix, "dollars" prefix, "and" conjunction, custom separators)
-  - [ ] Left and Center alignment options for numeric fields
-- [ ] Vehicle Merchandising (VM) Safety Detection:
+- [ ] **Bulk Field Editing** `[Both SCMT & FormGen Mod]`:
+  - [ ] Bulk operations across page fields (bold all, font size all, align all)
+- [ ] **Vehicle Merchandising (VM) Safety Detection** `[Both SCMT & FormGen Mod]`:
   - [ ] Detect if form is VM-safe (restricted to subset of F fields) and display status indicator
-- [ ] Barcode & QR Code Dynamic Generation:
-  - [ ] Programmatic barcode / QR code generation at print time (customer profile, vehicle profile, AMPS links)
-- [ ] Label Printer Support:
-  - [ ] Small Zebra & Dymo label roll format support (beyond standard 8.5x11 sheet labels)
+- [ ] **Automatic PDF Sanitization** `[Both SCMT & FormGen Mod]`:
+  - [ ] Strip interactive form fields and embedded JavaScript prior to loading in FormGen
 
-##### C. FormGen UI & Workflow Experience
-- [ ] Background / Console Window Suppression:
-  - [ ] Launch FormGen cleanly without lingering CLI console window (via `javaw` or SCMT launcher mod)
-- [ ] File Extension Associations:
-  - [ ] Associate `.formgen` files with FormGen singleton (open in active instance or launch fresh)
-- [ ] Enhanced Undo / Redo Lifecycle:
-  - [x] Code editor undo/redo support via `StyledTextUndoManager` (Implemented in FormGenAgent)
+##### B. FormGen Mod Only Candidates
+- [ ] **FormGen UI & Shell Experience** `[FormGen Mod]`:
+  - [ ] Background / Console Window Suppression (launch cleanly without lingering CLI console window via `javaw` or launcher mod)
+  - [ ] Form Comparison Tool (side-by-side comparison of 2 forms for visual alignment and field/prompt/codeline migration)
+  - [ ] Theme Customization (optional dark theme for FormGen via configuration/JSON; cross-ref Section 7)
+- [ ] **Enhanced Undo / Redo Lifecycle** `[FormGen Mod]`:
+  - [x] Code editor undo/redo support via `StyledTextUndoManager` *(Implemented in FormGenAgent)*
   - [ ] Deep undo/redo: field contents, addition/subtraction of prompts, prompt contents, and Init/Prompts/Post tabs
   - [ ] "Undo All / Reset to Checkout" revert action
   - [ ] "Preview Checkout" semi-transparent overlay to visually confirm changes against original checkout
-- [ ] Theme Customization:
-  - [ ] Dark theme support for FormGen via configuration/JSON
-- [ ] Form Comparison Tool:
-  - [ ] Side-by-side comparison of 2 forms for visual alignment and field/prompt/codeline migration
-
-##### D. PDF Tools & Document Sanitization
-- [x] Release PDF file locks on closed tabs (Fixed in PR #105)
-- [ ] "Open in Adobe" button from FormGen toolbar/menu
-- [ ] Automatic PDF sanitization (strip interactive form fields and embedded JavaScript prior to load)
-- [ ] PDF upload size check & compression warning before publishing
-
-##### E. Search & Repository Management
-- [ ] Form Search Improvements & Crash Prevention:
-  - [ ] Prevent UI freeze / crash on large query results (500+ items) via paging/batching
+- [ ] **PDF & Publishing Tools** `[FormGen Mod]`:
+  - [ ] "Open in Adobe" button from FormGen toolbar/menu
+  - [ ] PDF upload size check & compression warning before publishing
+  - [ ] Advanced Publishing: "Publish to All" button to deploy updates to all dealers with the form on menu, with option to fork multi-dealer published forms with unique UUIDs
+- [ ] **Search & Repository Management** `[FormGen Mod]`:
+  - [ ] Form search crash prevention on large query results (500+ items) via paging/batching
   - [ ] Search by 'Active' forms filter
-  - [ ] Show dealer renamed form titles in search results
+  - [ ] Show dealer-renamed form titles in search results
   - [ ] "Customized" badge to distinguish shared baseline forms from dealer-specific customized forms
   - [ ] Real-time Elasticsearch integration for instant form lookup
-- [ ] Advanced Publishing:
-  - [ ] "Publish to All" button to deploy updates to all dealers with the form on menu
-  - [ ] Fork multi-dealer published forms with unique UUIDs
-- [ ] Multi-Revision Form History:
-  - [ ] Unified form definition tracking multiple base image and code revisions under one entry
-- [ ] Global Forms Libraries:
-  - [ ] Organize forms into OEM, Lender, State, Generic, and Licensed libraries with dealer-level access control
+- [ ] **Forms Libraries & Custom Fields** `[FormGen Mod]`:
+  - [ ] Global Forms Libraries: organize forms into OEM, Lender, State, Generic, and Licensed libraries with dealer-level access control
+  - [ ] Custom Runtime Calculation Fields: user-defined composite fields in FormGen
 
-##### F. Dealership, CST & Formula Tooling
-- [x] Scratch-like Formula Builder (Implemented in SCMT Code Blocks)
-- [x] Code Path Tree & Live Testing (Implemented in SCMT Code Blocks)
-- [ ] Custom Runtime Calculation Fields (User-defined composite fields)
-- [ ] Dealership Profiles & CST Integration:
-  - [ ] Select dealer group / company profile to auto-populate Server ID, Company #, and Name across tools
-  - [ ] Shared CST name/server database integration & AMPS direct launcher
-  - [ ] Automated form changelog notes generated from dealer profile / modifications
-- [ ] Advanced Line Adjustment Simulation:
+##### C. SCMT Primary / Cross-Tool Integrations
+- [ ] **Advanced Line Adjustment Simulation** `[SCMT Primary, FormGen Mod Secondary]`:
   - [ ] Import dealer scanned impact print photocopy as semi-transparent overlay
   - [ ] Automated line adjustment simulation comparing impact file to scanned image
+- [ ] **Dealership Profiles & CST Integration** `[SCMT Foundation -> FormGen Mod]`:
+  - [ ] SCMT profile selector for dealer group / company to auto-populate Server ID, Company #, and Name across tools
+  - [ ] Shared CST name/server database integration & AMPS direct launcher
+  - [ ] Automated form changelog notes generated from dealer profile / modifications
+
+##### D. Completed & Already Integrated Features
+- [x] **Release PDF file locks on closed tabs**: *Fixed in [PR #105](https://github.com/TheHeartOfFire/Solera-Case-Management-System/pull/105)*
+- [x] **File Extension Associations**: *Completed via SCMT context menu integration & single-instance launcher*
+- [x] **Scratch-like Formula Builder**: *Implemented in SCMT Code Blocks*
+- [x] **Code Path Tree & Live Testing**: *Implemented in SCMT Code Blocks*
+- [x] **Field Alignment & Distribution**: *Implemented in SCMT FormGen Utilities*
+- [x] **Code Editor Undo/Redo**: *Implemented in FormGenAgent via `StyledTextUndoManager`*
+
+##### E. Feasibility Investigation (Low Confidence / Architectural Review)
+- [ ] **Multi-Revision Form History** `[Investigate Feasibility]`:
+  - [ ] Unified form definition tracking multiple base image and code revisions under one entry (suspected to require central database updates which may not be feasible prior to next-gen)
+
+##### F. Blocked / Not Doable in Mods (Requires Auto/Mate Proper DMS Updates)
+- [ ] ~~**Dynamic Prompts**~~: *Requires updating Auto/Mate proper runtime to receive and manage conditional prompt visibility/labels*
+- [ ] ~~**Required Prompts Expansion**~~: *Requires updating Auto/Mate proper runtime to evaluate complex requirement logic (OR relationships, dropdown default checks, date requirements)*
+- [ ] ~~**Form Counters**~~: *Requires Auto/Mate proper print engine updates to persist and increment per-print invoice/serial counters*
+- [ ] ~~**Barcode & QR Code Dynamic Generation**~~: *Requires Auto/Mate core print engine update to render programmatic barcodes/QRs at print time*
+- [ ] ~~**Label Printer Support**~~: *Requires Auto/Mate core print engine update to support small Zebra/Dymo roll formats beyond 8.5x11 sheets*
+- [ ] ~~**Extended DMS Field Formatting**~~ (Italics styling, suppressing `$` on money fields, left/center alignment for numeric fields): *Requires Auto/Mate print rendering engine changes*
 
 
