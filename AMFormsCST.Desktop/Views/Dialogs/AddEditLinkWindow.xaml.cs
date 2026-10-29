@@ -14,11 +14,6 @@ namespace AMFormsCST.Desktop.Views.Dialogs
             ViewModel = viewModel;
             DataContext = viewModel;
             InitializeComponent();
-
-            if (Application.Current?.MainWindow is Window mainWindow && mainWindow.IsVisible)
-            {
-                Owner = mainWindow;
-            }
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

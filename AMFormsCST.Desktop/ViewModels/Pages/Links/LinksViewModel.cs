@@ -144,7 +144,7 @@ namespace AMFormsCST.Desktop.ViewModels.Pages.Links
     }
 
     [RelayCommand]
-    private void OnLinkClick(LinkModel? parameter)
+    private void OpenLink(LinkModel? parameter)
     {
         if (parameter is null || string.IsNullOrEmpty(parameter.ResolvedPath))
         {
@@ -164,76 +164,100 @@ namespace AMFormsCST.Desktop.ViewModels.Pages.Links
     }
 
     [RelayCommand]
-    private void OnAddLinkClick()
+    private void AddLink()
     {
-        var addLinkVm = new AddLinkDialogViewModel();
-        var dialog = new AddEditLinkWindow(addLinkVm);
-
-        if (dialog.ShowDialog() == true)
+        try
         {
-            var newLink = new LinkModel
+            var addLinkVm = new AddLinkDialogViewModel();
+            var dialog = new AddEditLinkWindow(addLinkVm);
+
+            if (dialog.ShowDialog() == true)
             {
-                Id = Guid.NewGuid().ToString(),
-                DisplayName = addLinkVm.DisplayName.Trim(),
-                Key = addLinkVm.Path.Trim(),
-                TargetUrl = addLinkVm.Path.Trim(),
-                Category = string.IsNullOrWhiteSpace(addLinkVm.Category) ? "Custom" : addLinkVm.Category.Trim(),
-                Description = string.IsNullOrWhiteSpace(addLinkVm.Description) ? null : addLinkVm.Description.Trim(),
-                Icon = addLinkVm.SelectedIcon?.Symbol ?? SymbolRegular.Globe24,
-                IsBuiltIn = false
-            };
+                var newLink = new LinkModel
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    DisplayName = addLinkVm.DisplayName.Trim(),
+                    Key = addLinkVm.Path.Trim(),
+                    TargetUrl = addLinkVm.Path.Trim(),
+                    Category = string.IsNullOrWhiteSpace(addLinkVm.Category) ? "Custom" : addLinkVm.Category.Trim(),
+                    Description = string.IsNullOrWhiteSpace(addLinkVm.Description) ? null : addLinkVm.Description.Trim(),
+                    Icon = addLinkVm.SelectedIcon?.Symbol ?? SymbolRegular.Globe24,
+                    IsBuiltIn = false
+                };
 
-            Links.Add(newLink);
-            _linksService.SaveLinks(Links);
-            RefreshCategories();
-            ApplyFilter();
+                Links.Add(newLink);
+                _linksService.SaveLinks(Links);
+                RefreshCategories();
+                ApplyFilter();
 
-            _snackbarService?.Show(
-                "Quick Link Added",
-                $"Added '{newLink.DisplayName}' to Quick Links.",
-                ControlAppearance.Success,
-                new SymbolIcon(SymbolRegular.CheckmarkCircle24),
-                TimeSpan.FromSeconds(3));
+                _snackbarService?.Show(
+                    "Quick Link Added",
+                    $"Added '{newLink.DisplayName}' to Quick Links.",
+                    ControlAppearance.Success,
+                    new SymbolIcon(SymbolRegular.CheckmarkCircle24),
+                    TimeSpan.FromSeconds(3));
 
-            _logger?.LogInfo($"New quick link added: {newLink.DisplayName} ({newLink.ResolvedPath})");
+                _logger?.LogInfo($"New quick link added: {newLink.DisplayName} ({newLink.ResolvedPath})");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error opening or saving Add Link dialog.", ex);
+            System.Windows.MessageBox.Show(
+                $"Failed to open Add Link dialog: {ex.Message}",
+                "Quick Links Error",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
         }
     }
 
     [RelayCommand]
-    private void OnEditLinkClick(LinkModel? parameter)
+    private void EditLink(LinkModel? parameter)
     {
         if (parameter is null) return;
 
-        var editLinkVm = new AddLinkDialogViewModel();
-        editLinkVm.LoadFrom(parameter);
-        var dialog = new AddEditLinkWindow(editLinkVm);
-
-        if (dialog.ShowDialog() == true)
+        try
         {
-            parameter.DisplayName = editLinkVm.DisplayName.Trim();
-            parameter.TargetUrl = editLinkVm.Path.Trim();
-            parameter.Key = editLinkVm.Path.Trim();
-            parameter.Category = string.IsNullOrWhiteSpace(editLinkVm.Category) ? "Custom" : editLinkVm.Category.Trim();
-            parameter.Description = string.IsNullOrWhiteSpace(editLinkVm.Description) ? null : editLinkVm.Description.Trim();
-            parameter.Icon = editLinkVm.SelectedIcon?.Symbol ?? SymbolRegular.Globe24;
+            var editLinkVm = new AddLinkDialogViewModel();
+            editLinkVm.LoadFrom(parameter);
+            var dialog = new AddEditLinkWindow(editLinkVm);
 
-            _linksService.SaveLinks(Links);
-            RefreshCategories();
-            ApplyFilter();
+            if (dialog.ShowDialog() == true)
+            {
+                parameter.DisplayName = editLinkVm.DisplayName.Trim();
+                parameter.TargetUrl = editLinkVm.Path.Trim();
+                parameter.Key = editLinkVm.Path.Trim();
+                parameter.Category = string.IsNullOrWhiteSpace(editLinkVm.Category) ? "Custom" : editLinkVm.Category.Trim();
+                parameter.Description = string.IsNullOrWhiteSpace(editLinkVm.Description) ? null : editLinkVm.Description.Trim();
+                parameter.Icon = editLinkVm.SelectedIcon?.Symbol ?? SymbolRegular.Globe24;
 
-            _snackbarService?.Show(
-                "Quick Link Updated",
-                $"Updated '{parameter.DisplayName}'.",
-                ControlAppearance.Success,
-                new SymbolIcon(SymbolRegular.CheckmarkCircle24),
-                TimeSpan.FromSeconds(3));
+                _linksService.SaveLinks(Links);
+                RefreshCategories();
+                ApplyFilter();
 
-            _logger?.LogInfo($"Quick link updated: {parameter.DisplayName}");
+                _snackbarService?.Show(
+                    "Quick Link Updated",
+                    $"Updated '{parameter.DisplayName}'.",
+                    ControlAppearance.Success,
+                    new SymbolIcon(SymbolRegular.CheckmarkCircle24),
+                    TimeSpan.FromSeconds(3));
+
+                _logger?.LogInfo($"Quick link updated: {parameter.DisplayName}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError($"Error opening or saving Edit Link dialog for '{parameter.DisplayName}'.", ex);
+            System.Windows.MessageBox.Show(
+                $"Failed to open Edit Link dialog: {ex.Message}",
+                "Quick Links Error",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
         }
     }
 
     [RelayCommand]
-    private void OnDeleteLinkClick(LinkModel? parameter)
+    private void DeleteLink(LinkModel? parameter)
     {
         if (parameter is null) return;
 
@@ -261,7 +285,7 @@ namespace AMFormsCST.Desktop.ViewModels.Pages.Links
     }
 
     [RelayCommand]
-    private void OnCopyLinkClick(LinkModel? parameter)
+    private void CopyLink(LinkModel? parameter)
     {
         if (parameter is null || string.IsNullOrWhiteSpace(parameter.ResolvedPath)) return;
 
@@ -282,7 +306,7 @@ namespace AMFormsCST.Desktop.ViewModels.Pages.Links
     }
 
     [RelayCommand]
-    private void OnResetDefaultsClick()
+    private void ResetDefaults()
     {
         var result = System.Windows.MessageBox.Show(
             "Reset all Quick Links to default configuration? Custom links will be replaced.",
