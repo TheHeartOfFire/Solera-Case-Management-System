@@ -369,4 +369,51 @@ public class FormgenCodeParserTests
         Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("HASCOREG"));
         Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("NonExistentCustomVar123"));
     }
+
+    [Fact]
+    public void Parse_MissingParenInNestedIfWithinSeplist_RepairsParenWithoutDiscardingRemainingArguments()
+    {
+        // User test case: valid SEPLIST formula where closing parenthesis for the first IF was omitted
+        var input = "SEPLIST(' ', IF(NOTBLANK(F340),'TRADE #2: ',' ', F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)";
+
+        var result = FormgenCodeParser.Parse(input);
+
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
+        Assert.NotNull(result.SuggestedFix);
+
+        // Crucial requirement: Must NOT truncate arguments! Both IFs and all F-fields must be preserved!
+        Assert.Contains("TRADE #2:", result.SuggestedFix);
+        Assert.Contains("TRADE #3:", result.SuggestedFix);
+        Assert.Contains("F340", result.SuggestedFix);
+        Assert.Contains("F341", result.SuggestedFix);
+        Assert.Contains("F339", result.SuggestedFix);
+        Assert.Contains("F345", result.SuggestedFix);
+        Assert.Contains("F479", result.SuggestedFix);
+        Assert.Contains("F351", result.SuggestedFix);
+        Assert.Contains("F352", result.SuggestedFix);
+        Assert.Contains("F350", result.SuggestedFix);
+        Assert.Contains("F356", result.SuggestedFix);
+        Assert.Contains("F480", result.SuggestedFix);
+
+        // The suggested fix itself must be a 100% valid formula
+        var reparsed = FormgenCodeParser.Parse(result.SuggestedFix);
+        Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
+        Assert.NotNull(reparsed.CondensedBlock);
+    }
+
+    [Fact]
+    public void Parse_NestedFunctionWithExtraArgsInsideParent_SpillsArgumentsCleanly()
+    {
+        var input = "SEPLIST(' ', IF(NOTBLANK(F340),'TRADE #2: ',' ', F340, F341))";
+
+        var result = FormgenCodeParser.Parse(input);
+
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
+        Assert.NotNull(result.SuggestedFix);
+        Assert.Contains("F340", result.SuggestedFix);
+        Assert.Contains("F341", result.SuggestedFix);
+
+        var reparsed = FormgenCodeParser.Parse(result.SuggestedFix);
+        Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
+    }
 }

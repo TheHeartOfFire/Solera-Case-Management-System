@@ -407,7 +407,7 @@ public class FormgenUtilitiesViewModelTests
         Assert.Empty(safeAnalysis.DisallowedFields);
         Assert.Empty(safeAnalysis.DisallowedVariables);
         Assert.Empty(safeAnalysis.Violations);
-        Assert.Equal("VM Safe ?", safeAnalysis.BadgeText);
+        Assert.Equal("VM Safe \u2713", safeAnalysis.BadgeText);
 
         // 2. Unsafe form: contains Deal fields (F3: Buyer Name, F35: Cash Price)
         var unsafeForm = new DotFormgen();

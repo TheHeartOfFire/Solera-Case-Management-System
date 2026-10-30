@@ -565,8 +565,8 @@ public static class FormgenCodeParser
         if (openParens > closeParens)
         {
             int missing = openParens - closeParens;
-            syntaxIssues.Add($"Missing {missing} closing parenthesis '{new string(')', missing)}' at the end of the expression.");
-            workingFix += new string(')', missing);
+            workingFix = RepairMissingClosingParentheses(workingFix, missing, out var parenIssues);
+            syntaxIssues.AddRange(parenIssues);
         }
         else if (closeParens > openParens)
         {
@@ -687,7 +687,13 @@ public static class FormgenCodeParser
             // Validate argument count against FunctionSpec
             if (!ValidateArgumentCount(spec, argStrings, diagnostics, out var fixedArgs))
             {
-                if (fixedArgs != null)
+                if (!isTopLevel && spec.MaxArgs.HasValue && argStrings.Count > spec.MaxArgs.Value)
+                {
+                    var closedCall = $"{spec.Prefix}({string.Join(", ", argStrings.Take(spec.MaxArgs.Value))})";
+                    var remaining = string.Join(", ", argStrings.Skip(spec.MaxArgs.Value));
+                    suggestedFix = $"{closedCall}, {remaining}";
+                }
+                else if (fixedArgs != null)
                 {
                     suggestedFix = $"{spec.Prefix}({string.Join(", ", fixedArgs)})";
                 }
@@ -1447,5 +1453,155 @@ public static class FormgenCodeParser
             return secondStageFix;
         }
         return string.Equals(candidateFix.Trim(), originalInput.Trim(), StringComparison.Ordinal) ? null : candidateFix;
+    }
+
+    private sealed class ParenFrame
+    {
+        public string FunctionName { get; }
+        public int? MaxArgs { get; }
+        public int ArgCount { get; set; } = 1;
+        public int OpenParenIndex { get; }
+
+        public ParenFrame(string functionName, int? maxArgs, int openParenIndex)
+        {
+            FunctionName = functionName;
+            MaxArgs = maxArgs;
+            OpenParenIndex = openParenIndex;
+        }
+    }
+
+    private static string RepairMissingClosingParentheses(string text, int missingCount, out List<string> issues)
+    {
+        issues = [];
+        if (missingCount <= 0 || string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+        var sb = new StringBuilder(text.Length + missingCount + 8);
+        var stack = new Stack<ParenFrame>();
+        bool inQuotes = false;
+        int remainingMissing = missingCount;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c == '\'')
+            {
+                inQuotes = !inQuotes;
+                sb.Append(c);
+                continue;
+            }
+
+            if (inQuotes)
+            {
+                sb.Append(c);
+                continue;
+            }
+
+            if (c == '(')
+            {
+                string fnName = ExtractPrecedingIdentifier(text, i);
+                int? maxArgs = null;
+                if (!string.IsNullOrEmpty(fnName))
+                {
+                    if (KnownFunctions.TryGetValue(fnName, out var spec))
+                    {
+                        maxArgs = spec.MaxArgs;
+                    }
+                    else if (CommonFunctionAliases.TryGetValue(fnName, out var alias) &&
+                             KnownFunctions.TryGetValue(alias, out var aliasSpec))
+                    {
+                        maxArgs = aliasSpec.MaxArgs;
+                    }
+                }
+
+                stack.Push(new ParenFrame(fnName, maxArgs, sb.Length));
+                sb.Append(c);
+                continue;
+            }
+
+            if (c == ')')
+            {
+                if (stack.Count > 0)
+                {
+                    stack.Pop();
+                }
+                sb.Append(c);
+                continue;
+            }
+
+            if (c == ',')
+            {
+                if (stack.Count > 0)
+                {
+                    var top = stack.Peek();
+                    top.ArgCount++;
+
+                    // If the current function has a known maximum argument count,
+                    // has reached that maximum (top.ArgCount > top.MaxArgs.Value),
+                    // there is an enclosing function on the stack to receive subsequent arguments (stack.Count > 1),
+                    // and there are missing closing parentheses to place:
+                    if (remainingMissing > 0 && stack.Count > 1 && top.MaxArgs.HasValue && top.ArgCount > top.MaxArgs.Value)
+                    {
+                        // Trim trailing whitespace from sb before inserting ')'
+                        int insertPos = sb.Length;
+                        while (insertPos > 0 && char.IsWhiteSpace(sb[insertPos - 1]))
+                        {
+                            insertPos--;
+                        }
+
+                        sb.Insert(insertPos, ')');
+                        stack.Pop();
+                        remainingMissing--;
+
+                        var fnDisplayName = !string.IsNullOrEmpty(top.FunctionName) ? $"'{top.FunctionName}()'" : "function";
+                        issues.Add($"Missing closing parenthesis ')' for {fnDisplayName} after argument {top.MaxArgs.Value}.");
+
+                        // Now the comma belongs to the parent frame on the stack (if any)
+                        if (stack.Count > 0)
+                        {
+                            stack.Peek().ArgCount++;
+                        }
+                    }
+                }
+
+                sb.Append(c);
+                continue;
+            }
+
+            sb.Append(c);
+        }
+
+        // Any remaining unclosed parentheses belong at the end of the expression
+        if (remainingMissing > 0)
+        {
+            sb.Append(new string(')', remainingMissing));
+            issues.Add($"Missing {remainingMissing} closing parenthesis '{new string(')', remainingMissing)}' at the end of the expression.");
+        }
+
+        return sb.ToString();
+    }
+
+    private static string ExtractPrecedingIdentifier(string text, int parenIndex)
+    {
+        int end = parenIndex - 1;
+        while (end >= 0 && char.IsWhiteSpace(text[end]))
+        {
+            end--;
+        }
+        if (end < 0) return string.Empty;
+
+        int start = end;
+        while (start >= 0 && (char.IsLetterOrDigit(text[start]) || text[start] == '_'))
+        {
+            start--;
+        }
+        start++;
+        if (start <= end)
+        {
+            return text[start..(end + 1)];
+        }
+        return string.Empty;
     }
 }
