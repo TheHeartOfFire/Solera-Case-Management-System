@@ -8,16 +8,23 @@ namespace AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils;
 public partial class PromptItemViewModel : ObservableObject
 {
     private readonly Action? _onChanged;
+    private readonly Action? _onSelectionChanged;
 
     public CodeLine CodeLine { get; }
 
     [ObservableProperty]
     private bool _isSelected;
 
-    public PromptItemViewModel(CodeLine codeLine, Action? onChanged = null)
+    partial void OnIsSelectedChanged(bool value)
+    {
+        _onSelectionChanged?.Invoke();
+    }
+
+    public PromptItemViewModel(CodeLine codeLine, Action? onChanged = null, Action? onSelectionChanged = null)
     {
         CodeLine = codeLine ?? throw new ArgumentNullException(nameof(codeLine));
         _onChanged = onChanged;
+        _onSelectionChanged = onSelectionChanged;
     }
 
     public int Order

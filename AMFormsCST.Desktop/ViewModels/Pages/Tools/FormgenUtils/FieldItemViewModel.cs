@@ -8,6 +8,7 @@ namespace AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils;
 public partial class FieldItemViewModel : ObservableObject
 {
     private readonly Action? _onChanged;
+    private readonly Action? _onSelectionChanged;
 
     public FormField Field { get; }
     public FormPage Page { get; }
@@ -15,11 +16,17 @@ public partial class FieldItemViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 
-    public FieldItemViewModel(FormField field, FormPage page, Action? onChanged = null)
+    partial void OnIsSelectedChanged(bool value)
+    {
+        _onSelectionChanged?.Invoke();
+    }
+
+    public FieldItemViewModel(FormField field, FormPage page, Action? onChanged = null, Action? onSelectionChanged = null)
     {
         Field = field ?? throw new ArgumentNullException(nameof(field));
         Page = page ?? throw new ArgumentNullException(nameof(page));
         _onChanged = onChanged;
+        _onSelectionChanged = onSelectionChanged;
     }
 
     public int ID => Field.Settings?.ID ?? 0;

@@ -342,4 +342,51 @@ public class FormgenUtilitiesViewModelTests
         Assert.Equal("IF( F10 = 'NEW', 'N', 'U' )", badField.Expression);
         Assert.True(issue.IsValid);
     }
+
+    [Fact]
+    public void PromptSelection_MasterCheckboxAndMultiSelect_WorksCorrectly()
+    {
+        var viewModel = new FormgenUtilitiesViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object);
+        var fakeFormgen = new DotFormgen();
+        var prompt1 = new CodeLine { Settings = { Order = 1, Variable = "P1", Type = CodeLineSettings.CodeType.PROMPT } };
+        var prompt2 = new CodeLine { Settings = { Order = 2, Variable = "P2", Type = CodeLineSettings.CodeType.PROMPT } };
+        var prompt3 = new CodeLine { Settings = { Order = 3, Variable = "P3", Type = CodeLineSettings.CodeType.PROMPT } };
+        fakeFormgen.CodeLines.Add(prompt1);
+        fakeFormgen.CodeLines.Add(prompt2);
+        fakeFormgen.CodeLines.Add(prompt3);
+
+        _mockFormgenUtils.Setup(fu => fu.ParsedFormgenFile).Returns(fakeFormgen);
+
+        // Populate lists
+        viewModel.PromptsList.Add(new AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils.PromptItemViewModel(prompt1, null, viewModel.UpdateAreAllPromptsSelected));
+        viewModel.PromptsList.Add(new AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils.PromptItemViewModel(prompt2, null, viewModel.UpdateAreAllPromptsSelected));
+        viewModel.PromptsList.Add(new AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils.PromptItemViewModel(prompt3, null, viewModel.UpdateAreAllPromptsSelected));
+        viewModel.UpdateAreAllPromptsSelected();
+
+        Assert.False(viewModel.AreAllPromptsSelected);
+        Assert.Equal("3 Prompts & Code Lines", viewModel.PromptsSelectedCountText);
+
+        // Select one prompt
+        viewModel.PromptsList[0].IsSelected = true;
+        Assert.Null(viewModel.AreAllPromptsSelected); // Indeterminate / partially selected
+        Assert.Equal("1 of 3 Selected", viewModel.PromptsSelectedCountText);
+
+        // Select all via master checkbox
+        viewModel.AreAllPromptsSelected = true;
+        Assert.All(viewModel.PromptsList, p => Assert.True(p.IsSelected));
+        Assert.Equal("3 of 3 Selected", viewModel.PromptsSelectedCountText);
+
+        // Deselect all via master checkbox
+        viewModel.AreAllPromptsSelected = false;
+        Assert.All(viewModel.PromptsList, p => Assert.False(p.IsSelected));
+        Assert.Equal("3 Prompts & Code Lines", viewModel.PromptsSelectedCountText);
+
+        // Multi-select prompts 1 and 2 and delete them
+        viewModel.PromptsList[0].IsSelected = true;
+        viewModel.PromptsList[1].IsSelected = true;
+
+        viewModel.DeleteSelectedPromptsCommand.Execute(null);
+
+        _mockFormgenUtils.Verify(fu => fu.DeletePrompts(It.Is<IEnumerable<CodeLine>>(lines => lines.Count() == 2)), Times.Once);
+    }
 }

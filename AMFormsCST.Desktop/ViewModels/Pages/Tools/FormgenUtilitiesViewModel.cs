@@ -115,6 +115,146 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         }
     }
 
+    private bool? _areAllPromptsSelected = false;
+    public bool? AreAllPromptsSelected
+    {
+        get => _areAllPromptsSelected;
+        set
+        {
+            if (SetProperty(ref _areAllPromptsSelected, value))
+            {
+                if (value.HasValue)
+                {
+                    foreach (var p in PromptsList)
+                    {
+                        p.IsSelected = value.Value;
+                    }
+                    OnPropertyChanged(nameof(PromptsSelectedCountText));
+                }
+            }
+        }
+    }
+
+    public string PromptsSelectedCountText
+    {
+        get
+        {
+            int selected = PromptsList.Count(p => p.IsSelected);
+            return selected > 0
+                ? $"{selected} of {PromptsList.Count} Selected"
+                : $"{PromptsList.Count} Prompts & Code Lines";
+        }
+    }
+
+    public void UpdateAreAllPromptsSelected()
+    {
+        if (PromptsList.Count == 0)
+        {
+            _areAllPromptsSelected = false;
+        }
+        else
+        {
+            int count = PromptsList.Count(p => p.IsSelected);
+            if (count == 0)
+                _areAllPromptsSelected = false;
+            else if (count == PromptsList.Count)
+                _areAllPromptsSelected = true;
+            else
+                _areAllPromptsSelected = null;
+        }
+        OnPropertyChanged(nameof(AreAllPromptsSelected));
+        OnPropertyChanged(nameof(PromptsSelectedCountText));
+    }
+
+    private bool? _areAllFieldsSelected = false;
+    public bool? AreAllFieldsSelected
+    {
+        get => _areAllFieldsSelected;
+        set
+        {
+            if (SetProperty(ref _areAllFieldsSelected, value))
+            {
+                if (value.HasValue)
+                {
+                    foreach (var f in FilteredFieldsList)
+                    {
+                        f.IsSelected = value.Value;
+                    }
+                    OnPropertyChanged(nameof(FieldsSelectedCountText));
+                }
+            }
+        }
+    }
+
+    public string FieldsSelectedCountText
+    {
+        get
+        {
+            int selected = FilteredFieldsList.Count(f => f.IsSelected);
+            return selected > 0
+                ? $"{selected} of {FilteredFieldsList.Count} Selected"
+                : $"{FilteredFieldsList.Count} Fields";
+        }
+    }
+
+    public void UpdateAreAllFieldsSelected()
+    {
+        if (FilteredFieldsList.Count == 0)
+        {
+            _areAllFieldsSelected = false;
+        }
+        else
+        {
+            int count = FilteredFieldsList.Count(f => f.IsSelected);
+            if (count == 0)
+                _areAllFieldsSelected = false;
+            else if (count == FilteredFieldsList.Count)
+                _areAllFieldsSelected = true;
+            else
+                _areAllFieldsSelected = null;
+        }
+        OnPropertyChanged(nameof(AreAllFieldsSelected));
+        OnPropertyChanged(nameof(FieldsSelectedCountText));
+    }
+
+    private bool? _areAllTransferPromptsSelected = false;
+    public bool? AreAllTransferPromptsSelected
+    {
+        get => _areAllTransferPromptsSelected;
+        set
+        {
+            if (SetProperty(ref _areAllTransferPromptsSelected, value))
+            {
+                if (value.HasValue)
+                {
+                    foreach (var p in TransferSourcePrompts)
+                    {
+                        p.IsSelected = value.Value;
+                    }
+                }
+            }
+        }
+    }
+
+    public void UpdateAreAllTransferPromptsSelected()
+    {
+        if (TransferSourcePrompts.Count == 0)
+        {
+            _areAllTransferPromptsSelected = false;
+        }
+        else
+        {
+            int count = TransferSourcePrompts.Count(p => p.IsSelected);
+            if (count == 0)
+                _areAllTransferPromptsSelected = false;
+            else if (count == TransferSourcePrompts.Count)
+                _areAllTransferPromptsSelected = true;
+            else
+                _areAllTransferPromptsSelected = null;
+        }
+        OnPropertyChanged(nameof(AreAllTransferPromptsSelected));
+    }
+
     // Code Parser & Diagnostics
     public ObservableCollection<FormCodeValidationItem> CodeValidationIssues { get; } = [];
 
@@ -521,12 +661,16 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         PromptsList.Clear();
         foreach (var cl in fileData.CodeLines)
         {
-            PromptsList.Add(new PromptItemViewModel(cl, () =>
-            {
-                OnPropertyChanged(nameof(HasChanged));
-                SelectedNode?.RefreshHeader();
-            }));
+            PromptsList.Add(new PromptItemViewModel(
+                cl,
+                () =>
+                {
+                    OnPropertyChanged(nameof(HasChanged));
+                    SelectedNode?.RefreshHeader();
+                },
+                UpdateAreAllPromptsSelected));
         }
+        UpdateAreAllPromptsSelected();
 
         FieldsList.Clear();
         AvailablePageFilters.Clear();
@@ -539,11 +683,15 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             AvailablePageFilters.Add($"Page {pageNum}");
             foreach (var f in page.Fields)
             {
-                FieldsList.Add(new FieldItemViewModel(f, page, () =>
-                {
-                    OnPropertyChanged(nameof(HasChanged));
-                    SelectedNode?.RefreshHeader();
-                }));
+                FieldsList.Add(new FieldItemViewModel(
+                    f,
+                    page,
+                    () =>
+                    {
+                        OnPropertyChanged(nameof(HasChanged));
+                        SelectedNode?.RefreshHeader();
+                    },
+                    UpdateAreAllFieldsSelected));
             }
         }
 
@@ -571,6 +719,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
                     FilteredFieldsList.Add(f);
             }
         }
+        UpdateAreAllFieldsSelected();
     }
 
     private void SyncSelectionWithTables(object? data)
@@ -621,11 +770,16 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
     #region Prompt Manipulation Commands
     [RelayCommand]
-    private void CloneSelectedPrompts()
+    private void CloneSelectedPrompts(object? commandParameter = null)
     {
         if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
 
-        var selected = PromptsList.Where(p => p.IsSelected).Select(p => p.CodeLine).ToArray();
+        var selectedFromCheckboxes = PromptsList.Where(p => p.IsSelected).Select(p => p.CodeLine);
+        var selectedFromGrid = (commandParameter as System.Collections.IList)?
+            .OfType<PromptItemViewModel>()
+            .Select(p => p.CodeLine) ?? Enumerable.Empty<CodeLine>();
+
+        var selected = selectedFromCheckboxes.Concat(selectedFromGrid).Distinct().ToArray();
         if (selected.Length == 0 && SelectedPromptItem != null)
         {
             selected = [SelectedPromptItem.CodeLine];
@@ -639,11 +793,16 @@ public partial class FormgenUtilitiesViewModel : ViewModel
     }
 
     [RelayCommand]
-    private void DeleteSelectedPrompts()
+    private void DeleteSelectedPrompts(object? commandParameter = null)
     {
         if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
 
-        var selected = PromptsList.Where(p => p.IsSelected).Select(p => p.CodeLine).ToList();
+        var selectedFromCheckboxes = PromptsList.Where(p => p.IsSelected).Select(p => p.CodeLine);
+        var selectedFromGrid = (commandParameter as System.Collections.IList)?
+            .OfType<PromptItemViewModel>()
+            .Select(p => p.CodeLine) ?? Enumerable.Empty<CodeLine>();
+
+        var selected = selectedFromCheckboxes.Concat(selectedFromGrid).Distinct().ToList();
         if (selected.Count == 0 && SelectedPromptItem != null)
         {
             selected.Add(SelectedPromptItem.CodeLine);
@@ -677,11 +836,15 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
     #region Field Manipulation Commands
     [RelayCommand]
-    private void CloneSelectedFields()
+    private void CloneSelectedFields(object? commandParameter = null)
     {
         if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
 
-        var selected = FilteredFieldsList.Where(f => f.IsSelected).ToList();
+        var selectedFromCheckboxes = FilteredFieldsList.Where(f => f.IsSelected);
+        var selectedFromGrid = (commandParameter as System.Collections.IList)?
+            .OfType<FieldItemViewModel>() ?? Enumerable.Empty<FieldItemViewModel>();
+
+        var selected = selectedFromCheckboxes.Concat(selectedFromGrid).Distinct().ToList();
         if (selected.Count == 0 && SelectedFieldItem != null)
         {
             selected.Add(SelectedFieldItem);
@@ -699,11 +862,15 @@ public partial class FormgenUtilitiesViewModel : ViewModel
     }
 
     [RelayCommand]
-    private void DeleteSelectedFields()
+    private void DeleteSelectedFields(object? commandParameter = null)
     {
         if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
 
-        var selected = FilteredFieldsList.Where(f => f.IsSelected).ToList();
+        var selectedFromCheckboxes = FilteredFieldsList.Where(f => f.IsSelected);
+        var selectedFromGrid = (commandParameter as System.Collections.IList)?
+            .OfType<FieldItemViewModel>() ?? Enumerable.Empty<FieldItemViewModel>();
+
+        var selected = selectedFromCheckboxes.Concat(selectedFromGrid).Distinct().ToList();
         if (selected.Count == 0 && SelectedFieldItem != null)
         {
             selected.Add(SelectedFieldItem);
@@ -936,8 +1103,9 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             TransferSourcePrompts.Clear();
             foreach (var p in sourceFormgen.CodeLines.Where(cl => cl.Settings?.Type == AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure.CodeLineSettings.CodeType.PROMPT))
             {
-                TransferSourcePrompts.Add(new PromptItemViewModel(p));
+                TransferSourcePrompts.Add(new PromptItemViewModel(p, null, UpdateAreAllTransferPromptsSelected));
             }
+            UpdateAreAllTransferPromptsSelected();
 
             TransferSourcePages.Clear();
             for (int i = 1; i <= sourceFormgen.Pages.Count; i++)

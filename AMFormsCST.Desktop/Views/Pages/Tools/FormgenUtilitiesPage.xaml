@@ -213,6 +213,7 @@
                                         Style="{StaticResource ToolBarButtonStyle}"
                                         Appearance="Primary"
                                         Command="{Binding CloneSelectedPromptsCommand}"
+                                        CommandParameter="{Binding SelectedItems, ElementName=PromptsDataGrid}"
                                         Content="Duplicate"
                                         Icon="{ui:SymbolIcon Copy24}"
                                         ToolTip="Duplicate selected prompt(s)" />
@@ -234,37 +235,65 @@
                                         Style="{StaticResource ToolBarButtonStyle}"
                                         Appearance="Danger"
                                         Command="{Binding DeleteSelectedPromptsCommand}"
+                                        CommandParameter="{Binding SelectedItems, ElementName=PromptsDataGrid}"
                                         Content="Delete"
                                         Icon="{ui:SymbolIcon Delete24}"
-                                        ToolTip="Delete selected prompt(s)" />
+                                        ToolTip="Delete selected prompt(s) (Del)" />
                                 </StackPanel>
 
                                 <TextBlock
                                     Grid.Column="1"
                                     VerticalAlignment="Center"
                                     Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="{Binding PromptsList.Count, StringFormat='{}{0} Prompts &amp; Code Lines'}" />
+                                    Text="{Binding PromptsSelectedCountText}" />
                             </Grid>
                         </Border>
 
                         <!-- Prompt DataGrid -->
                         <DataGrid
+                            x:Name="PromptsDataGrid"
                             Grid.Row="1"
                             AutoGenerateColumns="False"
                             CanUserAddRows="False"
                             CanUserDeleteRows="False"
                             ItemsSource="{Binding PromptsList}"
                             SelectedItem="{Binding SelectedPromptItem, Mode=TwoWay}"
-                            SelectionMode="Extended">
+                            SelectionMode="Extended"
+                            PreviewKeyDown="OnDataGridPreviewKeyDown">
                             <DataGrid.Columns>
-                                <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Header="Select" />
+                                <DataGridTemplateColumn Width="45" CanUserResize="False">
+                                    <DataGridTemplateColumn.Header>
+                                        <CheckBox
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            IsChecked="{Binding DataContext.AreAllPromptsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
+                                            ToolTip="Select / Deselect All" />
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Binding="{Binding Order}" Header="Order" IsReadOnly="True" Width="55" />
                                 <DataGridTextColumn Binding="{Binding Variable}" Header="Variable" FontWeight="SemiBold" Width="80" />
                                 <DataGridTextColumn Binding="{Binding Type}" Header="Type" IsReadOnly="True" Width="75" />
                                 <DataGridTextColumn Binding="{Binding PromptKind}" Header="Prompt Kind" Width="100" />
                                 <DataGridTextColumn Binding="{Binding Message}" Header="Prompt Message / Label" Width="2*" />
                                 <DataGridTextColumn Binding="{Binding Expression}" Header="Expression / Default" Width="2*" />
-                                <DataGridCheckBoxColumn Binding="{Binding Required}" Header="Req" Width="50" />
+                                <DataGridTemplateColumn Header="Req" Width="50">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding Required, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Binding="{Binding ChoicesText}" Header="Choices" Width="1.5*" />
                             </DataGrid.Columns>
                         </DataGrid>
@@ -305,6 +334,7 @@
                                     Style="{StaticResource ToolBarButtonStyle}"
                                     Appearance="Primary"
                                     Command="{Binding CloneSelectedFieldsCommand}"
+                                    CommandParameter="{Binding SelectedItems, ElementName=FieldsDataGrid}"
                                     Content="Duplicate"
                                     Icon="{ui:SymbolIcon Copy24}"
                                     ToolTip="Duplicate selected field(s)" />
@@ -313,9 +343,10 @@
                                     Style="{StaticResource ToolBarButtonStyle}"
                                     Appearance="Danger"
                                     Command="{Binding DeleteSelectedFieldsCommand}"
+                                    CommandParameter="{Binding SelectedItems, ElementName=FieldsDataGrid}"
                                     Content="Delete"
                                     Icon="{ui:SymbolIcon Delete24}"
-                                    ToolTip="Delete selected field(s)" />
+                                    ToolTip="Delete selected field(s) (Del)" />
 
                                 <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
 
@@ -382,27 +413,61 @@
                                     Content="Align Across Pages"
                                     Icon="{ui:SymbolIcon ArrowSync24}"
                                     ToolTip="Synchronize field positions across multi-page forms" />
+
+                                <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding FieldsSelectedCountText}" />
                             </WrapPanel>
                         </Border>
 
                         <!-- Fields DataGrid -->
                         <DataGrid
+                            x:Name="FieldsDataGrid"
                             Grid.Row="1"
                             AutoGenerateColumns="False"
                             CanUserAddRows="False"
                             CanUserDeleteRows="False"
                             ItemsSource="{Binding FilteredFieldsList}"
                             SelectedItem="{Binding SelectedFieldItem, Mode=TwoWay}"
-                            SelectionMode="Extended">
+                            SelectionMode="Extended"
+                            PreviewKeyDown="OnDataGridPreviewKeyDown">
                             <DataGrid.Columns>
-                                <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Header="Select" />
+                                <DataGridTemplateColumn Width="45" CanUserResize="False">
+                                    <DataGridTemplateColumn.Header>
+                                        <CheckBox
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            IsChecked="{Binding DataContext.AreAllFieldsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
+                                            ToolTip="Select / Deselect All" />
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Binding="{Binding ID}" Header="ID" IsReadOnly="True" Width="55" />
                                 <DataGridTextColumn Binding="{Binding PageNumber}" Header="Page" IsReadOnly="True" Width="50" />
                                 <DataGridTextColumn Binding="{Binding Expression}" Header="Expression" Width="2.5*" />
                                 <DataGridTextColumn Binding="{Binding SampleData}" Header="Sample Data" Width="1.5*" />
                                 <DataGridTextColumn Binding="{Binding Type}" Header="Type" Width="80" />
                                 <DataGridTextColumn Binding="{Binding FontSize}" Header="Font Size" Width="70" />
-                                <DataGridCheckBoxColumn Binding="{Binding Bold}" Header="Bold" Width="50" />
+                                <DataGridTemplateColumn Header="Bold" Width="50">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding Bold, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Binding="{Binding FontAlignment}" Header="Alignment" Width="75" />
                                 <DataGridTextColumn Binding="{Binding LaserRectX}" Header="X" Width="50" />
                                 <DataGridTextColumn Binding="{Binding LaserRectY}" Header="Y" Width="50" />
@@ -592,7 +657,23 @@
                                         CanUserAddRows="False"
                                         ItemsSource="{Binding TransferSourcePrompts}">
                                         <DataGrid.Columns>
-                                            <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Header="Select" />
+                                            <DataGridTemplateColumn Width="45" CanUserResize="False">
+                                                <DataGridTemplateColumn.Header>
+                                                    <CheckBox
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        IsChecked="{Binding DataContext.AreAllTransferPromptsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
+                                                        ToolTip="Select / Deselect All" />
+                                                </DataGridTemplateColumn.Header>
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <CheckBox
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
                                             <DataGridTextColumn Binding="{Binding Variable}" Header="Variable" Width="80" />
                                             <DataGridTextColumn Binding="{Binding Message}" Header="Message" Width="*" />
                                         </DataGrid.Columns>

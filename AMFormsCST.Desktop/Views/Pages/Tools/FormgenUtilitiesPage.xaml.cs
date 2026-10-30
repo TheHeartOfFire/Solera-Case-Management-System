@@ -1,11 +1,14 @@
 using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Desktop.ControlsLookup;
 using AMFormsCST.Desktop.ViewModels.Pages.Tools;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Wpf.Ui;
 using Wpf.Ui.Controls;
+using AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils;
 
 namespace AMFormsCST.Desktop.Views.Pages.Tools
 {
@@ -74,6 +77,41 @@ namespace AMFormsCST.Desktop.Views.Pages.Tools
             Loaded -= OnLoaded;
             Unloaded -= OnUnloaded;
             _logger?.LogInfo("FormgenUtilitiesPage unloaded. Scroll re-enabled.");
+        }
+
+        private void OnDataGridPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.DataGrid dg) return;
+            if (e.OriginalSource is System.Windows.Controls.TextBox or Wpf.Ui.Controls.TextBox) return;
+
+            if (e.Key == Key.Delete)
+            {
+                if (dg == PromptsDataGrid)
+                {
+                    ViewModel.DeleteSelectedPromptsCommand.Execute(dg.SelectedItems);
+                    e.Handled = true;
+                }
+                else if (dg == FieldsDataGrid)
+                {
+                    ViewModel.DeleteSelectedFieldsCommand.Execute(dg.SelectedItems);
+                    e.Handled = true;
+                }
+            }
+            else if (e.Key == Key.Space)
+            {
+                if (dg.SelectedItems.Count > 0)
+                {
+                    bool anyUnchecked = dg.SelectedItems.OfType<PromptItemViewModel>().Any(p => !p.IsSelected)
+                                     || dg.SelectedItems.OfType<FieldItemViewModel>().Any(f => !f.IsSelected);
+
+                    foreach (var item in dg.SelectedItems)
+                    {
+                        if (item is PromptItemViewModel p) p.IsSelected = anyUnchecked;
+                        else if (item is FieldItemViewModel f) f.IsSelected = anyUnchecked;
+                    }
+                    e.Handled = true;
+                }
+            }
         }
 
         /// <summary>
