@@ -189,11 +189,11 @@ public class FormgenCodeParserTests
     [Fact]
     public void Parse_SmartFieldVariable_ReturnsValid()
     {
-        var result = FormgenCodeParser.Parse("CashPrice");
+        var result = FormgenCodeParser.Parse("BuyerName");
         Assert.Equal(FormgenParseStatus.Valid, result.Status);
         Assert.NotNull(result.CondensedBlock);
-        Assert.Equal("Predefined Smart Field: CashPrice", result.StatusTitle);
-        Assert.Equal("CashPrice", result.CondensedBlock.GetCode());
+        Assert.Equal("Predefined Smart Field: BuyerName", result.StatusTitle);
+        Assert.Equal("BuyerName", result.CondensedBlock.GetCode());
         Assert.False(result.HasSuggestedFix);
     }
 
@@ -251,10 +251,10 @@ public class FormgenCodeParserTests
     [Fact]
     public void Parse_EquationWithSmartFields_ReturnsValid()
     {
-        var result = FormgenCodeParser.Parse("CashPrice - F2867");
+        var result = FormgenCodeParser.Parse("ACC01_PRICE - F2867");
         Assert.Equal(FormgenParseStatus.Valid, result.Status);
         Assert.NotNull(result.CondensedBlock);
-        Assert.Equal("CashPrice - F2867", result.CondensedBlock.GetCode());
+        Assert.Equal("ACC01_PRICE - F2867", result.CondensedBlock.GetCode());
     }
 
     [Fact]
@@ -281,21 +281,21 @@ public class FormgenCodeParserTests
     [Fact]
     public void SmartFieldCode_OutputsBareNameAndClonesCleanly()
     {
-        var sf = new SmartFieldCode("TradeCreditN");
-        Assert.Equal("TradeCreditN", sf.GetCode());
+        var sf = new SmartFieldCode("BuyerName");
+        Assert.Equal("BuyerName", sf.GetCode());
         Assert.Equal("SF", sf.Prefix);
         Assert.True(sf.IsPredefined);
 
         var clone = (SmartFieldCode)sf.Clone();
-        Assert.Equal("TradeCreditN", clone.FieldName);
-        Assert.Equal("TradeCreditN", clone.GetCode());
+        Assert.Equal("BuyerName", clone.FieldName);
+        Assert.Equal("BuyerName", clone.GetCode());
         Assert.True(clone.IsPredefined);
     }
 
     [Theory]
     [InlineData("BuyerName")]
     [InlineData("CobuyerAddr")]
-    [InlineData("CashPrice")]
+    [InlineData("SALEDATE")]
     [InlineData("HASCOBUYER")]
     [InlineData("ACC01_COMPNAME")]
     [InlineData("ACC15_POSPRICE")]
@@ -360,7 +360,7 @@ public class FormgenCodeParserTests
         Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("ACC15_COMPNAME"));
         Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("HASACC03"));
         Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("DEALNUM"));
-        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("CashPrice"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("SALEDATE"));
 
         Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("NonExistentCustomVar123"));
     }

@@ -827,17 +827,6 @@ public static class FormgenReferenceCatalog
         AddVar("REGCSZ", "Buyer / Co-Buyer", "Registered Owner City, State, and ZIP shorthand alias", "BUYERCSZ");
         AddVar("COREGCSZ", "Buyer / Co-Buyer", "Co-Registered Owner City, State, and ZIP shorthand alias", "BUYERCSZ");
 
-        // 4. Common FormGen Smart Fields & Calculation Identifiers
-        AddVar("CashPrice", "Financial", "Total vehicle / deal cash selling price", "standardNumeric");
-        AddVar("TradeCreditN", "Trade-In", "Net trade-in credit amount", "standardNumeric");
-        AddVar("TradeCredit1", "Trade-In", "Trade-in 1 credit amount", "standardNumeric");
-        AddVar("TradeCredit2", "Trade-In", "Trade-in 2 credit amount", "standardNumeric");
-
-        for (int r = 1; r <= 10; r++)
-        {
-            AddVar($"RA{r}", "Financial", $"Rebate / Allowance slot {r} amount", "standardNumeric");
-        }
-
         return dict;
     }
 

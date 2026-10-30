@@ -12,7 +12,7 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:viewModels="clr-namespace:AMFormsCST.Desktop.ViewModels.Pages.Tools"
     d:DataContext="{d:DesignInstance Type=viewModels:FormgenUtilitiesViewModel, IsDesignTimeCreatable=True}"
-    mc:Ignorable="d" MinWidth="1100" MinHeight="600"
+    mc:Ignorable="d"
     Title="FormgenUtilitiesPage">
 
     <Page.Resources>
@@ -180,20 +180,13 @@
         <!-- ========================================================= -->
         <!--  ROW 0: Top Action Bar & Form Identification Strip        -->
         <!-- ========================================================= -->
-        <Border Grid.Row="0" Margin="0,0,0,10" Padding="10,8"
+        <Border Grid.Row="0" Margin="0,0,0,10" Padding="8,6"
                 Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1" CornerRadius="8">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <!-- Left: File Operations -->
-                    <ColumnDefinition Width="Auto" />
-                    <!-- Right: Form Title & UUID -->
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
+            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <!-- Left: Open, Save, Push, Backup, Close File -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,16,2">
                     <ui:Button Margin="0,0,6,0" Appearance="Primary" Command="{Binding OpenFormgenFileCommand}" Content="Open" Icon="{ui:SymbolIcon Document24}" ToolTip="Open a .formgen file" />
                     <ui:Button Margin="0,0,6,0" Appearance="Success" Command="{Binding SaveFormgenFileCommand}" Content="{Binding SaveButtonText}" Icon="{ui:SymbolIcon Save24}" IsEnabled="{Binding HasChanged}" ToolTip="Save changes to .formgen file" />
                     <ui:Button Margin="0,0,6,0" Appearance="Info" Command="{Binding PushToFormGenCommand}" Content="{Binding PushButtonText}" Icon="{ui:SymbolIcon ArrowUpload24}" IsEnabled="{Binding IsFileLoaded}" ToolTip="Push form into live FormGen session" />
@@ -202,32 +195,28 @@
                 </StackPanel>
 
                 <!-- Right: Form Title & UUID Strip -->
-                <Grid Grid.Column="1" Margin="20,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left"
-                      Visibility="{Binding IsFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="220" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="230" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
+                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,0,2"
+                           Visibility="{Binding IsFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <!-- Form Name / Title -->
-                    <TextBlock Grid.Column="0" Text="Form:" FontWeight="SemiBold" FontSize="12"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <ui:TextBox Grid.Column="1" Text="{Binding FormTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                FontSize="12" Padding="6,3" VerticalAlignment="Center" ToolTip="Edit Form Title" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock Text="Form:" FontWeight="SemiBold" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ui:TextBox Text="{Binding FormTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    FontSize="12" Width="180" Padding="6,3" VerticalAlignment="Center" ToolTip="Edit Form Title" />
+                    </StackPanel>
 
                     <!-- UUID -->
-                    <TextBlock Grid.Column="2" Text="UUID:" FontWeight="SemiBold" FontSize="12"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="14,0,6,0" />
-                    <ui:TextBox Grid.Column="3" Text="{Binding Uuid, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                FontSize="11" Width="230" Padding="6,3" VerticalAlignment="Center" ToolTip="Form Unique Identifier (UUID)" />
-                    <ui:Button Grid.Column="4" Margin="4,0,0,0" Padding="6,4" Appearance="Secondary"
-                               Command="{Binding RegenerateUuidCommand}" ToolTip="Regenerate new UUID"
-                               Icon="{ui:SymbolIcon ArrowReset24}" />
-                </Grid>
-            </Grid>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="UUID:" FontWeight="SemiBold" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ui:TextBox Text="{Binding Uuid, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    FontSize="11" Width="200" Padding="6,3" VerticalAlignment="Center" ToolTip="Form Unique Identifier (UUID)" />
+                        <ui:Button Margin="4,0,0,0" Padding="6,4" Appearance="Secondary"
+                                   Command="{Binding RegenerateUuidCommand}" ToolTip="Regenerate new UUID"
+                                   Icon="{ui:SymbolIcon ArrowReset24}" />
+                    </StackPanel>
+                </WrapPanel>
+            </WrapPanel>
         </Border>
 
         <!-- ========================================================= -->
@@ -741,11 +730,11 @@
                         <Grid Margin="0,2,0,0">
                             <Grid.ColumnDefinitions>
                                 <!-- Left Column: TreeView -->
-                                <ColumnDefinition Width="400" MinWidth="280" MaxWidth="600" />
+                                <ColumnDefinition Width="320" MinWidth="180" MaxWidth="500" />
                                 <!-- Splitter -->
                                 <ColumnDefinition Width="5" />
                                 <!-- Right Column: Properties Inspector -->
-                                <ColumnDefinition Width="*" MinWidth="320" />
+                                <ColumnDefinition Width="*" MinWidth="200" />
                             </Grid.ColumnDefinitions>
 
                             <!-- Left: Form Hierarchy TreeView Card -->
