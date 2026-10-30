@@ -84,6 +84,18 @@ public sealed record FormgenFieldInfo(
     }
 }
 
+public sealed record FormgenSmartFieldInfo(
+    string Name,
+    string Category,
+    string Description,
+    string? DefaultFormat = null)
+{
+    public string ShortSummary => $"{Name} ({Category}): {Description}";
+
+    public string VerboseTooltip =>
+        $"{Name}\nCategory: {Category}\nDescription: {Description}\n(Predefined FormGen Smart Field: reacts dynamically to deal data and prompts at print runtime)";
+}
+
 public sealed record FormgenFunctionDoc(
     string Prefix,
     string FullName,
@@ -656,6 +668,164 @@ public static class FormgenReferenceCatalog
 
     public static FormgenOperatorDoc? TryGetOperatorDoc(string? op) =>
         !string.IsNullOrWhiteSpace(op) && Operators.TryGetValue(op.Trim(), out var doc) ? doc : null;
+
+    public static bool IsPredefinedSmartField(string? name) =>
+        !string.IsNullOrWhiteSpace(name) && PredefinedSmartFields.ContainsKey(name.Trim());
+
+    public static bool TryGetSmartField(string? name, out FormgenSmartFieldInfo? info)
+    {
+        info = null;
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        return PredefinedSmartFields.TryGetValue(name.Trim(), out info);
+    }
+
+    public static IReadOnlyDictionary<string, FormgenSmartFieldInfo> PredefinedSmartFields { get; } =
+        BuildPredefinedSmartFields();
+
+    private static IReadOnlyDictionary<string, FormgenSmartFieldInfo> BuildPredefinedSmartFields()
+    {
+        var dict = new Dictionary<string, FormgenSmartFieldInfo>(StringComparer.OrdinalIgnoreCase);
+
+        void AddVar(string name, string category, string description, string? defaultFormat = null)
+        {
+            if (!dict.ContainsKey(name))
+            {
+                dict[name] = new FormgenSmartFieldInfo(name, category, description, defaultFormat);
+            }
+        }
+
+        // 1. Buyer, CoBuyer, Reg, and CoReg Predefined Variables (from FormGen BuyerCobuyerField)
+        var buyerBases = new (string BaseName, string Desc, string Format)[]
+        {
+            ("Name", "Full Name", "ALPHA80"),
+            ("NameStacked", "Full Name (Stacked format)", "ALPHA80"),
+            ("LastFirstStacked", "Last, First (Stacked format)", "ALPHA80"),
+            ("FirstStacked", "First Name (Stacked format)", "ALPHA35"),
+            ("MiddleStacked", "Middle Initial / Name (Stacked format)", "ALPHA1"),
+            ("LastStacked", "Last Name (Stacked format)", "ALPHA50"),
+            ("Addr", "Street Address", "ALPHA35"),
+            ("City", "City", "ALPHA21"),
+            ("St", "State Abbreviation", "ALPHA2"),
+            ("Zip", "ZIP Code", "ALPHA5"),
+            ("First", "First Name", "ALPHA35"),
+            ("Middle", "Middle Initial / Name", "ALPHA1"),
+            ("Last", "Last Name", "ALPHA50"),
+            ("LastFirst", "Last Name, First Name", "ALPHA50"),
+            ("DOB", "Date of Birth", "DATE"),
+            ("SSN", "Social Security / Tax ID Number", "SSN"),
+            ("Age", "Age in Years", "NUMERIC"),
+            ("DriversLic", "Driver's License Number", "ALPHA25"),
+            ("DriversLicSt", "Driver's License State", "ALPHA2"),
+            ("DriversLicExp", "Driver's License Expiration Date", "DATE"),
+            ("Email", "Email Address", "ALPHA60"),
+            ("County", "County", "ALPHA25"),
+            ("Phone", "Phone Number", "PHONE"),
+            ("Gender", "Gender Code", "ALPHA1")
+        };
+
+        var prefixes = new (string Prefix, string Role)[]
+        {
+            ("Buyer", "Buyer"),
+            ("Cobuyer", "Co-Buyer"),
+            ("Reg", "Registered Owner"),
+            ("CoReg", "Co-Registered Owner")
+        };
+
+        foreach (var (pfx, role) in prefixes)
+        {
+            foreach (var (baseName, desc, format) in buyerBases)
+            {
+                AddVar($"{pfx}{baseName}", "Buyer / Co-Buyer", $"{role} {desc}", format);
+            }
+        }
+
+        // Combined City/State/ZIP and Co-Buyer presence flags
+        AddVar("BUYERCITYSTATEZIP", "Buyer / Co-Buyer", "Buyer combined City, State, and ZIP", "BUYERCSZ");
+        AddVar("COBUYERCITYSTATEZIP", "Buyer / Co-Buyer", "Co-Buyer combined City, State, and ZIP", "BUYERCSZ");
+        AddVar("REGCITYSTATEZIP", "Buyer / Co-Buyer", "Registered Owner combined City, State, and ZIP", "BUYERCSZ");
+        AddVar("COREGCITYSTATEZIP", "Buyer / Co-Buyer", "Co-Registered Owner combined City, State, and ZIP", "BUYERCSZ");
+        AddVar("HASCOBUYER", "Buyer / Co-Buyer", "Flag indicating whether deal has an active Co-Buyer (TRUE/FALSE)", "BOOLEAN");
+        AddVar("HASCOREG", "Buyer / Co-Buyer", "Flag indicating whether deal has an active Co-Registered Owner (TRUE/FALSE)", "BOOLEAN");
+
+        // 2. Accessory Predefined Variables (ACC01..ACC15 from FormGen AccessoryVar)
+        var accFields = new (string Suffix, string Desc, string Format)[]
+        {
+            ("RESERVE", "Reserve amount", "standardNumeric"),
+            ("COST", "Cost amount", "standardNumeric"),
+            ("FINLSECAP_DESC", "Finance / Lease capitalized description", "ALPHA40"),
+            ("FINLSECAP_PRICE", "Finance / Lease capitalized price", "standardNumeric"),
+            ("LSEINCEP_DESC", "Lease inception description", "ALPHA40"),
+            ("LSEINCEP_PRICE", "Lease inception price", "standardNumeric"),
+            ("LSE_CICODE", "Lease capitalize / inception indicator code", "ALPHA1"),
+            ("POSDESC", "Point of sale description", "ALPHA40"),
+            ("POSPRICE", "Point of sale retail price", "standardNumeric"),
+            ("RESIDUAL", "Residual value amount", "standardNumeric"),
+            ("RESIDUALIZE_YN", "Residualize flag (Y/N)", "ALPHA1"),
+            ("TAX", "Tax amount", "standardNumeric"),
+            ("TAXRATE", "Tax rate percentage", "standardNumeric"),
+            ("TAXYN", "Taxable flag (Y/N)", "ALPHA1"),
+            ("SPXCOMM", "Salesperson X commission amount", "standardNumeric"),
+            ("SPXPCT", "Salesperson X commission percentage", "standardNumeric"),
+            ("SP1COMM", "Salesperson 1 commission amount", "standardNumeric"),
+            ("SP1PCT", "Salesperson 1 commission percentage", "standardNumeric"),
+            ("SP2COMM", "Salesperson 2 commission amount", "standardNumeric"),
+            ("SP2PCT", "Salesperson 2 commission percentage", "standardNumeric"),
+            ("SP3COMM", "Salesperson 3 commission amount", "standardNumeric"),
+            ("SP3PCT", "Salesperson 3 commission percentage", "standardNumeric"),
+            ("SM1COMM", "Sales Manager 1 commission amount", "standardNumeric"),
+            ("SM1PCT", "Sales Manager 1 commission percentage", "standardNumeric"),
+            ("SM2COMM", "Sales Manager 2 commission amount", "standardNumeric"),
+            ("SM2PCT", "Sales Manager 2 commission percentage", "standardNumeric"),
+            ("FM1COMM", "Finance Manager 1 commission amount", "standardNumeric"),
+            ("FM1PCT", "Finance Manager 1 commission percentage", "standardNumeric"),
+            ("COMPNAME", "Vendor / Company name", "ALPHA40")
+        };
+
+        for (int i = 1; i <= 15; i++)
+        {
+            string idx = i.ToString("D2");
+            foreach (var (suffix, desc, format) in accFields)
+            {
+                AddVar($"ACC{idx}_{suffix}", "Accessory", $"Accessory {i} {desc}", format);
+            }
+            AddVar($"HASACC{idx}", "Accessory", $"Flag indicating whether Accessory {i} is selected on deal", "BOOLEAN");
+        }
+        AddVar("ACCESSORIES_CHOSEN", "Accessory", "Formatted block of all accessories selected for the deal", "ALPHA80");
+
+        // 3. Other Predefined Variables (from FormGen PredefinedVariable)
+        AddVar("DEALNUM", "Deal / General", "Deal Number (COBOL field F1)", "INTEGER");
+        AddVar("_DEALNUM", "Deal / General", "Deal Number (COBOL field F1)", "INTEGER");
+        AddVar("BUYER_NAME_COBOL_FORMAT", "Buyer / Co-Buyer", "Buyer full name in raw COBOL format (F80)", "ALPHA80");
+        AddVar("_BUYER_NAME_COBOL_FORMAT", "Buyer / Co-Buyer", "Buyer full name in raw COBOL format (F80)", "ALPHA80");
+        AddVar("REBATE_AMOUNT", "Financial", "Total rebate amount applied to deal (F229)", "standardNumeric");
+        AddVar("_REBATE_AMOUNT", "Financial", "Total rebate amount applied to deal (F229)", "standardNumeric");
+        AddVar("SALEDATE", "Deal / General", "Deal sale date (F456)", "DATE");
+        AddVar("_SALEDATE", "Deal / General", "Deal sale date (F456)", "DATE");
+        AddVar("SUBCOMPANY", "Deal / General", "Dealership sub-company code (F2887)", "INTEGER");
+        AddVar("_SUBCOMPANY", "Deal / General", "Dealership sub-company code (F2887)", "INTEGER");
+        AddVar("TOTALREBATEDESC", "Financial", "Total rebate description (evaluates IF(F229=0,'','REBATE'))", "ALPHA6");
+        AddVar("BUYERNAMES", "Buyer / Co-Buyer", "Buyer and Co-Buyer combined names (First Middle Last)", "ALPHA80");
+        AddVar("BUYERNAMES_LFM", "Buyer / Co-Buyer", "Buyer and Co-Buyer combined names (Last, First Middle)", "ALPHA80");
+        AddVar("REGNAMES", "Buyer / Co-Buyer", "Registered and Co-Registered owner combined names (First Middle Last)", "ALPHA80");
+        AddVar("REGNAMES_LFM", "Buyer / Co-Buyer", "Registered and Co-Registered owner combined names (Last, First Middle)", "ALPHA80");
+        AddVar("BUYERCSZ", "Buyer / Co-Buyer", "Buyer City, State, and ZIP shorthand alias", "BUYERCSZ");
+        AddVar("COBUYERCSZ", "Buyer / Co-Buyer", "Co-Buyer City, State, and ZIP shorthand alias", "BUYERCSZ");
+        AddVar("REGCSZ", "Buyer / Co-Buyer", "Registered Owner City, State, and ZIP shorthand alias", "BUYERCSZ");
+        AddVar("COREGCSZ", "Buyer / Co-Buyer", "Co-Registered Owner City, State, and ZIP shorthand alias", "BUYERCSZ");
+
+        // 4. Common FormGen Smart Fields & Calculation Identifiers
+        AddVar("CashPrice", "Financial", "Total vehicle / deal cash selling price", "standardNumeric");
+        AddVar("TradeCreditN", "Trade-In", "Net trade-in credit amount", "standardNumeric");
+        AddVar("TradeCredit1", "Trade-In", "Trade-in 1 credit amount", "standardNumeric");
+        AddVar("TradeCredit2", "Trade-In", "Trade-in 2 credit amount", "standardNumeric");
+
+        for (int r = 1; r <= 10; r++)
+        {
+            AddVar($"RA{r}", "Financial", $"Rebate / Allowance slot {r} amount", "standardNumeric");
+        }
+
+        return dict;
+    }
 
     private static IReadOnlyDictionary<int, FormgenFieldInfo> LoadMasterFields()
     {

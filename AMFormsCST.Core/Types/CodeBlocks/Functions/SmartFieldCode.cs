@@ -9,15 +9,31 @@ namespace AMFormsCST.Core.Types.CodeBlocks.Functions;
 /// </summary>
 public class SmartFieldCode : CodeBase
 {
-    public SmartFieldCode() : this("CashPrice")
+    public bool IsPredefined { get; set; }
+    public string Category { get; set; } = "Smart Field";
+
+    public SmartFieldCode() : this("CashPrice", isPredefined: true, "Financial", "Total vehicle / deal cash selling price")
     {
     }
 
     public SmartFieldCode(string fieldName)
+        : this(
+            fieldName,
+            isPredefined: FormgenReferenceCatalog.IsPredefinedSmartField(fieldName),
+            category: FormgenReferenceCatalog.TryGetSmartField(fieldName, out var sf) ? sf!.Category : "User Variable",
+            description: FormgenReferenceCatalog.TryGetSmartField(fieldName, out sf) ? sf!.Description : null)
     {
-        Name = "Smart Field / Variable";
+    }
+
+    public SmartFieldCode(string fieldName, bool isPredefined, string category = "Smart Field", string? description = null)
+    {
+        IsPredefined = isPredefined;
+        Category = category;
+        Name = isPredefined ? $"Smart Field: {fieldName}" : $"Variable: {fieldName}";
         Prefix = "SF";
-        Description = "Auto/Mate FormGen Smart Field, F-Field, or named calculation variable (e.g. CashPrice, F72, ACC01_COMPNAME).";
+        Description = description ?? (isPredefined
+            ? $"Auto/Mate FormGen Predefined Smart Field '{fieldName}' ({category}) — reacts dynamically to prompts and deal data at print time."
+            : $"Auto/Mate FormGen variable identifier '{fieldName}'.");
         AddInput(fieldName, "Field Name");
     }
 
@@ -48,15 +64,21 @@ public class SmartFieldCode : CodeBase
     public override string GetPseudoCode(int indentLevel = 0)
     {
         string indent = new(' ', indentLevel * 2);
-        return $"{indent}VARIABLE / FIELD ({DescribeInlineSummary()}):\n" +
-               $"{indent}  ➜ Retrieves the runtime value of {DescribeInlineSummary()}";
+        var field = DescribeInlineSummary();
+        if (IsPredefined)
+        {
+            return $"{indent}SMART FIELD ({field}):\n" +
+                   $"{indent}  ➜ Retrieves FormGen predefined dynamic value '{field}' ({Category})";
+        }
+
+        return $"{indent}VARIABLE / FIELD ({field}):\n" +
+               $"{indent}  ➜ Retrieves the runtime value of variable '{field}'";
     }
 
     public override CodeBase Clone()
     {
-        var clone = new SmartFieldCode(FieldName);
+        var clone = new SmartFieldCode(FieldName, IsPredefined, Category, Description);
         clone.Name = Name;
-        clone.Description = Description;
         clone.Prefix = Prefix;
         return clone;
     }

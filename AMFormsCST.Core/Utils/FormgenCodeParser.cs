@@ -257,12 +257,21 @@ public static class FormgenCodeParser
                     fix);
             }
 
-            // Otherwise, this identifier is a valid FormGen Smart Field / named variable
-            var sfLeaf = new SmartFieldCode(normalizedWhitespace);
-            var sfTitle = $"Smart Field: {normalizedWhitespace}";
-            var sfDesc = $"Valid FormGen Smart Field / variable identifier '{normalizedWhitespace}'.";
-            var sfCondensed = new CustomSnippetCode(sfTitle, sfDesc, sfLeaf, exposeVariableIdentifiers: false);
-            return new FormgenParseResult(FormgenParseStatus.Valid, input, sfLeaf, sfCondensed, sfTitle, sfDesc);
+            // Otherwise, check whether this identifier is a predefined FormGen smart field or a user-defined variable
+            if (FormgenReferenceCatalog.TryGetSmartField(normalizedWhitespace, out var smartField))
+            {
+                var sfLeaf = new SmartFieldCode(smartField!.Name, isPredefined: true, smartField.Category, smartField.Description);
+                var sfTitle = $"Predefined Smart Field: {smartField.Name}";
+                var sfDesc = $"{smartField.Description} (Category: {smartField.Category}). Predefined FormGen smart variable that reacts dynamically to prompts and deal data.";
+                var sfCondensed = new CustomSnippetCode(sfTitle, sfDesc, sfLeaf, exposeVariableIdentifiers: false);
+                return new FormgenParseResult(FormgenParseStatus.Valid, input, sfLeaf, sfCondensed, sfTitle, sfDesc);
+            }
+
+            var uvLeaf = new SmartFieldCode(normalizedWhitespace, isPredefined: false, "User Variable", $"User-defined variable '{normalizedWhitespace}'.");
+            var uvTitle = $"User-Defined Variable: {normalizedWhitespace}";
+            var uvDesc = $"Valid FormGen user-defined calculation or prompt variable '{normalizedWhitespace}'.";
+            var uvCondensed = new CustomSnippetCode(uvTitle, uvDesc, uvLeaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, uvLeaf, uvCondensed, uvTitle, uvDesc);
         }
 
         // 1. Check whether the text has any similarity to a FormGen function or expression
@@ -369,7 +378,9 @@ public static class FormgenCodeParser
         }
         if (parsedTree is SmartFieldCode sf)
         {
-            return $"Field: {sf.FieldName}";
+            return sf.IsPredefined
+                ? $"Smart Field: {sf.FieldName}"
+                : $"Variable: {sf.FieldName}";
         }
         if (!string.IsNullOrWhiteSpace(parsedTree.Name))
             return $"Parsed: {parsedTree.Name}";

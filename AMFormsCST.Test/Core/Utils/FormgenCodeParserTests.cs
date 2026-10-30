@@ -191,7 +191,7 @@ public class FormgenCodeParserTests
         var result = FormgenCodeParser.Parse("CashPrice");
         Assert.Equal(FormgenParseStatus.Valid, result.Status);
         Assert.NotNull(result.CondensedBlock);
-        Assert.Equal("Smart Field: CashPrice", result.StatusTitle);
+        Assert.Equal("Predefined Smart Field: CashPrice", result.StatusTitle);
         Assert.Equal("CashPrice", result.CondensedBlock.GetCode());
         Assert.False(result.HasSuggestedFix);
     }
@@ -283,9 +283,64 @@ public class FormgenCodeParserTests
         var sf = new SmartFieldCode("TradeCreditN");
         Assert.Equal("TradeCreditN", sf.GetCode());
         Assert.Equal("SF", sf.Prefix);
+        Assert.True(sf.IsPredefined);
 
         var clone = (SmartFieldCode)sf.Clone();
         Assert.Equal("TradeCreditN", clone.FieldName);
         Assert.Equal("TradeCreditN", clone.GetCode());
+        Assert.True(clone.IsPredefined);
+    }
+
+    [Theory]
+    [InlineData("BuyerName")]
+    [InlineData("CobuyerAddr")]
+    [InlineData("CashPrice")]
+    [InlineData("HASCOBUYER")]
+    [InlineData("ACC01_COMPNAME")]
+    [InlineData("ACC15_POSPRICE")]
+    [InlineData("HASACC01")]
+    [InlineData("DEALNUM")]
+    [InlineData("TOTALREBATEDESC")]
+    public void Parse_PredefinedSmartField_IdentifiesAsPredefined(string smartFieldName)
+    {
+        var result = FormgenCodeParser.Parse(smartFieldName);
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.Contains("Predefined Smart Field", result.StatusTitle);
+        Assert.NotNull(result.ParsedTree);
+        Assert.IsType<SmartFieldCode>(result.ParsedTree);
+        var sf = (SmartFieldCode)result.ParsedTree;
+        Assert.True(sf.IsPredefined);
+        Assert.Equal(smartFieldName, sf.FieldName);
+    }
+
+    [Theory]
+    [InlineData("CustomRate")]
+    [InlineData("DealerFeeOption")]
+    [InlineData("TempCalculationVar")]
+    public void Parse_UserDefinedVariable_IdentifiesAsUserDefined(string varName)
+    {
+        var result = FormgenCodeParser.Parse(varName);
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.Contains("User-Defined Variable", result.StatusTitle);
+        Assert.NotNull(result.ParsedTree);
+        Assert.IsType<SmartFieldCode>(result.ParsedTree);
+        var sf = (SmartFieldCode)result.ParsedTree;
+        Assert.False(sf.IsPredefined);
+        Assert.Equal(varName, sf.FieldName);
+    }
+
+    [Fact]
+    public void FormgenReferenceCatalog_ContainsPredefinedVariablesFromFormGen()
+    {
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("BuyerName"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("BUYERCITYSTATEZIP"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("HASCOBUYER"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("ACC01_COST"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("ACC15_COMPNAME"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("HASACC03"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("DEALNUM"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("CashPrice"));
+
+        Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("NonExistentCustomVar123"));
     }
 }
