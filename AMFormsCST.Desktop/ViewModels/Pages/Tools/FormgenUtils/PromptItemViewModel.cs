@@ -92,10 +92,13 @@ public partial class PromptItemViewModel : ObservableObject
             {
                 CodeLine.PromptData.Message = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(PromptText));
                 _onChanged?.Invoke();
             }
         }
     }
+
+    public string PromptText => Message;
 
     public string Expression
     {

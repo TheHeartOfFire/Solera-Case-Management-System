@@ -841,15 +841,15 @@ public partial class CodeSnippetsViewModel : ViewModel
             }
         }
 
-        AddCategoryIfAny("Variables_General", "Smart Fields: Deal & Financial", "#1F10B981", "#CC10B981", "#FF10B981", expanded: true);
-        AddCategoryIfAny("Variables_Buyer", "Smart Fields: Buyer / Co-Buyer", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
-        AddCategoryIfAny("Variables_Accessory", "Smart Fields: Accessories (ACC01–15)", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
-        AddCategoryIfAny("Variables", "Fields & Variables", "#1F10B981", "#CC10B981", "#FF10B981", expanded: true);
         AddCategoryIfAny("Logic", "Logic & Conditionals", "#1FD97706", "#CCD97706", "#FFD97706", expanded: true);
         AddCategoryIfAny("Text", "Text & Formatting", "#1F0D9488", "#CC0D9488", "#FF0D9488", expanded: true);
         AddCategoryIfAny("Date", "Date & Time", "#1F0284C7", "#CC0284C7", "#FF0284C7", expanded: false);
         AddCategoryIfAny("Math", "Math & Numbers", "#1F2563EB", "#CC2563EB", "#FF2563EB", expanded: false);
         AddCategoryIfAny("Trig", "Trigonometry", "#1F4F46E5", "#CC4F46E5", "#FF4F46E5", expanded: false);
+        AddCategoryIfAny("Variables", "Fields & Variables", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
+        AddCategoryIfAny("Variables_General", "Smart Fields: Deal & Financial", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
+        AddCategoryIfAny("Variables_Buyer", "Smart Fields: Buyer / Co-Buyer", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
+        AddCategoryIfAny("Variables_Accessory", "Smart Fields: Accessories (ACC01–15)", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
 
         FunctionCategories = new ObservableCollection<FunctionCategoryViewModel>(categories);
     }

@@ -76,13 +76,15 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
     public bool IsPromptsTabSelected => SelectedWorkspaceTabIndex == 0;
     public bool IsFieldsTabSelected => SelectedWorkspaceTabIndex == 1;
-    public bool IsCodeParserTabSelected => SelectedWorkspaceTabIndex == 2;
-    public bool IsTransferTabSelected => SelectedWorkspaceTabIndex == 3;
+    public bool IsHierarchyTabSelected => SelectedWorkspaceTabIndex == 2;
+    public bool IsCodeParserTabSelected => SelectedWorkspaceTabIndex == 3;
+    public bool IsTransferTabSelected => SelectedWorkspaceTabIndex == 4;
 
     partial void OnSelectedWorkspaceTabIndexChanged(int value)
     {
         OnPropertyChanged(nameof(IsPromptsTabSelected));
         OnPropertyChanged(nameof(IsFieldsTabSelected));
+        OnPropertyChanged(nameof(IsHierarchyTabSelected));
         OnPropertyChanged(nameof(IsCodeParserTabSelected));
         OnPropertyChanged(nameof(IsTransferTabSelected));
     }

@@ -131,6 +131,10 @@ public partial class FieldItemViewModel : ObservableObject
         }
     }
 
+    public string LaserCoordsDisplay => $"({LaserRectX}, {LaserRectY}, {LaserRectWidth}, {LaserRectHeight})";
+
+    public string ImpactCoordsDisplay => $"({ImpactCol}, {ImpactLine})";
+
     public int LaserRectX
     {
         get => Field.Settings?.LaserRect.X ?? 0;
@@ -142,6 +146,7 @@ public partial class FieldItemViewModel : ObservableObject
                 r.X = value;
                 Field.Settings.LaserRect = r;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(LaserCoordsDisplay));
                 _onChanged?.Invoke();
             }
         }
@@ -158,6 +163,7 @@ public partial class FieldItemViewModel : ObservableObject
                 r.Y = value;
                 Field.Settings.LaserRect = r;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(LaserCoordsDisplay));
                 _onChanged?.Invoke();
             }
         }
@@ -174,6 +180,7 @@ public partial class FieldItemViewModel : ObservableObject
                 r.Width = value;
                 Field.Settings.LaserRect = r;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(LaserCoordsDisplay));
                 _onChanged?.Invoke();
             }
         }
@@ -190,6 +197,7 @@ public partial class FieldItemViewModel : ObservableObject
                 r.Height = value;
                 Field.Settings.LaserRect = r;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(LaserCoordsDisplay));
                 _onChanged?.Invoke();
             }
         }
@@ -206,6 +214,7 @@ public partial class FieldItemViewModel : ObservableObject
                 pos.X = value;
                 Field.Settings.ImpactPosition = pos;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(ImpactCoordsDisplay));
                 _onChanged?.Invoke();
             }
         }
@@ -222,6 +231,7 @@ public partial class FieldItemViewModel : ObservableObject
                 pos.Y = value;
                 Field.Settings.ImpactPosition = pos;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(ImpactCoordsDisplay));
                 _onChanged?.Invoke();
             }
         }
@@ -242,8 +252,10 @@ public partial class FieldItemViewModel : ObservableObject
         OnPropertyChanged(nameof(LaserRectY));
         OnPropertyChanged(nameof(LaserRectWidth));
         OnPropertyChanged(nameof(LaserRectHeight));
+        OnPropertyChanged(nameof(LaserCoordsDisplay));
         OnPropertyChanged(nameof(ImpactCol));
         OnPropertyChanged(nameof(ImpactLine));
+        OnPropertyChanged(nameof(ImpactCoordsDisplay));
     }
 }
 
