@@ -74,6 +74,28 @@ public partial class FormgenUtilitiesViewModel : ViewModel
     [ObservableProperty]
     private int _selectedWorkspaceTabIndex = 0;
 
+    public bool IsPromptsTabSelected => SelectedWorkspaceTabIndex == 0;
+    public bool IsFieldsTabSelected => SelectedWorkspaceTabIndex == 1;
+    public bool IsCodeParserTabSelected => SelectedWorkspaceTabIndex == 2;
+    public bool IsTransferTabSelected => SelectedWorkspaceTabIndex == 3;
+
+    partial void OnSelectedWorkspaceTabIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsPromptsTabSelected));
+        OnPropertyChanged(nameof(IsFieldsTabSelected));
+        OnPropertyChanged(nameof(IsCodeParserTabSelected));
+        OnPropertyChanged(nameof(IsTransferTabSelected));
+    }
+
+    [RelayCommand]
+    private void SelectWorkspaceTab(string? tabIndexStr)
+    {
+        if (int.TryParse(tabIndexStr, out int idx))
+        {
+            SelectedWorkspaceTabIndex = idx;
+        }
+    }
+
     // Center Workspace Collections
     public ObservableCollection<PromptItemViewModel> PromptsList { get; } = [];
     public ObservableCollection<FieldItemViewModel> FieldsList { get; } = [];
