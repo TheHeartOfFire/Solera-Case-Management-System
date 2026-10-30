@@ -415,6 +415,57 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         _logger?.LogInfo("FormgenUtilitiesViewModel initialized.");
     }
 
+    public event Action<PromptItemViewModel>? RequestScrollToPrompt;
+    public event Action<FieldItemViewModel>? RequestScrollToField;
+
+    [RelayCommand]
+    public void NavigateToTreeNode(TreeItemNodeViewModel? node)
+    {
+        if (node?.Data == null) return;
+
+        if (node.Data is CodeLine codeLine)
+        {
+            SelectedWorkspaceTabIndex = 0; // Prompts & Code tab
+            var target = PromptsList.FirstOrDefault(c => c.CodeLine == codeLine);
+            if (target != null)
+            {
+                SelectedPromptItem = target;
+                RequestScrollToPrompt?.Invoke(target);
+            }
+        }
+        else if (node.Data is CodeLineGroup codeGroup)
+        {
+            SelectedWorkspaceTabIndex = 0;
+            var target = PromptsList.FirstOrDefault(c => c.Type == codeGroup.Type);
+            if (target != null)
+            {
+                SelectedPromptItem = target;
+                RequestScrollToPrompt?.Invoke(target);
+            }
+        }
+        else if (node.Data is FormField field)
+        {
+            SelectedWorkspaceTabIndex = 1; // Form Fields tab
+            var target = FieldsList.FirstOrDefault(f => f.Field == field);
+            if (target != null)
+            {
+                SelectedFieldItem = target;
+                RequestScrollToField?.Invoke(target);
+            }
+        }
+        else if (node.Data is FormPage page)
+        {
+            SelectedWorkspaceTabIndex = 1;
+            var pageNum = page.Settings?.PageNumber ?? 1;
+            var target = FieldsList.FirstOrDefault(f => f.PageNumber == pageNum);
+            if (target != null)
+            {
+                SelectedFieldItem = target;
+                RequestScrollToField?.Invoke(target);
+            }
+        }
+    }
+
     [RelayCommand]
     private void ToggleSidebar()
     {

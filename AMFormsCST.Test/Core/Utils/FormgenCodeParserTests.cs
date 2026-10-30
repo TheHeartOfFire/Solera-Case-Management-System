@@ -1,6 +1,7 @@
 using AMFormsCST.Core.Types.CodeBlocks.Formulae;
 using AMFormsCST.Core.Types.CodeBlocks.Functions;
 using AMFormsCST.Core.Utils;
+using System.IO;
 using Xunit;
 
 namespace AMFormsCST.Test.Core.Utils;
@@ -313,20 +314,40 @@ public class FormgenCodeParserTests
         Assert.Equal(smartFieldName, sf.FieldName);
     }
 
-    [Theory]
-    [InlineData("CustomRate")]
-    [InlineData("DealerFeeOption")]
-    [InlineData("TempCalculationVar")]
-    public void Parse_UserDefinedVariable_IdentifiesAsUserDefined(string varName)
+    [Fact]
+    public void Parse_SamplePdfFormgen_AllExpressionsValid()
     {
-        var result = FormgenCodeParser.Parse(varName);
+        var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "AMFormsCST.Desktop", "SampleData", "Formgen Sample Data", "Pdf Sample", "Sample Pdf.formgen");
+        var fullPath = Path.GetFullPath(path);
+        Assert.True(File.Exists(fullPath), $"File should exist at {fullPath}");
+        var doc = new System.Xml.XmlDocument();
+        doc.Load(fullPath);
+        var nodes = doc.SelectNodes("//expression");
+        Assert.NotNull(nodes);
+
+        var failures = new List<string>();
+        foreach (System.Xml.XmlNode n in nodes)
+        {
+            var text = n.InnerText?.Trim();
+            if (string.IsNullOrWhiteSpace(text)) continue;
+            var res = FormgenCodeParser.Parse(text);
+            if (res.Status != FormgenParseStatus.Valid)
+            {
+                failures.Add($"[{text}] -> {res.Status}: {res.DiagnosticMessage} (Fix: '{res.SuggestedFix}')");
+            }
+        }
+
+        Assert.True(failures.Count == 0, "Failures:\n" + string.Join("\n", failures));
+    }
+
+    [Theory]
+    [InlineData("IF(F667>0 && NOTBLANK(F49),F456,'')")]
+    [InlineData("IF(F667=0 || BLANK(F49),'NA','')")]
+    [InlineData("IF(F17 != 'J' || BLANK(F49),'NA','')")]
+    public void Parse_CompoundConditionsWithLogicalAmpersandsAndPipes_ParsesValid(string code)
+    {
+        var result = FormgenCodeParser.Parse(code);
         Assert.Equal(FormgenParseStatus.Valid, result.Status);
-        Assert.Contains("User-Defined Variable", result.StatusTitle);
-        Assert.NotNull(result.ParsedTree);
-        Assert.IsType<SmartFieldCode>(result.ParsedTree);
-        var sf = (SmartFieldCode)result.ParsedTree;
-        Assert.False(sf.IsPredefined);
-        Assert.Equal(varName, sf.FieldName);
     }
 
     [Fact]

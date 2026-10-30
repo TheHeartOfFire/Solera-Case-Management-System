@@ -77,14 +77,11 @@ public class CodeBlocks : ICodeBlocks
         AddDefaultBlock(new FormgenFunctionCode("ADDMONTHS", "Add Months (ADDMONTHS)", ["Date", "Months"]));
         AddDefaultBlock(new FormgenFunctionCode("ADDYEARS", "Add Years (ADDYEARS)", ["Date", "Years"]));
 
-        // Fields & Variables
-        AddDefaultBlock(new SmartFieldCode("CashPrice"));
-        AddDefaultBlock(new SmartFieldCode("BuyerName"));
-        AddDefaultBlock(new SmartFieldCode("CobuyerName"));
-        AddDefaultBlock(new SmartFieldCode("HASCOBUYER"));
-        AddDefaultBlock(new SmartFieldCode("TradeCreditN"));
-        AddDefaultBlock(new SmartFieldCode("ACC01_COMPNAME"));
-        AddDefaultBlock(new SmartFieldCode("ACC01_POSPRICE"));
+        // Fields & Variables (FormGen Predefined Smart Fields)
+        foreach (var smartField in FormgenReferenceCatalog.PredefinedSmartFields.Values)
+        {
+            AddDefaultBlock(new SmartFieldCode(smartField.Name));
+        }
 
         // Math & Conversion Functions + Operators
         AddDefaultBlock(new OperatorCode());

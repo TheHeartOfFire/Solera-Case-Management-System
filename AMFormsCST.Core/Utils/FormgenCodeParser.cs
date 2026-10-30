@@ -132,7 +132,7 @@ public static class FormgenCodeParser
 
     private static readonly Regex FunctionCallHeaderRegex = new(@"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", RegexOptions.Compiled);
     private static readonly Regex FFieldTokenRegex = new(@"\b[Ff]\d{1,4}\b", RegexOptions.Compiled);
-    private static readonly Regex OperatorTokenRegex = new(@"(!=|<=|>=|==|<>|[=+\-*/%<>]|\bAND\b|\bOR\b)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex OperatorTokenRegex = new(@"(!=|<=|>=|==|<>|&&|\|\||[=+\-*/%<>]|\bAND\b|\bOR\b)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static FormgenParseResult Parse(string? rawInput)
     {
@@ -1088,8 +1088,8 @@ public static class FormgenCodeParser
         // 6. Scientific notation: e
         string[][] precedenceGroups =
         [
-            ["OR"],
-            ["AND"],
+            ["||", "OR"],
+            ["&&", "AND"],
             ["!=", "<=", ">=", "=", "<", ">"],
             ["+", "-"],
             ["*", "/", "%"]

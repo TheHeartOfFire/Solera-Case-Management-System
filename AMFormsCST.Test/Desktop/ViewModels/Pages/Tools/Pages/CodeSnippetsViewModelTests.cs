@@ -575,8 +575,10 @@ public class CodeSnippetsViewModelTests
         var vm = new CodeSnippetsViewModel(supportToolMock.Object);
 
         // Assert
-        Assert.Equal(6, vm.FunctionCategories.Count);
-        Assert.Contains(vm.FunctionCategories, c => c.Name == "Fields & Variables");
+        Assert.Equal(8, vm.FunctionCategories.Count);
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Smart Fields: Deal & Financial");
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Smart Fields: Buyer / Co-Buyer");
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Smart Fields: Accessories (ACC01–15)");
         Assert.Contains(vm.FunctionCategories, c => c.Name == "Logic & Conditionals");
         Assert.Contains(vm.FunctionCategories, c => c.Name == "Text & Formatting");
         Assert.Contains(vm.FunctionCategories, c => c.Name == "Date & Time");

@@ -37,6 +37,8 @@ namespace AMFormsCST.Desktop.Views.Pages.Tools
 
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
+            ViewModel.RequestScrollToPrompt += OnRequestScrollToPrompt;
+            ViewModel.RequestScrollToField += OnRequestScrollToField;
             _logger?.LogInfo("FormgenUtilitiesPage initialized.");
         }
 
@@ -74,9 +76,74 @@ namespace AMFormsCST.Desktop.Views.Pages.Tools
                 parentScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             }
 
+            ViewModel.RequestScrollToPrompt -= OnRequestScrollToPrompt;
+            ViewModel.RequestScrollToField -= OnRequestScrollToField;
+
             Loaded -= OnLoaded;
             Unloaded -= OnUnloaded;
             _logger?.LogInfo("FormgenUtilitiesPage unloaded. Scroll re-enabled.");
+        }
+
+        private void OnRequestScrollToPrompt(PromptItemViewModel item)
+        {
+            CenterDataGridItem(PromptsDataGrid, item);
+        }
+
+        private void OnRequestScrollToField(FieldItemViewModel item)
+        {
+            CenterDataGridItem(FieldsDataGrid, item);
+        }
+
+        private void TreeView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is TreeView tv && tv.SelectedItem is TreeItemNodeViewModel node)
+            {
+                ViewModel.NavigateToTreeNode(node);
+                e.Handled = true;
+            }
+        }
+
+        private static void CenterDataGridItem(System.Windows.Controls.DataGrid? grid, object? item)
+        {
+            if (grid == null || item == null) return;
+
+            grid.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+            {
+                grid.ScrollIntoView(item);
+                grid.UpdateLayout();
+
+                var scrollViewer = FindVisualChild<ScrollViewer>(grid);
+                if (scrollViewer != null)
+                {
+                    var row = (DataGridRow)grid.ItemContainerGenerator.ContainerFromItem(item);
+                    if (row != null)
+                    {
+                        try
+                        {
+                            var transform = row.TransformToAncestor(scrollViewer);
+                            var rowOffset = transform.Transform(new Point(0, 0)).Y + scrollViewer.VerticalOffset;
+                            var targetOffset = rowOffset - (scrollViewer.ViewportHeight / 2.0) + (row.ActualHeight / 2.0);
+                            scrollViewer.ScrollToVerticalOffset(Math.Max(0, targetOffset));
+                        }
+                        catch
+                        {
+                            // Fallback if visual tree transform is momentarily unmapped
+                        }
+                    }
+                }
+            });
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild) return typedChild;
+                var found = FindVisualChild<T>(child);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         private void OnDataGridPreviewKeyDown(object sender, KeyEventArgs e)

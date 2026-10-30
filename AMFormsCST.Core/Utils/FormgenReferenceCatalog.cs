@@ -636,13 +636,27 @@ public static class FormgenReferenceCatalog
                 "Condition1 AND Condition2",
                 "Returns TRUE only if both the Left condition and the Right condition evaluate to TRUE.",
                 "(F72 = 'U') AND (F69 < 50000)"),
+            ["&&"] = new(
+                "&&",
+                "Logical AND",
+                "Infix Logical AND (&&) — Both Conditions Must Be True",
+                "Condition1 && Condition2",
+                "Returns TRUE only if both the Left condition and the Right condition evaluate to TRUE.",
+                "(F72 = 'U') && (F69 < 50000)"),
             ["OR"] = new(
                 "OR",
                 "Logical OR",
                 "Infix Logical OR — Either Condition Can Be True",
                 "Condition1 OR Condition2",
                 "Returns TRUE if either the Left condition or the Right condition (or both) evaluates to TRUE.",
-                "(F72 = 'N') OR (F72 = 'D')")
+                "(F72 = 'N') OR (F72 = 'D')"),
+            ["||"] = new(
+                "||",
+                "Logical OR",
+                "Infix Logical OR (||) — Either Condition Can Be True",
+                "Condition1 || Condition2",
+                "Returns TRUE if either the Left condition or the Right condition (or both) evaluates to TRUE.",
+                "(F72 = 'N') || (F72 = 'D')")
         };
 
     public static FormgenFieldInfo? TryGetField(string? tokenOrNumber)
@@ -757,8 +771,8 @@ public static class FormgenReferenceCatalog
             ("LSEINCEP_DESC", "Lease inception description", "ALPHA40"),
             ("LSEINCEP_PRICE", "Lease inception price", "standardNumeric"),
             ("LSE_CICODE", "Lease capitalize / inception indicator code", "ALPHA1"),
-            ("POSDESC", "Point of sale description", "ALPHA40"),
-            ("POSPRICE", "Point of sale retail price", "standardNumeric"),
+            ("POSDESC", "Positional description", "ALPHA40"),
+            ("POSPRICE", "Positional retail price", "standardNumeric"),
             ("RESIDUAL", "Residual value amount", "standardNumeric"),
             ("RESIDUALIZE_YN", "Residualize flag (Y/N)", "ALPHA1"),
             ("TAX", "Tax amount", "standardNumeric"),

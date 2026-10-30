@@ -7,7 +7,7 @@ public class OperatorCode : CodeBase
 {
     public static IReadOnlyList<string> SupportedOperators { get; } =
     [
-        "+", "-", "*", "/", "%", "e", "=", "!=", "<", ">", "<=", ">=", "AND", "OR"
+        "+", "-", "*", "/", "%", "e", "=", "!=", "<", ">", "<=", ">=", "AND", "OR", "&&", "||"
     ];
 
     private string _operator = "+";
@@ -48,7 +48,7 @@ public class OperatorCode : CodeBase
     public override bool IsMultiLinePseudoCode =>
         (Inputs.Count > 0 && Inputs[0].Value is CodeBase cb0 && (cb0.GetStructure() ?? cb0).IsMultiLinePseudoCode) ||
         (Inputs.Count > 1 && Inputs[1].Value is CodeBase cb1 && (cb1.GetStructure() ?? cb1).IsMultiLinePseudoCode) ||
-        Operator is "AND" or "OR";
+        Operator is "AND" or "OR" or "&&" or "||";
 
     public override string DescribeInlineSummary()
     {
@@ -63,8 +63,8 @@ public class OperatorCode : CodeBase
             "<=" => $"{left} is less than or equal to {right}",
             ">=" => $"{left} is greater than or equal to {right}",
             "%" => $"({left} modulo {right} — remainder after division)",
-            "AND" => $"({left} AND {right})",
-            "OR" => $"({left} OR {right})",
+            "AND" or "&&" => $"({left} AND {right})",
+            "OR" or "||" => $"({left} OR {right})",
             _ => $"({left} {Operator} {right})"
         };
     }
@@ -88,16 +88,17 @@ public class OperatorCode : CodeBase
             }
         }
 
-        if (Operator is "AND" or "OR")
+        if (Operator is "AND" or "OR" or "&&" or "||")
         {
+            var isAnd = Operator is "AND" or "&&";
             var sb = new System.Text.StringBuilder();
-            var rule = Operator == "AND"
+            var rule = isAnd
                 ? "CHECK THAT BOTH CONDITIONS ARE TRUE (AND):"
                 : "CHECK IF EITHER CONDITION IS TRUE (OR):";
             sb.AppendLine($"{indent}{rule}");
             sb.AppendLine($"{indent}  • Left Condition: {leftInline}");
             sb.AppendLine($"{indent}  • Right Condition: {rightInline}");
-            sb.Append(Operator == "AND"
+            sb.Append(isAnd
                 ? $"{indent}  ➜ TRUE only if both Left and Right are TRUE; otherwise FALSE"
                 : $"{indent}  ➜ TRUE if at least one of Left or Right is TRUE; otherwise FALSE");
             return sb.ToString();
@@ -289,15 +290,17 @@ public class OperatorCode : CodeBase
             }
 
             case "AND":
+            case "&&":
             {
                 bool res = EvaluateConditionString(leftVal) && EvaluateConditionString(rightVal);
-                return new CodeEvaluationResult(true, res ? "TRUE" : "FALSE", $"Logical AND: Checked {leftVal} AND {rightVal} -> {(res ? "TRUE" : "FALSE")}", diagnostics);
+                return new CodeEvaluationResult(true, res ? "TRUE" : "FALSE", $"Logical AND ({Operator}): Checked {leftVal} {Operator} {rightVal} -> {(res ? "TRUE" : "FALSE")}", diagnostics);
             }
 
             case "OR":
+            case "||":
             {
                 bool res = EvaluateConditionString(leftVal) || EvaluateConditionString(rightVal);
-                return new CodeEvaluationResult(true, res ? "TRUE" : "FALSE", $"Logical OR: Checked {leftVal} OR {rightVal} -> {(res ? "TRUE" : "FALSE")}", diagnostics);
+                return new CodeEvaluationResult(true, res ? "TRUE" : "FALSE", $"Logical OR ({Operator}): Checked {leftVal} {Operator} {rightVal} -> {(res ? "TRUE" : "FALSE")}", diagnostics);
             }
 
             default:

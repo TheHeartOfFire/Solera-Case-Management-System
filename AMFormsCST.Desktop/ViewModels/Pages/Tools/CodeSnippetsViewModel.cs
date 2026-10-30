@@ -808,11 +808,19 @@ public partial class CodeSnippetsViewModel : ViewModel
     {
         static string GetFunctionGroupKey(ICodeBase block)
         {
-            if (block is SmartFieldCode) return "Variables";
+            if (block is SmartFieldCode sf)
+            {
+                return sf.Category switch
+                {
+                    "Buyer / Co-Buyer" => "Variables_Buyer",
+                    "Accessory" => "Variables_Accessory",
+                    _ => "Variables_General"
+                };
+            }
             if (block is OperatorCode) return "Math";
             return block.Prefix switch
             {
-                "IF" or "XIF" or "XXIF" or "CASE" or "CASELTE" or "MATCHRANGE" or "CONTAINS" or "NOT" or "AND" or "OR" or "BLANK" or "NOTBLANK" => "Logic",
+                "IF" or "XIF" or "XXIF" or "CASE" or "CASELTE" or "MATCHRANGE" or "CONTAINS" or "NOT" or "AND" or "OR" => "Logic",
                 "TODAY" or "MONTH" or "DAY" or "YEAR" or "DATE" or "ADDDAYS" or "ADDWEEKS" or "ADDMONTHS" or "ADDYEARS" => "Date",
                 "SIN" or "COS" or "TAN" or "ASIN" or "ACOS" or "ATAN" or "SINH" or "COSH" or "TANH" or "RAD" or "DEG" => "Trig",
                 "ROUND" or "NUM" or "FLOOR" or "CEILING" or "ABS" or "MAX" or "MIN" or "SQRT" or "LOG" or "LOG10" or "RANDOM" or "PI" => "Math",
@@ -833,6 +841,9 @@ public partial class CodeSnippetsViewModel : ViewModel
             }
         }
 
+        AddCategoryIfAny("Variables_General", "Smart Fields: Deal & Financial", "#1F10B981", "#CC10B981", "#FF10B981", expanded: true);
+        AddCategoryIfAny("Variables_Buyer", "Smart Fields: Buyer / Co-Buyer", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
+        AddCategoryIfAny("Variables_Accessory", "Smart Fields: Accessories (ACC01–15)", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
         AddCategoryIfAny("Variables", "Fields & Variables", "#1F10B981", "#CC10B981", "#FF10B981", expanded: true);
         AddCategoryIfAny("Logic", "Logic & Conditionals", "#1FD97706", "#CCD97706", "#FFD97706", expanded: true);
         AddCategoryIfAny("Text", "Text & Formatting", "#1F0D9488", "#CC0D9488", "#FF0D9488", expanded: true);

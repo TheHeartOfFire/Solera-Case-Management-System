@@ -24,16 +24,17 @@
         <converters:EnumValuesConverter x:Key="EnumValuesConverter" />
         <converters:IntToDoubleConverter x:Key="IntToDoubleConverter" />
 
+        <!-- Unified ToolBar Button Style matching SCMT -->
         <Style x:Key="ToolBarButtonStyle" TargetType="ui:Button">
             <Setter Property="Margin" Value="0,0,6,0" />
-            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Padding" Value="10,5" />
             <Setter Property="FontSize" Value="12" />
         </Style>
 
         <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
             <Setter Property="Margin" Value="0,4,0,4" />
         </Style>
 
@@ -42,7 +43,7 @@
             <Setter Property="Height" Value="36" />
             <Setter Property="Margin" Value="2" />
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -59,8 +60,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="TabBorder" Property="Background" Value="{ui:ThemeResource SubtleFillColorSecondaryBrush}" />
-                                <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                                <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
                             </Trigger>
                             <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag}" Value="True">
                                 <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
@@ -77,6 +78,11 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="Transparent" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- Unified Modern DataGrid Column Header Style compliant with Dark/Light themes -->
@@ -112,6 +118,37 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
+        <!-- Seamless Subtle DataGridRow Style eliminating stark selection boxes -->
+        <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Transparent DataGridCell Style so selected row background is continuous -->
+        <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Padding" Value="6,4" />
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Default TextBlock Style to ensure theme compliance across all containers -->
         <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -132,1026 +169,1113 @@
         </Style>
     </Page.Resources>
 
-    <Grid Margin="12">
-        <Grid.ColumnDefinitions>
-            <!-- Col 0: Left Panel (File Ops & Tree) -->
-            <ColumnDefinition Width="240" MinWidth="180" MaxWidth="360" />
-            <!-- Col 1: Splitter -->
-            <ColumnDefinition Width="Auto" />
-            <!-- Col 2: Center Workspace (Manipulate Prompts, Fields, Code) -->
-            <ColumnDefinition Width="*" MinWidth="350" />
-            <!-- Col 3: Splitter -->
-            <ColumnDefinition Width="Auto" />
-            <!-- Col 4: Right Sidebar (Properties Inspector - Collapsible) -->
-            <ColumnDefinition x:Name="SidebarColumn" Width="280" MinWidth="220" MaxWidth="420">
-                <ColumnDefinition.Style>
-                    <Style TargetType="ColumnDefinition">
-                        <Setter Property="Width" Value="280" />
-                        <Setter Property="MinWidth" Value="220" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsSidebarVisible}" Value="False">
-                                <Setter Property="Width" Value="0" />
-                                <Setter Property="MinWidth" Value="0" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </ColumnDefinition.Style>
-            </ColumnDefinition>
-        </Grid.ColumnDefinitions>
+    <Grid Margin="12,8,12,12">
+        <Grid.RowDefinitions>
+            <!-- Row 0: Top Action Bar & Form Header -->
+            <RowDefinition Height="Auto" />
+            <!-- Row 1: Main Center Workspace + Right Collapsible Inspector -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
         <!-- ========================================================= -->
-        <!--  COLUMN 0: Left Panel (File Operations & Form TreeView)   -->
+        <!--  ROW 0: Top Action Bar & Form Identification Strip        -->
         <!-- ========================================================= -->
-        <Grid Grid.Column="0" Margin="0,0,8,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <Border Grid.Row="0" Margin="0,0,0,10" Padding="10,8"
+                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1" CornerRadius="8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <!-- Left: File Operations -->
+                    <ColumnDefinition Width="Auto" />
+                    <!-- Center: Form Title & UUID -->
+                    <ColumnDefinition Width="*" />
+                    <!-- Right: Inspector Sidebar Toggle -->
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <!-- Top Action Toolbar -->
-            <StackPanel Grid.Row="0" Orientation="Vertical">
-                <Grid Margin="0,0,0,8">
+                <!-- Left: Open, Save, Push, Backup, Close File -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:Button Margin="0,0,6,0" Appearance="Primary" Command="{Binding OpenFormgenFileCommand}" Content="Open" Icon="{ui:SymbolIcon Document24}" ToolTip="Open a .formgen file" />
+                    <ui:Button Margin="0,0,6,0" Appearance="Success" Command="{Binding SaveFormgenFileCommand}" Content="{Binding SaveButtonText}" Icon="{ui:SymbolIcon Save24}" IsEnabled="{Binding HasChanged}" ToolTip="Save changes to .formgen file" />
+                    <ui:Button Margin="0,0,6,0" Appearance="Info" Command="{Binding PushToFormGenCommand}" Content="{Binding PushButtonText}" Icon="{ui:SymbolIcon ArrowUpload24}" IsEnabled="{Binding IsFileLoaded}" ToolTip="Push form into live FormGen session" />
+                    <ui:Button Margin="0,0,6,0" Appearance="Secondary" Command="{Binding LoadBackupCommand}" Content="Backup" Icon="{ui:SymbolIcon History24}" IsEnabled="{Binding IsFileLoaded}" ToolTip="Create or restore from backup" />
+                    <ui:Button Margin="0,0,6,0" Appearance="Danger" Command="{Binding ClearFileCommand}" Content="Close File" Icon="{ui:SymbolIcon Dismiss24}" IsEnabled="{Binding IsFileLoaded}" ToolTip="Close current file" />
+                </StackPanel>
+
+                <!-- Center: Form Title & UUID Strip -->
+                <Grid Grid.Column="1" Margin="16,0,16,0" VerticalAlignment="Center"
+                      Visibility="{Binding IsFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" MinWidth="130" MaxWidth="300" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <ui:Button
-                        Grid.Column="0"
-                        Margin="0,0,4,0"
-                        HorizontalAlignment="Stretch"
-                        Appearance="Primary"
-                        Command="{Binding OpenFormgenFileCommand}"
-                        Content="Open"
-                        Icon="{ui:SymbolIcon Document24}" />
-                    <ui:Button
-                        Grid.Column="1"
-                        Margin="4,0,0,0"
-                        HorizontalAlignment="Stretch"
-                        Appearance="Success"
-                        Command="{Binding SaveFormgenFileCommand}"
-                        Content="{Binding SaveButtonText}"
-                        Icon="{ui:SymbolIcon Save24}"
-                        IsEnabled="{Binding HasChanged}" />
+
+                    <!-- Form Name / Title -->
+                    <TextBlock Grid.Column="0" Text="Form:" FontWeight="SemiBold" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ui:TextBox Grid.Column="1" Text="{Binding FormTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                FontSize="12" Padding="6,3" VerticalAlignment="Center" ToolTip="Edit Form Title" />
+
+                    <!-- UUID -->
+                    <TextBlock Grid.Column="2" Text="UUID:" FontWeight="SemiBold" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="14,0,6,0" />
+                    <ui:TextBox Grid.Column="3" Text="{Binding Uuid, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                FontSize="11" Width="230" Padding="6,3" VerticalAlignment="Center" ToolTip="Form Unique Identifier (UUID)" />
+                    <ui:Button Grid.Column="4" Margin="4,0,0,0" Padding="6,4" Appearance="Secondary"
+                               Command="{Binding RegenerateUuidCommand}" ToolTip="Regenerate new UUID"
+                               Icon="{ui:SymbolIcon ArrowReset24}" />
                 </Grid>
 
-                <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <ui:Button
-                        Grid.Column="0"
-                        Margin="0,0,4,0"
-                        HorizontalAlignment="Stretch"
-                        Appearance="Info"
-                        Command="{Binding PushToFormGenCommand}"
-                        Content="{Binding PushButtonText}"
-                        Icon="{ui:SymbolIcon ArrowUpload24}"
-                        IsEnabled="{Binding IsFileLoaded}"
-                        ToolTip="Push form into live FormGen session" />
-                    <ui:Button
-                        Grid.Column="1"
-                        Margin="4,0,0,0"
-                        HorizontalAlignment="Stretch"
-                        Appearance="Secondary"
-                        Command="{Binding LoadBackupCommand}"
-                        Content="Backup"
-                        Icon="{ui:SymbolIcon History24}"
-                        IsEnabled="{Binding IsFileLoaded}" />
-                </Grid>
-
-                <ui:Button
-                    HorizontalAlignment="Stretch"
-                    Appearance="Danger"
-                    Command="{Binding ClearFileCommand}"
-                    Content="Close File"
-                    Icon="{ui:SymbolIcon Dismiss24}"
-                    IsEnabled="{Binding IsFileLoaded}" />
-            </StackPanel>
-
-            <!-- Navigation Tree -->
-            <Border
-                Grid.Row="1"
-                Margin="0,10,0,0"
-                Padding="6"
-                Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="6">
-                <Grid>
-                    <ui:ProgressRing
-                        IsIndeterminate="True"
-                        Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
-
-                    <TreeView
-                        ItemsSource="{Binding TreeViewNodes}"
-                        Style="{StaticResource {x:Type TreeView}}"
-                        Visibility="{Binding IsFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <TreeView.ItemContainerStyle>
-                            <Style BasedOn="{StaticResource {x:Type TreeViewItem}}" TargetType="{x:Type TreeViewItem}">
-                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-                            </Style>
-                        </TreeView.ItemContainerStyle>
-                        <TreeView.ItemTemplate>
-                            <HierarchicalDataTemplate DataType="{x:Type vms:TreeItemNodeViewModel}" ItemsSource="{Binding Children}">
-                                <TextBlock Text="{Binding Header}" />
-                            </HierarchicalDataTemplate>
-                        </TreeView.ItemTemplate>
-                    </TreeView>
-
-                    <StackPanel
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding IsFileLoaded, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
-                        <ui:SymbolIcon
-                            HorizontalAlignment="Center"
-                            FontSize="32"
-                            Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                            Symbol="Document24" />
-                        <TextBlock
-                            Margin="0,8,0,0"
-                            HorizontalAlignment="Center"
-                            Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"
-                            Text="Load a .formgen file to begin" />
-                    </StackPanel>
-                </Grid>
-            </Border>
-        </Grid>
-
-        <!-- Splitter 1 -->
-        <GridSplitter
-            Grid.Column="1"
-            Width="4"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Stretch"
-            Background="Transparent" />
+                <!-- Right: Hierarchy & Properties Sidebar Toggle Button -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:Button Appearance="Secondary"
+                               Command="{Binding ToggleSidebarCommand}"
+                               ToolTip="Show or hide Form Hierarchy and Properties sidebar">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="DocumentBulletList24" Margin="0,0,6,0" FontSize="16" />
+                            <TextBlock Text="Hierarchy &amp; Inspector" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ui:Button>
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <!-- ========================================================= -->
-        <!--  COLUMN 2: Center Workspace (Manipulate Prompts, Fields)  -->
+        <!--  ROW 1: Main Center Workspace (Tabs + Collapsible Pane)   -->
         <!-- ========================================================= -->
-        <Grid Grid.Column="2" Margin="4,0,4,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <!-- Col 0: Center Workspace (Full width!) -->
+                <ColumnDefinition Width="*" MinWidth="450" />
+                <!-- Col 1: Splitter -->
+                <ColumnDefinition Width="Auto" />
+                <!-- Col 2: Collapsible Right Inspector Sidebar -->
+                <ColumnDefinition x:Name="SidebarColumn" Width="330" MinWidth="240" MaxWidth="500">
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Setter Property="Width" Value="330" />
+                            <Setter Property="MinWidth" Value="240" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSidebarVisible}" Value="False">
+                                    <Setter Property="Width" Value="0" />
+                                    <Setter Property="MinWidth" Value="0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
+            </Grid.ColumnDefinitions>
 
-            <!-- Prominent Category Segmented Navigation Bar -->
-            <Border
-                Grid.Row="0"
-                Margin="0,0,0,10"
-                Padding="3"
-                Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8">
-                <UniformGrid Rows="1" Columns="4">
-                    <!-- Tab 0: Prompts & Code -->
-                    <Button
-                        Command="{Binding SelectWorkspaceTabCommand}"
-                        CommandParameter="0"
-                        Style="{StaticResource WorkspaceTabButtonStyle}"
-                        Tag="{Binding IsPromptsTabSelected}">
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <ui:SymbolIcon Symbol="CommentEdit24" Margin="0,0,8,0" FontSize="16" />
-                            <TextBlock Text="Prompts &amp; Code" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
+            <!-- Center Workspace (Col 0) -->
+            <Grid Grid.Column="0" Margin="0,0,4,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                    <!-- Tab 1: Form Fields -->
-                    <Button
-                        Command="{Binding SelectWorkspaceTabCommand}"
-                        CommandParameter="1"
-                        Style="{StaticResource WorkspaceTabButtonStyle}"
-                        Tag="{Binding IsFieldsTabSelected}">
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <ui:SymbolIcon Symbol="Grid24" Margin="0,0,8,0" FontSize="16" />
-                            <TextBlock Text="Form Fields" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
+                <!-- Prominent Category Segmented Navigation Bar -->
+                <Border
+                    Grid.Row="0"
+                    Margin="0,0,0,10"
+                    Padding="3"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <UniformGrid Rows="1" Columns="4">
+                        <!-- Tab 0: Prompts & Code -->
+                        <Button
+                            Command="{Binding SelectWorkspaceTabCommand}"
+                            CommandParameter="0"
+                            Style="{StaticResource WorkspaceTabButtonStyle}"
+                            Tag="{Binding IsPromptsTabSelected}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <ui:SymbolIcon Symbol="CommentEdit24" Margin="0,0,8,0" FontSize="16" />
+                                <TextBlock Text="Prompts &amp; Code" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
 
-                    <!-- Tab 2: Code Parser & Diagnostics -->
-                    <Button
-                        Command="{Binding SelectWorkspaceTabCommand}"
-                        CommandParameter="2"
-                        Style="{StaticResource WorkspaceTabButtonStyle}"
-                        Tag="{Binding IsCodeParserTabSelected}">
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <ui:SymbolIcon Symbol="ShieldCheckmark24" Margin="0,0,8,0" FontSize="16" />
-                            <TextBlock Text="Code Parser" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
+                        <!-- Tab 1: Form Fields -->
+                        <Button
+                            Command="{Binding SelectWorkspaceTabCommand}"
+                            CommandParameter="1"
+                            Style="{StaticResource WorkspaceTabButtonStyle}"
+                            Tag="{Binding IsFieldsTabSelected}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <ui:SymbolIcon Symbol="Table24" Margin="0,0,8,0" FontSize="16" />
+                                <TextBlock Text="Form Fields" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
 
-                    <!-- Tab 3: Cross-Form Transfer -->
-                    <Button
-                        Command="{Binding SelectWorkspaceTabCommand}"
-                        CommandParameter="3"
-                        Style="{StaticResource WorkspaceTabButtonStyle}"
-                        Tag="{Binding IsTransferTabSelected}">
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <ui:SymbolIcon Symbol="ArrowSwap24" Margin="0,0,8,0" FontSize="16" />
-                            <TextBlock Text="Cross-Form Transfer" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </UniformGrid>
-            </Border>
+                        <!-- Tab 2: Code Parser & Diagnostics -->
+                        <Button
+                            Command="{Binding SelectWorkspaceTabCommand}"
+                            CommandParameter="2"
+                            Style="{StaticResource WorkspaceTabButtonStyle}"
+                            Tag="{Binding IsCodeParserTabSelected}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <ui:SymbolIcon Symbol="Code24" Margin="0,0,8,0" FontSize="16" />
+                                <TextBlock Text="Code Parser" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
 
-            <!-- Tab Content (Driven by SelectedWorkspaceTabIndex) -->
-            <TabControl
-                Grid.Row="1"
-                Style="{StaticResource WorkspaceTabControlStyle}"
-                SelectedIndex="{Binding SelectedWorkspaceTabIndex, Mode=TwoWay}">
-                <!-- TAB 1: Prompts & CodeLines -->
-                <TabItem Header="Prompts &amp; Code">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
+                        <!-- Tab 3: Cross-Form Transfer -->
+                        <Button
+                            Command="{Binding SelectWorkspaceTabCommand}"
+                            CommandParameter="3"
+                            Style="{StaticResource WorkspaceTabButtonStyle}"
+                            Tag="{Binding IsTransferTabSelected}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <ui:SymbolIcon Symbol="ArrowSwap24" Margin="0,0,8,0" FontSize="16" />
+                                <TextBlock Text="Cross-Form Transfer" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </UniformGrid>
+                </Border>
 
-                        <!-- Prompt Toolbar -->
-                        <Border
-                            Grid.Row="0"
-                            Margin="0,0,0,8"
-                            Padding="8,6"
-                            Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                <!-- Headless TabControl Switched By Top Segmented Bar -->
+                <TabControl
+                    Grid.Row="1"
+                    SelectedIndex="{Binding SelectedWorkspaceTabIndex, Mode=TwoWay}"
+                    Style="{StaticResource WorkspaceTabControlStyle}">
 
-                                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                    <ui:Button
-                                        Style="{StaticResource ToolBarButtonStyle}"
-                                        Appearance="Primary"
-                                        Command="{Binding CloneSelectedPromptsCommand}"
-                                        CommandParameter="{Binding SelectedItems, ElementName=PromptsDataGrid}"
-                                        Content="Duplicate"
-                                        Icon="{ui:SymbolIcon Copy24}"
-                                        ToolTip="Duplicate selected prompt(s)" />
-                                    <ui:Button
-                                        Style="{StaticResource ToolBarButtonStyle}"
-                                        Appearance="Secondary"
-                                        Command="{Binding MoveSelectedPromptUpCommand}"
-                                        Content="Move Up"
-                                        Icon="{ui:SymbolIcon ArrowUp24}"
-                                        ToolTip="Move selected prompt up in order" />
-                                    <ui:Button
-                                        Style="{StaticResource ToolBarButtonStyle}"
-                                        Appearance="Secondary"
-                                        Command="{Binding MoveSelectedPromptDownCommand}"
-                                        Content="Move Down"
-                                        Icon="{ui:SymbolIcon ArrowDown24}"
-                                        ToolTip="Move selected prompt down in order" />
-                                    <ui:Button
-                                        Style="{StaticResource ToolBarButtonStyle}"
-                                        Appearance="Danger"
-                                        Command="{Binding DeleteSelectedPromptsCommand}"
-                                        CommandParameter="{Binding SelectedItems, ElementName=PromptsDataGrid}"
-                                        Content="Delete"
-                                        Icon="{ui:SymbolIcon Delete24}"
-                                        ToolTip="Delete selected prompt(s) (Del)" />
-                                </StackPanel>
+                    <!-- ================================================= -->
+                    <!-- TAB 0: Prompts & Code Workspace                   -->
+                    <!-- ================================================= -->
+                    <TabItem Header="Prompts &amp; Code">
+                        <Grid Margin="0,2,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
 
-                                <TextBlock
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="{Binding PromptsSelectedCountText}" />
-                            </Grid>
-                        </Border>
-
-                        <!-- Prompt DataGrid -->
-                        <DataGrid
-                            x:Name="PromptsDataGrid"
-                            Grid.Row="1"
-                            AutoGenerateColumns="False"
-                            CanUserAddRows="False"
-                            CanUserDeleteRows="False"
-                            CanUserResizeColumns="True"
-                            HorizontalScrollBarVisibility="Auto"
-                            VerticalScrollBarVisibility="Auto"
-                            ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
-                            ItemsSource="{Binding PromptsList}"
-                            SelectedItem="{Binding SelectedPromptItem, Mode=TwoWay}"
-                            SelectionMode="Extended"
-                            PreviewKeyDown="OnDataGridPreviewKeyDown">
-                            <DataGrid.Columns>
-                                <DataGridTemplateColumn Width="46" CanUserResize="False"
-                                                        CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
-                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
-                                    <DataGridTemplateColumn.Header>
-                                        <CheckBox
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Background="Transparent"
-                                            Margin="0" Padding="0" MinWidth="0" MinHeight="0"
-                                            IsChecked="{Binding DataContext.AreAllPromptsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
-                                            ToolTip="Select / Deselect All" />
-                                    </DataGridTemplateColumn.Header>
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <CheckBox
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Background="Transparent"
-                                                Margin="0" Padding="0" MinWidth="0" MinHeight="0"
-                                                IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTextColumn Binding="{Binding Order}" Header="Order" IsReadOnly="True" Width="55" />
-                                <DataGridTextColumn Binding="{Binding Variable}" Header="Variable" FontWeight="SemiBold" Width="85" />
-                                <DataGridTextColumn Binding="{Binding Type}" Header="Type" IsReadOnly="True" Width="75" />
-                                <DataGridTextColumn Binding="{Binding PromptKind}" Header="Prompt Kind" Width="95" />
-                                <DataGridTextColumn Binding="{Binding Message}" Header="Prompt Message / Label" MinWidth="130" Width="2*" />
-                                <DataGridTextColumn Binding="{Binding Expression}" Header="Expression / Default" MinWidth="130" Width="2*" />
-                                <DataGridTemplateColumn Header="Req" Width="46"
-                                                        CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
-                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <CheckBox
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Background="Transparent"
-                                                Margin="0" Padding="0" MinWidth="0" MinHeight="0"
-                                                IsChecked="{Binding Required, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTextColumn Binding="{Binding ChoicesText}" Header="Choices" MinWidth="90" Width="1.5*" />
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </Grid>
-                </TabItem>
-
-                <!-- TAB 2: Form Fields -->
-                <TabItem Header="Form Fields">
-                    <Grid Margin="0,8,0,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-
-                        <!-- Field Operations Toolbar -->
-                        <Border
-                            Grid.Row="0"
-                            Margin="0,0,0,8"
-                            Padding="8,6"
-                            Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="6">
-                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <!-- Page Filter -->
-                                <TextBlock
-                                    Margin="0,0,6,0"
-                                    VerticalAlignment="Center"
-                                    FontWeight="SemiBold"
-                                    Text="Page:" />
-                                <ComboBox
-                                    Margin="0,0,12,0"
-                                    Width="110"
-                                    ItemsSource="{Binding AvailablePageFilters}"
-                                    SelectedItem="{Binding SelectedPageFilter, Mode=TwoWay}" />
-
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Primary"
-                                    Command="{Binding CloneSelectedFieldsCommand}"
-                                    CommandParameter="{Binding SelectedItems, ElementName=FieldsDataGrid}"
-                                    Content="Duplicate"
-                                    Icon="{ui:SymbolIcon Copy24}"
-                                    ToolTip="Duplicate selected field(s)" />
-
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Danger"
-                                    Command="{Binding DeleteSelectedFieldsCommand}"
-                                    CommandParameter="{Binding SelectedItems, ElementName=FieldsDataGrid}"
-                                    Content="Delete"
-                                    Icon="{ui:SymbolIcon Delete24}"
-                                    ToolTip="Delete selected field(s) (Del)" />
-
-                                <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
-
-                                <!-- Alignment Operations -->
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Secondary"
-                                    Command="{Binding AlignFieldsCommand}"
-                                    CommandParameter="Left"
-                                    Content="Align Left"
-                                    Icon="{ui:SymbolIcon AlignLeft24}"
-                                    ToolTip="Align selected fields to leftmost coordinate" />
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Secondary"
-                                    Command="{Binding AlignFieldsCommand}"
-                                    CommandParameter="Top"
-                                    Content="Align Top"
-                                    Icon="{ui:SymbolIcon ArrowUp24}"
-                                    ToolTip="Align selected fields to topmost coordinate" />
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Secondary"
-                                    Command="{Binding AlignFieldsCommand}"
-                                    CommandParameter="MatchWidth"
-                                    Content="Match Width"
-                                    Icon="{ui:SymbolIcon ArrowAutofitWidth24}"
-                                    ToolTip="Make selected fields uniform width" />
-
-                                <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
-
-                                <!-- Distribution Operations -->
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Secondary"
-                                    Command="{Binding DistributeFieldsCommand}"
-                                    CommandParameter="Horizontal"
-                                    Content="Distribute H"
-                                    Icon="{ui:SymbolIcon ArrowAutofitWidth24}"
-                                    ToolTip="Distribute selected fields evenly across horizontal space" />
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Secondary"
-                                    Command="{Binding DistributeFieldsCommand}"
-                                    CommandParameter="Vertical"
-                                    Content="Distribute V"
-                                    Icon="{ui:SymbolIcon ArrowAutofitHeight24}"
-                                    ToolTip="Distribute selected fields evenly across vertical space" />
-
-                                <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
-
-                                <!-- Bulk Styling -->
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Secondary"
-                                    Command="{Binding BulkToggleBoldCommand}"
-                                    Content="Toggle Bold"
-                                    Icon="{ui:SymbolIcon TextBold24}"
-                                    ToolTip="Toggle bold on selected or all page fields" />
-                                <ui:Button
-                                    Style="{StaticResource ToolBarButtonStyle}"
-                                    Appearance="Secondary"
-                                    Command="{Binding AlignAcrossPagesCommand}"
-                                    Content="Align Across Pages"
-                                    Icon="{ui:SymbolIcon ArrowSync24}"
-                                    ToolTip="Synchronize field positions across multi-page forms" />
-
-                                <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
-
-                                <TextBlock
-                                    VerticalAlignment="Center"
-                                    Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="{Binding FieldsSelectedCountText}" />
-                            </WrapPanel>
-                        </Border>
-
-                        <!-- Fields DataGrid -->
-                        <DataGrid
-                            x:Name="FieldsDataGrid"
-                            Grid.Row="1"
-                            AutoGenerateColumns="False"
-                            CanUserAddRows="False"
-                            CanUserDeleteRows="False"
-                            CanUserResizeColumns="True"
-                            HorizontalScrollBarVisibility="Auto"
-                            VerticalScrollBarVisibility="Auto"
-                            ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
-                            ItemsSource="{Binding FilteredFieldsList}"
-                            SelectedItem="{Binding SelectedFieldItem, Mode=TwoWay}"
-                            SelectionMode="Extended"
-                            PreviewKeyDown="OnDataGridPreviewKeyDown">
-                            <DataGrid.Columns>
-                                <DataGridTemplateColumn Width="46" CanUserResize="False"
-                                                        CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
-                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
-                                    <DataGridTemplateColumn.Header>
-                                        <CheckBox
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Background="Transparent"
-                                            Margin="0" Padding="0" MinWidth="0" MinHeight="0"
-                                            IsChecked="{Binding DataContext.AreAllFieldsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
-                                            ToolTip="Select / Deselect All" />
-                                    </DataGridTemplateColumn.Header>
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <CheckBox
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Background="Transparent"
-                                                Margin="0" Padding="0" MinWidth="0" MinHeight="0"
-                                                IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTextColumn Binding="{Binding ID}" Header="ID" IsReadOnly="True" Width="50" />
-                                <DataGridTextColumn Binding="{Binding PageNumber}" Header="Page" IsReadOnly="True" Width="50" />
-                                <DataGridTextColumn Binding="{Binding Type}" Header="Type" Width="75" />
-                                <DataGridTextColumn Binding="{Binding Expression}" Header="Expression" Width="200" MinWidth="130" />
-                                <DataGridTextColumn Binding="{Binding SampleData}" Header="Sample Data" Width="120" MinWidth="90" />
-                                <DataGridTextColumn Binding="{Binding FontSize}" Header="Font Size" Width="70" />
-                                <DataGridTemplateColumn Header="Bold" Width="46"
-                                                        CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
-                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <CheckBox
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Background="Transparent"
-                                                Margin="0" Padding="0" MinWidth="0" MinHeight="0"
-                                                IsChecked="{Binding Bold, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTextColumn Binding="{Binding FontAlignment}" Header="Alignment" Width="75" />
-                                <DataGridTextColumn Binding="{Binding LaserRectX}" Header="Laser X" Width="60" />
-                                <DataGridTextColumn Binding="{Binding LaserRectY}" Header="Laser Y" Width="60" />
-                                <DataGridTextColumn Binding="{Binding LaserRectWidth}" Header="Laser W" Width="60" />
-                                <DataGridTextColumn Binding="{Binding LaserRectHeight}" Header="Laser H" Width="60" />
-                                <DataGridTextColumn Binding="{Binding ImpactCol}" Header="Impact Col" Width="75" />
-                                <DataGridTextColumn Binding="{Binding ImpactLine}" Header="Impact Line" Width="75" />
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </Grid>
-                </TabItem>
-
-                <!-- TAB 3: Code Parser & Diagnostics -->
-                <TabItem Header="Code Parser &amp; Diagnostics">
-                    <Grid Margin="0,8,0,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <!-- Scanner Header -->
-                        <Border
-                            Grid.Row="0"
-                            Margin="0,0,0,8"
-                            Padding="8,8"
-                            Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <ui:Button
-                                    Grid.Column="0"
-                                    Margin="0,0,12,0"
-                                    Appearance="Primary"
-                                    Command="{Binding ScanAllCodeCommand}"
-                                    Content="Scan Entire Form for Syntax Errors"
-                                    Icon="{ui:SymbolIcon Checkmark24}" />
-
-                                <TextBlock
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
-                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                    Text="{Binding CodeValidationSummary}" />
-                            </Grid>
-                        </Border>
-
-                        <!-- Issues DataGrid -->
-                        <DataGrid
-                            Grid.Row="1"
-                            AutoGenerateColumns="False"
-                            CanUserAddRows="False"
-                            CanUserDeleteRows="False"
-                            CanUserResizeColumns="True"
-                            HorizontalScrollBarVisibility="Auto"
-                            VerticalScrollBarVisibility="Auto"
-                            ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
-                            ItemsSource="{Binding CodeValidationIssues}">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Binding="{Binding Location}" Header="Location" FontWeight="SemiBold" Width="160" />
-                                <DataGridTextColumn Binding="{Binding Expression}" Header="Current Expression" Width="2*" />
-                                <DataGridTextColumn Binding="{Binding StatusTitle}" Header="Diagnostic Status" Width="1.5*" />
-                                <DataGridTextColumn Binding="{Binding DiagnosticMessage}" Header="Details" Width="3*" />
-                                <DataGridTextColumn Binding="{Binding SuggestedFix}" Header="Suggested Fix" Width="2*" />
-                                <DataGridTemplateColumn Header="Action" Width="100">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <ui:Button
-                                                Padding="6,3"
-                                                Appearance="Success"
-                                                Command="{Binding DataContext.ApplyCodeFixCommand, RelativeSource={RelativeSource AncestorType=Page}}"
-                                                CommandParameter="{Binding}"
-                                                Content="Apply Fix"
-                                                FontSize="11"
-                                                IsEnabled="{Binding HasSuggestedFix}" />
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
-
-                        <!-- Interactive Formula Tester / Scratchpad -->
-                        <Border
-                            Grid.Row="2"
-                            Margin="0,8,0,0"
-                            Padding="10"
-                            Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="6">
-                            <StackPanel Orientation="Vertical">
-                                <TextBlock Text="Interactive Formula Scratchpad &amp; Syntax Checker" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,6" />
-                                <Grid Margin="0,0,0,6">
+                            <!-- Prompt Manipulation Toolbar -->
+                            <Border
+                                Grid.Row="0"
+                                Margin="0,0,0,8"
+                                Padding="8,6"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                                <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <ui:TextBox
-                                        Grid.Column="0"
-                                        PlaceholderText="Type or paste any FormGen formula (e.g. IF(F72 = 'N', 'NEW', 'USED'))"
-                                        Text="{Binding ScratchpadExpression, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                    <ui:Button
+
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <ui:Button
+                                            Style="{StaticResource ToolBarButtonStyle}"
+                                            Appearance="Primary"
+                                            Command="{Binding CloneSelectedPromptsCommand}"
+                                            CommandParameter="{Binding SelectedItems, ElementName=PromptsDataGrid}"
+                                            Content="Duplicate"
+                                            Icon="{ui:SymbolIcon Copy24}"
+                                            ToolTip="Duplicate selected prompt(s)" />
+                                        <ui:Button
+                                            Style="{StaticResource ToolBarButtonStyle}"
+                                            Appearance="Secondary"
+                                            Command="{Binding MoveSelectedPromptUpCommand}"
+                                            Content="Move Up"
+                                            Icon="{ui:SymbolIcon ArrowUp24}"
+                                            ToolTip="Move selected prompt up in order" />
+                                        <ui:Button
+                                            Style="{StaticResource ToolBarButtonStyle}"
+                                            Appearance="Secondary"
+                                            Command="{Binding MoveSelectedPromptDownCommand}"
+                                            Content="Move Down"
+                                            Icon="{ui:SymbolIcon ArrowDown24}"
+                                            ToolTip="Move selected prompt down in order" />
+                                        <ui:Button
+                                            Style="{StaticResource ToolBarButtonStyle}"
+                                            Appearance="Danger"
+                                            Command="{Binding DeleteSelectedPromptsCommand}"
+                                            CommandParameter="{Binding SelectedItems, ElementName=PromptsDataGrid}"
+                                            Content="Delete"
+                                            Icon="{ui:SymbolIcon Delete24}"
+                                            ToolTip="Delete selected prompt(s) (Del)" />
+                                    </StackPanel>
+
+                                    <TextBlock
                                         Grid.Column="1"
-                                        Margin="8,0,0,0"
-                                        Appearance="Primary"
-                                        Command="{Binding ValidateScratchpadCommand}"
-                                        Content="Validate"
-                                        Icon="{ui:SymbolIcon Checkmark24}" />
+                                        VerticalAlignment="Center"
+                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding PromptsSelectedCountText}" />
                                 </Grid>
-                                <TextBlock
-                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                    Text="{Binding ScratchpadResult.DiagnosticMessage}"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-                </TabItem>
+                            </Border>
 
-                <!-- TAB 4: Cross-Form Transfer -->
-                <TabItem Header="Cross-Form Transfer">
-                    <Grid Margin="0,8,0,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
+                            <!-- Prompt DataGrid with ToolTips on all columns -->
+                            <DataGrid
+                                x:Name="PromptsDataGrid"
+                                Grid.Row="1"
+                                AutoGenerateColumns="False"
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                CanUserResizeColumns="True"
+                                HorizontalScrollBarVisibility="Auto"
+                                VerticalScrollBarVisibility="Auto"
+                                ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
+                                ItemsSource="{Binding PromptsList}"
+                                SelectedItem="{Binding SelectedPromptItem, Mode=TwoWay}"
+                                SelectionMode="Extended"
+                                PreviewKeyDown="OnDataGridPreviewKeyDown">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Width="46" CanUserResize="False"
+                                                            CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
+                                                            HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
+                                        <DataGridTemplateColumn.Header>
+                                            <CheckBox
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Background="Transparent"
+                                                Margin="0" Padding="0" MinWidth="0" MinHeight="0"
+                                                IsChecked="{Binding DataContext.AreAllPromptsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
+                                                ToolTip="Select / Deselect All" />
+                                        </DataGridTemplateColumn.Header>
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Background="Transparent"
+                                                    Margin="0" Padding="0" MinWidth="0" MinHeight="0"
+                                                    IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
 
-                        <!-- Source Picker Bar -->
-                        <Border
-                            Grid.Row="0"
-                            Margin="0,0,0,8"
-                            Padding="8"
-                            Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
+                                    <DataGridTemplateColumn Header="Type" Width="90">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Type}" ToolTip="{Binding Type}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
 
-                                <ui:Button
-                                    Grid.Column="0"
-                                    Margin="0,0,12,0"
-                                    Appearance="Primary"
-                                    Command="{Binding BrowseTransferSourceCommand}"
-                                    Content="Choose Source Form..."
-                                    Icon="{ui:SymbolIcon FolderOpen24}" />
+                                    <DataGridTemplateColumn Header="Variable" Width="140">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Variable}" ToolTip="{Binding Variable}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
 
-                                <TextBlock
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                    Text="{Binding TransferSourceTitle, StringFormat='Source Form: {0}'}" />
-                            </Grid>
-                        </Border>
+                                    <DataGridTemplateColumn Header="Prompt Text / Message" Width="2*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding PromptText}" ToolTip="{Binding PromptText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
 
-                        <!-- Transfer Panes -->
-                        <Grid Grid.Row="1">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+                                    <DataGridTemplateColumn Header="Expression" Width="2.5*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Expression}" ToolTip="{Binding Expression}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
 
-                            <!-- Prompts Transfer Pane -->
+                                    <DataGridTemplateColumn Header="Default" Width="1.2*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding DefaultValue}" ToolTip="{Binding DefaultValue}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Format" Width="90">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Format}" ToolTip="{Binding Format}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- ================================================= -->
+                    <!-- TAB 1: Form Fields Workspace                      -->
+                    <!-- ================================================= -->
+                    <TabItem Header="Form Fields">
+                        <Grid Margin="0,2,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Field Manipulation & Alignment Toolbar -->
                             <Border
-                                Grid.Column="0"
-                                Padding="10"
-                                Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
+                                Grid.Row="0"
+                                Margin="0,0,0,8"
+                                Padding="8,6"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <!-- Page Filter Dropdown -->
+                                    <TextBlock Text="Page:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <ComboBox
+                                        Width="110"
+                                        Margin="0,0,10,0"
+                                        ItemsSource="{Binding AvailablePageFilters}"
+                                        SelectedItem="{Binding SelectedPageFilter, Mode=TwoWay}"
+                                        ToolTip="Filter fields by page" />
+
+                                    <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+
+                                    <!-- Clipboard & Reorder -->
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Primary"
+                                        Command="{Binding CloneSelectedFieldsCommand}"
+                                        CommandParameter="{Binding SelectedItems, ElementName=FieldsDataGrid}"
+                                        Content="Duplicate"
+                                        Icon="{ui:SymbolIcon Copy24}"
+                                        ToolTip="Duplicate selected field(s)" />
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Danger"
+                                        Command="{Binding DeleteSelectedFieldsCommand}"
+                                        CommandParameter="{Binding SelectedItems, ElementName=FieldsDataGrid}"
+                                        Content="Delete"
+                                        Icon="{ui:SymbolIcon Delete24}"
+                                        ToolTip="Delete selected field(s) (Del)" />
+
+                                    <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+
+                                    <!-- Alignment Operations -->
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Secondary"
+                                        Command="{Binding AlignFieldsCommand}"
+                                        CommandParameter="Left"
+                                        Content="Align Left"
+                                        Icon="{ui:SymbolIcon AlignLeft24}"
+                                        ToolTip="Align selected fields to leftmost coordinate" />
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Secondary"
+                                        Command="{Binding AlignFieldsCommand}"
+                                        CommandParameter="Top"
+                                        Content="Align Top"
+                                        Icon="{ui:SymbolIcon ArrowUp24}"
+                                        ToolTip="Align selected fields to topmost coordinate" />
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Secondary"
+                                        Command="{Binding AlignFieldsCommand}"
+                                        CommandParameter="MatchWidth"
+                                        Content="Match Width"
+                                        Icon="{ui:SymbolIcon ArrowAutofitWidth24}"
+                                        ToolTip="Make selected fields uniform width" />
+
+                                    <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+
+                                    <!-- Distribution Operations -->
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Secondary"
+                                        Command="{Binding DistributeFieldsCommand}"
+                                        CommandParameter="Horizontal"
+                                        Content="Distribute H"
+                                        Icon="{ui:SymbolIcon ArrowAutofitWidth24}"
+                                        ToolTip="Distribute selected fields evenly across horizontal space" />
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Secondary"
+                                        Command="{Binding DistributeFieldsCommand}"
+                                        CommandParameter="Vertical"
+                                        Content="Distribute V"
+                                        Icon="{ui:SymbolIcon ArrowAutofitHeight24}"
+                                        ToolTip="Distribute selected fields evenly across vertical space" />
+
+                                    <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+
+                                    <!-- Bulk Styling -->
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Secondary"
+                                        Command="{Binding BulkToggleBoldCommand}"
+                                        Content="Toggle Bold"
+                                        Icon="{ui:SymbolIcon TextBold24}"
+                                        ToolTip="Toggle bold on selected or all page fields" />
+                                    <ui:Button
+                                        Style="{StaticResource ToolBarButtonStyle}"
+                                        Appearance="Secondary"
+                                        Command="{Binding AlignAcrossPagesCommand}"
+                                        Content="Align Across Pages"
+                                        Icon="{ui:SymbolIcon ArrowSync24}"
+                                        ToolTip="Synchronize field positions across multi-page forms" />
+
+                                    <Separator Margin="4,0,8,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding FieldsSelectedCountText}" />
+                                </WrapPanel>
+                            </Border>
+
+                            <!-- Fields DataGrid with ToolTips on all columns -->
+                            <DataGrid
+                                x:Name="FieldsDataGrid"
+                                Grid.Row="1"
+                                AutoGenerateColumns="False"
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                CanUserResizeColumns="True"
+                                HorizontalScrollBarVisibility="Auto"
+                                VerticalScrollBarVisibility="Auto"
+                                ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
+                                ItemsSource="{Binding FilteredFieldsList}"
+                                SelectedItem="{Binding SelectedFieldItem, Mode=TwoWay}"
+                                SelectionMode="Extended"
+                                PreviewKeyDown="OnDataGridPreviewKeyDown">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Width="46" CanUserResize="False"
+                                                            CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
+                                                            HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
+                                        <DataGridTemplateColumn.Header>
+                                            <CheckBox
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Background="Transparent"
+                                                Margin="0" Padding="0" MinWidth="0" MinHeight="0"
+                                                IsChecked="{Binding DataContext.AreAllFieldsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
+                                                ToolTip="Select / Deselect All" />
+                                        </DataGridTemplateColumn.Header>
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Background="Transparent"
+                                                    Margin="0" Padding="0" MinWidth="0" MinHeight="0"
+                                                    IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="ID" Width="50">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding ID}" ToolTip="{Binding ID}" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Page" Width="55">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding PageNumber}" ToolTip="{Binding PageNumber}" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Type" Width="75">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Type}" ToolTip="{Binding Type}" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Expression" Width="2*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Expression}" ToolTip="{Binding Expression}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Sample Data" Width="1.2*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding SampleData}" ToolTip="{Binding SampleData}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Font" Width="55">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding FontSize}" ToolTip="{Binding FontSize}" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Bold" Width="50">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Bold}" ToolTip="{Binding Bold}" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Laser (X, Y, W, H)" Width="1.5*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding LaserCoordsDisplay}" ToolTip="{Binding LaserCoordsDisplay}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Impact (Col, Line)" Width="1.2*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding ImpactCoordsDisplay}" ToolTip="{Binding ImpactCoordsDisplay}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- ================================================= -->
+                    <!-- TAB 2: Code Parser & Diagnostics                  -->
+                    <!-- ================================================= -->
+                    <TabItem Header="Code Parser">
+                        <Grid Margin="0,2,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Scanner Header with Mode-Adaptive Button -->
+                            <Border
+                                Grid.Row="0"
+                                Margin="0,0,0,8"
+                                Padding="8,8"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1"
                                 CornerRadius="6">
                                 <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Row="0" Text="Prompts to Import" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,6" />
-
-                                    <DataGrid
-                                        Grid.Row="1"
-                                        AutoGenerateColumns="False"
-                                        CanUserAddRows="False"
-                                        CanUserResizeColumns="True"
-                                        HorizontalScrollBarVisibility="Auto"
-                                        VerticalScrollBarVisibility="Auto"
-                                        ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
-                                        ItemsSource="{Binding TransferSourcePrompts}">
-                                        <DataGrid.Columns>
-                                            <DataGridTemplateColumn Width="46" CanUserResize="False"
-                                                                    CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
-                                                                    HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
-                                                <DataGridTemplateColumn.Header>
-                                                    <CheckBox
-                                                        HorizontalAlignment="Center"
-                                                        VerticalAlignment="Center"
-                                                        Background="Transparent"
-                                                        Margin="0" Padding="0" MinWidth="0" MinHeight="0"
-                                                        IsChecked="{Binding DataContext.AreAllTransferPromptsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
-                                                        ToolTip="Select / Deselect All" />
-                                                </DataGridTemplateColumn.Header>
-                                                <DataGridTemplateColumn.CellTemplate>
-                                                    <DataTemplate>
-                                                        <CheckBox
-                                                            HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"
-                                                            Background="Transparent"
-                                                            Margin="0" Padding="0" MinWidth="0" MinHeight="0"
-                                                            IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                                    </DataTemplate>
-                                                </DataGridTemplateColumn.CellTemplate>
-                                            </DataGridTemplateColumn>
-                                            <DataGridTextColumn Binding="{Binding Variable}" Header="Variable" FontWeight="SemiBold" Width="90" />
-                                            <DataGridTextColumn Binding="{Binding Message}" Header="Message / Label" Width="*" />
-                                        </DataGrid.Columns>
-                                    </DataGrid>
-
+                                    <!-- Mode-adaptive Scan button honoring Light/Dark mode -->
                                     <ui:Button
-                                        Grid.Row="2"
-                                        Margin="0,8,0,0"
-                                        HorizontalAlignment="Stretch"
-                                        Appearance="Success"
-                                        Command="{Binding ExecutePromptTransferCommand}"
-                                        Content="Transfer Selected Prompts"
-                                        Icon="{ui:SymbolIcon ArrowDown24}" />
+                                        Grid.Column="0"
+                                        Margin="0,0,12,0"
+                                        Appearance="Secondary"
+                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                        Command="{Binding ScanAllCodeCommand}"
+                                        Content="Scan Entire Form for Syntax Errors"
+                                        Icon="{ui:SymbolIcon Checkmark24}" />
+
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                        Text="{Binding CodeValidationSummary}" />
                                 </Grid>
                             </Border>
 
-                            <!-- Fields Transfer Pane -->
+                            <!-- Issues DataGrid with ToolTips on all columns -->
+                            <DataGrid
+                                Grid.Row="1"
+                                AutoGenerateColumns="False"
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                CanUserResizeColumns="True"
+                                HorizontalScrollBarVisibility="Auto"
+                                VerticalScrollBarVisibility="Auto"
+                                ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
+                                ItemsSource="{Binding CodeValidationIssues}">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="Location" Width="140">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Location}" ToolTip="{Binding Location}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Current Expression" Width="2*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Expression}" ToolTip="{Binding Expression}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Status" Width="1.2*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding StatusTitle}" ToolTip="{Binding StatusTitle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Details" Width="3*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding DiagnosticMessage}" ToolTip="{Binding DiagnosticMessage}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Suggested Fix" Width="2*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding SuggestedFix}" ToolTip="{Binding SuggestedFix}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="Action" Width="100">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ui:Button
+                                                    Padding="6,3"
+                                                    Appearance="Success"
+                                                    Command="{Binding DataContext.ApplyCodeFixCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}"
+                                                    Content="Apply Fix"
+                                                    FontSize="11"
+                                                    IsEnabled="{Binding HasSuggestedFix}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- Interactive Formula Tester / Scratchpad -->
                             <Border
-                                Grid.Column="2"
+                                Grid.Row="2"
+                                Margin="0,8,0,0"
                                 Padding="10"
-                                Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                BorderBrush="{ui:ThemeResource CardStrokeColorDefaultBrush}"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1"
                                 CornerRadius="6">
                                 <StackPanel Orientation="Vertical">
-                                    <TextBlock Text="Transfer Fields Between Pages" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10" />
+                                    <TextBlock Text="Interactive Formula Scratchpad &amp; Syntax Checker" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,6" />
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ui:TextBox
+                                            Grid.Column="0"
+                                            PlaceholderText="Type or paste any FormGen formula (e.g. IF(F72 = 'N', 'NEW', 'USED'))"
+                                            Text="{Binding ScratchpadExpression, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <ui:Button
+                                            Grid.Column="1"
+                                            Margin="8,0,0,0"
+                                            Appearance="Primary"
+                                            Command="{Binding ValidateScratchpadCommand}"
+                                            Content="Validate"
+                                            Icon="{ui:SymbolIcon Checkmark24}" />
+                                    </Grid>
 
-                                    <TextBlock Text="From Source Page:" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,4" />
-                                    <ComboBox
-                                        Margin="0,0,0,12"
-                                        ItemsSource="{Binding TransferSourcePages}"
-                                        SelectedItem="{Binding SelectedTransferSourcePage, Mode=TwoWay}" />
-
-                                    <TextBlock Text="Into Target Page of Active Form:" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,4" />
-                                    <ComboBox
-                                        Margin="0,0,0,16"
-                                        ItemsSource="{Binding TransferSourcePages}"
-                                        SelectedItem="{Binding SelectedTransferTargetPage, Mode=TwoWay}" />
-
-                                    <ui:Button
-                                        HorizontalAlignment="Stretch"
-                                        Appearance="Success"
-                                        Command="{Binding ExecuteFieldTransferCommand}"
-                                        Content="Transfer Page Fields"
-                                        Icon="{ui:SymbolIcon ArrowDown24}" />
+                                    <TextBlock
+                                        Text="{Binding ScratchpadValidationResult}"
+                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
                         </Grid>
-                    </Grid>
-                </TabItem>
-            </TabControl>
-        </Grid>
+                    </TabItem>
 
-        <!-- Splitter 2 -->
-        <GridSplitter
-            Grid.Column="3"
-            Width="4"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Stretch"
-            Background="Transparent"
-            Visibility="{Binding IsSidebarVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <!-- ================================================= -->
+                    <!-- TAB 3: Cross-Form Transfer                        -->
+                    <!-- ================================================= -->
+                    <TabItem Header="Cross-Form Transfer">
+                        <Grid Margin="0,2,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
 
-        <!-- ========================================================= -->
-        <!--  COLUMN 4: Right Sidebar (Properties Inspector - Issue 72)-->
-        <!-- ========================================================= -->
-        <ScrollViewer
-            Grid.Column="4"
-            IsEnabled="{Binding IsFileLoaded}"
-            VerticalScrollBarVisibility="Auto"
-            Visibility="{Binding IsSidebarVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <StackPanel Orientation="Vertical" Margin="4,0,0,0">
+                            <!-- Source Picker Bar with Mode-Adaptive Button -->
+                            <Border
+                                Grid.Row="0"
+                                Margin="0,0,0,8"
+                                Padding="8"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
 
-                <!-- Form Details Card -->
-                <ui:CardControl Header="Form Details" HorizontalContentAlignment="Left">
-                    <StackPanel Orientation="Vertical">
-                        <TextBlock Text="Form Title" />
-                        <ui:TextBox Margin="0,4,0,0" Text="{Binding FormTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <!-- Mode-adaptive Choose Source Form button -->
+                                    <ui:Button
+                                        Grid.Column="0"
+                                        Margin="0,0,12,0"
+                                        Appearance="Secondary"
+                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                        Command="{Binding BrowseTransferSourceCommand}"
+                                        Content="Choose Source Form..."
+                                        Icon="{ui:SymbolIcon FolderOpen24}" />
 
-                        <TextBlock Margin="0,12,0,0" Text="Form UUID" />
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ui:TextBox Grid.Column="0" IsReadOnly="True" Text="{Binding Uuid}" />
-                            <ui:Button
-                                Grid.Column="1"
-                                Margin="8,0,0,0"
-                                Appearance="Secondary"
-                                Command="{Binding RegenerateUuidCommand}"
-                                Content="Regenerate"
-                                Icon="{ui:SymbolIcon ArrowSync24}" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                        Text="{Binding TransferSourceTitle, StringFormat='Source Form: {0}'}" />
+                                </Grid>
+                            </Border>
+
+                            <!-- Transfer Panes -->
+                            <Grid Grid.Row="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Prompts Transfer Pane -->
+                                <Border
+                                    Grid.Column="0"
+                                    Padding="10"
+                                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Text="Prompts to Import" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,6" />
+
+                                        <DataGrid
+                                            Grid.Row="1"
+                                            AutoGenerateColumns="False"
+                                            CanUserAddRows="False"
+                                            CanUserDeleteRows="False"
+                                            ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
+                                            ItemsSource="{Binding TransferSourcePrompts}">
+                                            <DataGrid.Columns>
+                                                <DataGridTemplateColumn Width="46" CellStyle="{StaticResource CenteredCheckBoxCellStyle}">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <CheckBox
+                                                                HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center"
+                                                                Background="Transparent"
+                                                                Margin="0" Padding="0" MinWidth="0" MinHeight="0"
+                                                                IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
+
+                                                <DataGridTemplateColumn Header="Variable" Width="120">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Variable}" ToolTip="{Binding Variable}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
+
+                                                <DataGridTemplateColumn Header="Message" Width="*">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding PromptText}" ToolTip="{Binding PromptText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+
+                                        <ui:Button
+                                            Grid.Row="2"
+                                            Margin="0,8,0,0"
+                                            Appearance="Primary"
+                                            Command="{Binding ImportSelectedPromptsFromSourceCommand}"
+                                            Content="Import Checked Prompts into Active Form"
+                                            HorizontalAlignment="Stretch"
+                                            Icon="{ui:SymbolIcon ArrowDownload24}" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- Field Migration / Duplication Across Pages -->
+                                <Border
+                                    Grid.Column="2"
+                                    Padding="10"
+                                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6">
+                                    <StackPanel Orientation="Vertical">
+                                        <TextBlock Text="Transfer Fields Between Pages" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10" />
+
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="8" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="From Page" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding TransferSourcePage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="To Page" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding TransferTargetPage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <ui:Button
+                                            Margin="0,4,0,0"
+                                            Appearance="Secondary"
+                                            Command="{Binding CopyFieldsBetweenPagesCommand}"
+                                            Content="Duplicate All Fields to Target Page"
+                                            HorizontalAlignment="Stretch"
+                                            Icon="{ui:SymbolIcon Copy24}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                         </Grid>
-                    </StackPanel>
-                </ui:CardControl>
+                    </TabItem>
+                </TabControl>
+            </Grid>
 
-                <!-- Image Options Card -->
-                <ui:CardControl Margin="0,10,0,0" Header="Image Options" HorizontalContentAlignment="Left">
-                    <StackPanel Orientation="Vertical">
+            <!-- Splitter between Center Workspace and Right Inspector -->
+            <GridSplitter
+                Grid.Column="1"
+                Width="5"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Stretch"
+                Background="Transparent" />
+
+            <!-- ========================================================= -->
+            <!--  COLUMN 2: Collapsible Right Inspector & Hierarchy Pane   -->
+            <!-- ========================================================= -->
+            <ScrollViewer
+                Grid.Column="2"
+                Margin="4,0,0,0"
+                VerticalScrollBarVisibility="Auto"
+                HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Orientation="Vertical">
+
+                    <!-- Inspector Header & Close Button -->
+                    <Border
+                        Margin="0,0,0,8"
+                        Padding="8,6"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6">
                         <Grid>
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <ui:SymbolIcon
-                                Grid.Column="0"
-                                FontSize="16"
-                                Symbol="{Binding IsImageFound, Converter={StaticResource NullableBoolToSymbolConverter}}" />
-                            <TextBlock
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="DocumentLandscape24" Margin="0,0,6,0" FontSize="16" />
+                                <TextBlock Text="Hierarchy &amp; Inspector" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <ui:Button
                                 Grid.Column="1"
-                                Margin="8,0,0,0"
+                                Padding="4,2"
+                                Appearance="Secondary"
+                                Command="{Binding ToggleSidebarCommand}"
+                                ToolTip="Close Sidebar"
+                                Icon="{ui:SymbolIcon Dismiss24}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Form Hierarchy TreeView Card -->
+                    <ui:CardControl Header="Form Hierarchy (Double-click to navigate)" Margin="0,0,0,8" HorizontalContentAlignment="Stretch">
+                        <Grid MinHeight="180" MaxHeight="300">
+                            <ui:ProgressRing
+                                IsIndeterminate="True"
+                                Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                            <TreeView
+                                ItemsSource="{Binding TreeViewNodes}"
+                                Style="{StaticResource {x:Type TreeView}}"
+                                MouseDoubleClick="TreeView_MouseDoubleClick"
+                                Visibility="{Binding IsFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TreeView.ItemContainerStyle>
+                                    <Style BasedOn="{StaticResource {x:Type TreeViewItem}}" TargetType="{x:Type TreeViewItem}">
+                                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                        <Setter Property="ToolTip" Value="{Binding Header}" />
+                                    </Style>
+                                </TreeView.ItemContainerStyle>
+                                <TreeView.ItemTemplate>
+                                    <HierarchicalDataTemplate DataType="{x:Type vms:TreeItemNodeViewModel}" ItemsSource="{Binding Children}">
+                                        <TextBlock Text="{Binding Header}" TextTrimming="CharacterEllipsis" />
+                                    </HierarchicalDataTemplate>
+                                </TreeView.ItemTemplate>
+                            </TreeView>
+
+                            <StackPanel
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Text="{Binding IsImageFound, Converter={StaticResource NullableBoolToTextConverter}}" />
-                        </Grid>
-
-                        <ui:ToggleSwitch
-                            Margin="0,8,0,0"
-                            Content="Rename image"
-                            IsChecked="{Binding ShouldRenameImage, Mode=TwoWay}"
-                            IsEnabled="{Binding IsImageFound, Converter={StaticResource BooleanToVisibilityConverter}}"
-                            OffContent="No"
-                            OnContent="Yes" />
-                    </StackPanel>
-                </ui:CardControl>
-
-                <!-- Targeted Field Inspector (Fixes Issue #72: Editable LaserRect & Coordinates) -->
-                <ui:CardControl
-                    Margin="0,10,0,0"
-                    Header="Field Geometry &amp; Properties"
-                    HorizontalContentAlignment="Left"
-                    Visibility="{Binding SelectedFieldItem, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <StackPanel Orientation="Vertical">
-                        <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Laser Coordinates (Pixels / Points)" />
-                        <Grid Margin="0,2,0,6">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="8" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="X Position" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.LaserRectX, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="Y Position" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.LaserRectY, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                Visibility="{Binding IsFileLoaded, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                <ui:SymbolIcon
+                                    HorizontalAlignment="Center"
+                                    FontSize="28"
+                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                    Symbol="Document24" />
+                                <TextBlock
+                                    Margin="0,6,0,0"
+                                    HorizontalAlignment="Center"
+                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                    Text="No .formgen loaded" />
                             </StackPanel>
                         </Grid>
+                    </ui:CardControl>
 
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="8" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="Width" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.LaserRectWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="Height" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.LaserRectHeight, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
-                            </StackPanel>
-                        </Grid>
-
-                        <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Impact Coordinates (Col / Line)" />
-                        <Grid Margin="0,2,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="8" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="Column" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.ImpactCol, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="Line" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.ImpactLine, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
-                            </StackPanel>
-                        </Grid>
-
-                        <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Typography &amp; Style" />
-                        <Grid Margin="0,2,0,6">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="8" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="Font Size" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                                <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.FontSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                <ui:ToggleSwitch
-                                    Margin="0,14,0,0"
-                                    Content="Bold"
-                                    IsChecked="{Binding SelectedFieldItem.Bold, Mode=TwoWay}" />
-                            </StackPanel>
-                        </Grid>
-
-                        <TextBlock Text="Expression" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" Margin="0,4,0,0" />
-                        <ui:TextBox Margin="0,2,0,6" Text="{Binding SelectedFieldItem.Expression, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-                        <TextBlock Text="Sample Data" FontSize="11" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" Margin="0,4,0,0" />
-                        <ui:TextBox Margin="0,2,0,6" Text="{Binding SelectedFieldItem.SampleData, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    </StackPanel>
-                </ui:CardControl>
-
-                <!-- Full Node Properties List (Dynamic Fallback & Extension) -->
-                <ui:CardControl
-                    Margin="0,10,0,0"
-                    Header="Item Properties"
-                    HorizontalContentAlignment="Left"
-                    Visibility="{Binding SelectedNodeProperties, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <ItemsControl ItemsSource="{Binding SelectedNodeProperties}">
-                        <ItemsControl.Resources>
-                            <DataTemplate x:Key="StringEditorTemplate" DataType="{x:Type models:DisplayProperty}">
-                                <ui:TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                            </DataTemplate>
-                            <DataTemplate x:Key="IntEditorTemplate" DataType="{x:Type models:DisplayProperty}">
-                                <ui:NumberBox Value="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
-                            </DataTemplate>
-                            <DataTemplate x:Key="BoolEditorTemplate" DataType="{x:Type models:DisplayProperty}">
-                                <ui:ToggleSwitch IsChecked="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                            </DataTemplate>
-                            <DataTemplate x:Key="EnumEditorTemplate" DataType="{x:Type models:DisplayProperty}">
-                                <ComboBox ItemsSource="{Binding Type, Converter={StaticResource EnumValuesConverter}}"
-                                          SelectedItem="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                            </DataTemplate>
-                            <DataTemplate x:Key="ListStringEditorTemplate" DataType="{x:Type models:DisplayProperty}">
-                                <ui:TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringListToStringConverter}}"
-                                            AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MinHeight="80" />
-                            </DataTemplate>
-                            <DataTemplate x:Key="ReadOnlyEditorTemplate" DataType="{x:Type models:DisplayProperty}">
-                                <Label Content="{Binding Value}" VerticalAlignment="Center" />
-                            </DataTemplate>
-                            <models:DisplayPropertyTemplateSelector x:Key="DisplayPropertyTemplateSelector"
-                                StringTemplate="{StaticResource StringEditorTemplate}"
-                                IntTemplate="{StaticResource IntEditorTemplate}"
-                                BoolTemplate="{StaticResource BoolEditorTemplate}"
-                                EnumTemplate="{StaticResource EnumEditorTemplate}"
-                                ListStringTemplate="{StaticResource ListStringEditorTemplate}"
-                                ReadOnlyTemplate="{StaticResource ReadOnlyEditorTemplate}" />
-                        </ItemsControl.Resources>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:DisplayProperty}">
-                                <StackPanel Orientation="Vertical" Margin="0,3,0,6">
-                                    <Label Content="{Binding Name}" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,2" />
-                                    <ContentControl Content="{Binding}" ContentTemplateSelector="{StaticResource DisplayPropertyTemplateSelector}" />
+                    <!-- Selected Field Live Editor Card -->
+                    <ui:CardControl
+                        Header="Field Properties"
+                        HorizontalContentAlignment="Left"
+                        Visibility="{Binding SelectedFieldItem, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Laser Coordinates (Pixels)" />
+                            <Grid Margin="0,2,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="X (Left)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.LaserRectX, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
                                 </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ui:CardControl>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Y (Top)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.LaserRectY, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                </StackPanel>
+                            </Grid>
 
-            </StackPanel>
-        </ScrollViewer>
+                            <Grid Margin="0,2,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Width" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.LaserRectWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Height" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.LaserRectHeight, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Impact Coordinates (Col / Line)" />
+                            <Grid Margin="0,2,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Column" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.ImpactCol, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Line" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.ImpactLine, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Typography &amp; Style" />
+                            <Grid Margin="0,2,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Font Size" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <ui:NumberBox Margin="0,2,0,0" Value="{Binding SelectedFieldItem.FontSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                    <ui:ToggleSwitch
+                                        Margin="0,14,0,0"
+                                        Content="Bold"
+                                        IsChecked="{Binding SelectedFieldItem.Bold, Mode=TwoWay}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Expression" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,4,0,0" />
+                            <ui:TextBox Margin="0,2,0,6" Text="{Binding SelectedFieldItem.Expression, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock Text="Sample Data" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,4,0,0" />
+                            <ui:TextBox Margin="0,2,0,6" Text="{Binding SelectedFieldItem.SampleData, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </ui:CardControl>
+
+                    <!-- Full Node Properties List (Dynamic Extension) -->
+                    <ui:CardControl
+                        Margin="0,8,0,0"
+                        Header="Item Properties"
+                        HorizontalContentAlignment="Left"
+                        Visibility="{Binding SelectedNodeProperties, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <ItemsControl ItemsSource="{Binding SelectedNodeProperties}">
+                            <ItemsControl.Resources>
+                                <DataTemplate x:Key="StringEditorTemplate" DataType="{x:Type models:DisplayProperty}">
+                                    <ui:TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                </DataTemplate>
+                                <DataTemplate x:Key="IntEditorTemplate" DataType="{x:Type models:DisplayProperty}">
+                                    <ui:NumberBox Value="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource IntToDoubleConverter}}" />
+                                </DataTemplate>
+                                <DataTemplate x:Key="BoolEditorTemplate" DataType="{x:Type models:DisplayProperty}">
+                                    <ui:ToggleSwitch IsChecked="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                </DataTemplate>
+                                <DataTemplate x:Key="EnumEditorTemplate" DataType="{x:Type models:DisplayProperty}">
+                                    <ComboBox ItemsSource="{Binding Type, Converter={StaticResource EnumValuesConverter}}"
+                                              SelectedItem="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                </DataTemplate>
+                                <DataTemplate x:Key="ListStringEditorTemplate" DataType="{x:Type models:DisplayProperty}">
+                                    <ui:TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringListToStringConverter}}"
+                                                AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MinHeight="80" />
+                                </DataTemplate>
+                                <DataTemplate x:Key="ReadOnlyEditorTemplate" DataType="{x:Type models:DisplayProperty}">
+                                    <Label Content="{Binding Value}" VerticalAlignment="Center" />
+                                </DataTemplate>
+                                <models:DisplayPropertyTemplateSelector x:Key="DisplayPropertyTemplateSelector"
+                                    StringTemplate="{StaticResource StringEditorTemplate}"
+                                    IntTemplate="{StaticResource IntEditorTemplate}"
+                                    BoolTemplate="{StaticResource BoolEditorTemplate}"
+                                    EnumTemplate="{StaticResource EnumEditorTemplate}"
+                                    ListStringTemplate="{StaticResource ListStringEditorTemplate}"
+                                    ReadOnlyTemplate="{StaticResource ReadOnlyEditorTemplate}" />
+                            </ItemsControl.Resources>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type models:DisplayProperty}">
+                                    <StackPanel Orientation="Vertical" Margin="0,3,0,6">
+                                        <Label Content="{Binding Name}" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,2" />
+                                        <ContentControl Content="{Binding}" ContentTemplateSelector="{StaticResource DisplayPropertyTemplateSelector}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ui:CardControl>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </Page>
 
