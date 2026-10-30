@@ -759,7 +759,6 @@ public static class FormgenReferenceCatalog
         AddVar("REGCITYSTATEZIP", "Buyer / Co-Buyer", "Registered Owner combined City, State, and ZIP", "BUYERCSZ");
         AddVar("COREGCITYSTATEZIP", "Buyer / Co-Buyer", "Co-Registered Owner combined City, State, and ZIP", "BUYERCSZ");
         AddVar("HASCOBUYER", "Buyer / Co-Buyer", "Flag indicating whether deal has an active Co-Buyer (TRUE/FALSE)", "BOOLEAN");
-        AddVar("HASCOREG", "Buyer / Co-Buyer", "Flag indicating whether deal has an active Co-Registered Owner (TRUE/FALSE)", "BOOLEAN");
 
         // 2. Accessory Predefined Variables (ACC01..ACC15 from FormGen AccessoryVar)
         var accFields = new (string Suffix, string Desc, string Format)[]
@@ -806,26 +805,17 @@ public static class FormgenReferenceCatalog
         }
         AddVar("ACCESSORIES_CHOSEN", "Accessory", "Formatted block of all accessories selected for the deal", "ALPHA80");
 
-        // 3. Other Predefined Variables (from FormGen PredefinedVariable)
-        AddVar("DEALNUM", "Deal / General", "Deal Number (COBOL field F1)", "INTEGER");
+        // 3. Other Predefined Variables (from FormGen PredefinedVariable - only working underscored or formatted names)
         AddVar("_DEALNUM", "Deal / General", "Deal Number (COBOL field F1)", "INTEGER");
-        AddVar("BUYER_NAME_COBOL_FORMAT", "Buyer / Co-Buyer", "Buyer full name in raw COBOL format (F80)", "ALPHA80");
         AddVar("_BUYER_NAME_COBOL_FORMAT", "Buyer / Co-Buyer", "Buyer full name in raw COBOL format (F80)", "ALPHA80");
-        AddVar("REBATE_AMOUNT", "Financial", "Total rebate amount applied to deal (F229)", "standardNumeric");
         AddVar("_REBATE_AMOUNT", "Financial", "Total rebate amount applied to deal (F229)", "standardNumeric");
-        AddVar("SALEDATE", "Deal / General", "Deal sale date (F456)", "DATE");
         AddVar("_SALEDATE", "Deal / General", "Deal sale date (F456)", "DATE");
-        AddVar("SUBCOMPANY", "Deal / General", "Dealership sub-company code (F2887)", "INTEGER");
         AddVar("_SUBCOMPANY", "Deal / General", "Dealership sub-company code (F2887)", "INTEGER");
         AddVar("TOTALREBATEDESC", "Financial", "Total rebate description (evaluates IF(F229=0,'','REBATE'))", "ALPHA6");
         AddVar("BUYERNAMES", "Buyer / Co-Buyer", "Buyer and Co-Buyer combined names (First Middle Last)", "ALPHA80");
         AddVar("BUYERNAMES_LFM", "Buyer / Co-Buyer", "Buyer and Co-Buyer combined names (Last, First Middle)", "ALPHA80");
         AddVar("REGNAMES", "Buyer / Co-Buyer", "Registered and Co-Registered owner combined names (First Middle Last)", "ALPHA80");
         AddVar("REGNAMES_LFM", "Buyer / Co-Buyer", "Registered and Co-Registered owner combined names (Last, First Middle)", "ALPHA80");
-        AddVar("BUYERCSZ", "Buyer / Co-Buyer", "Buyer City, State, and ZIP shorthand alias", "BUYERCSZ");
-        AddVar("COBUYERCSZ", "Buyer / Co-Buyer", "Co-Buyer City, State, and ZIP shorthand alias", "BUYERCSZ");
-        AddVar("REGCSZ", "Buyer / Co-Buyer", "Registered Owner City, State, and ZIP shorthand alias", "BUYERCSZ");
-        AddVar("COREGCSZ", "Buyer / Co-Buyer", "Co-Registered Owner City, State, and ZIP shorthand alias", "BUYERCSZ");
 
         return dict;
     }

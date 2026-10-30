@@ -295,12 +295,12 @@ public class FormgenCodeParserTests
     [Theory]
     [InlineData("BuyerName")]
     [InlineData("CobuyerAddr")]
-    [InlineData("SALEDATE")]
+    [InlineData("_SALEDATE")]
     [InlineData("HASCOBUYER")]
     [InlineData("ACC01_COMPNAME")]
     [InlineData("ACC15_POSPRICE")]
     [InlineData("HASACC01")]
-    [InlineData("DEALNUM")]
+    [InlineData("_DEALNUM")]
     [InlineData("TOTALREBATEDESC")]
     public void Parse_PredefinedSmartField_IdentifiesAsPredefined(string smartFieldName)
     {
@@ -359,9 +359,14 @@ public class FormgenCodeParserTests
         Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("ACC01_COST"));
         Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("ACC15_COMPNAME"));
         Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("HASACC03"));
-        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("DEALNUM"));
-        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("SALEDATE"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("_DEALNUM"));
+        Assert.True(FormgenReferenceCatalog.IsPredefinedSmartField("_SALEDATE"));
 
+        // Non-working aliases and unconfirmed smart fields should return false
+        Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("DEALNUM"));
+        Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("SALEDATE"));
+        Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("BUYERCSZ"));
+        Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("HASCOREG"));
         Assert.False(FormgenReferenceCatalog.IsPredefinedSmartField("NonExistentCustomVar123"));
     }
 }
