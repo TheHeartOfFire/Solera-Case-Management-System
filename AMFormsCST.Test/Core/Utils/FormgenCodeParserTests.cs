@@ -4,10 +4,18 @@ using AMFormsCST.Core.Utils;
 using System.IO;
 using Xunit;
 
+using Xunit.Abstractions;
+
 namespace AMFormsCST.Test.Core.Utils;
 
 public class FormgenCodeParserTests
 {
+    private readonly ITestOutputHelper? _output;
+
+    public FormgenCodeParserTests(ITestOutputHelper? output = null)
+    {
+        _output = output;
+    }
     [Fact]
     public void Parse_NullOrWhitespace_ReturnsUnrecognized()
     {
@@ -458,5 +466,105 @@ public class FormgenCodeParserTests
         var reparsed = FormgenCodeParser.Parse(result.SuggestedFix);
         Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
         Assert.NotNull(reparsed.CondensedBlock);
+    }
+
+    [Theory]
+    [InlineData("SEPLIST(' ', IF(NOTBLANK(F340), 'TRADE #2: ', ' '), F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)")]
+    [InlineData("IF(F72 = 'N', 'NEW', 'USED')")]
+    [InlineData("SEPLIST(', ', F93, F94)")]
+    public void Parse_SingleCharacterDeletionMutation_ExaminesParserResilience(string originalFormula)
+    {
+        int validCount = 0;
+        int malformedWithFixCount = 0;
+        int malformedNoFixCount = 0;
+        int unrecognizedCount = 0;
+        int invalidFixCount = 0;
+        int exactOrCloseFixCount = 0;
+
+        string normalizedOriginal = NormalizeWhitespace(originalFormula);
+
+        for (int i = 0; i < originalFormula.Length; i++)
+        {
+            char removedChar = originalFormula[i];
+            string mutated = originalFormula.Remove(i, 1);
+
+            var result = FormgenCodeParser.Parse(mutated);
+
+            if (result.Status == FormgenParseStatus.Valid)
+            {
+                validCount++;
+            }
+            else if (result.Status == FormgenParseStatus.MalformedSimilar)
+            {
+                if (result.SuggestedFix != null)
+                {
+                    var fixCheck = FormgenCodeParser.Parse(result.SuggestedFix);
+                    if (fixCheck.Status == FormgenParseStatus.Valid)
+                    {
+                        malformedWithFixCount++;
+                        string normalizedFix = NormalizeWhitespace(result.SuggestedFix);
+                        if (string.Equals(normalizedFix, normalizedOriginal, StringComparison.OrdinalIgnoreCase) ||
+                            LevenshteinDistance(normalizedFix, normalizedOriginal) <= 3)
+                        {
+                            exactOrCloseFixCount++;
+                        }
+                        // else { _output?.WriteLine($"[DIVERGENT FIX idx {i} ('{removedChar}')]: mutated='{mutated}' => fix='{result.SuggestedFix}'"); }
+                    }
+                    else
+                    {
+                        invalidFixCount++;
+                        _output?.WriteLine($"[INVALID FIX idx {i} ('{removedChar}')]: mutated='{mutated}' => fix='{result.SuggestedFix}'");
+                    }
+                }
+                else
+                {
+                    malformedNoFixCount++;
+                    _output?.WriteLine($"[NO FIX idx {i} ('{removedChar}')]: mutated='{mutated}'");
+                }
+            }
+            else
+            {
+                unrecognizedCount++;
+                _output?.WriteLine($"[UNRECOGNIZED idx {i} ('{removedChar}')]: mutated='{mutated}'");
+            }
+        }
+
+        _output?.WriteLine($"\n=== Mutation Summary for formula length {originalFormula.Length} ===");
+        _output?.WriteLine($"  Valid (benign deletions): {validCount}");
+        _output?.WriteLine($"  Malformed w/ Valid Fix:   {malformedWithFixCount} (Exact/Close: {exactOrCloseFixCount})");
+        _output?.WriteLine($"  Malformed without Fix:    {malformedNoFixCount}");
+        _output?.WriteLine($"  Invalid Fix (Parser Bug): {invalidFixCount}");
+        _output?.WriteLine($"  Unrecognized:             {unrecognizedCount}");
+        _output?.WriteLine("==================================================\n");
+
+        // Rule 1: A suggested fix MUST NEVER produce broken syntax!
+        Assert.Equal(0, invalidFixCount);
+    }
+
+    private static string NormalizeWhitespace(string s)
+    {
+        return System.Text.RegularExpressions.Regex.Replace(s.Replace("\"", "'"), @"\s+", " ").Trim();
+    }
+
+    private static int LevenshteinDistance(string s, string t)
+    {
+        if (string.IsNullOrEmpty(s)) return t?.Length ?? 0;
+        if (string.IsNullOrEmpty(t)) return s.Length;
+
+        int[,] d = new int[s.Length + 1, t.Length + 1];
+        for (int i = 0; i <= s.Length; i++) d[i, 0] = i;
+        for (int j = 0; j <= t.Length; j++) d[0, j] = j;
+
+        for (int i = 1; i <= s.Length; i++)
+        {
+            for (int j = 1; j <= t.Length; j++)
+            {
+                int cost = (s[i - 1] == t[j - 1]) ? 0 : 1;
+                d[i, j] = Math.Min(
+                    Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
+                    d[i - 1, j - 1] + cost);
+            }
+        }
+        return d[s.Length, t.Length];
     }
 }

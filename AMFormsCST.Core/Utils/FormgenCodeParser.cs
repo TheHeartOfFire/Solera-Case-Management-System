@@ -21,10 +21,14 @@ public sealed record FormgenParseResult(
     CustomSnippetCode? CondensedBlock,
     string StatusTitle,
     string DiagnosticMessage,
-    string? SuggestedFix = null)
+    string? SuggestedFix = null,
+    IReadOnlyList<string>? SuggestedFixes = null)
 {
     public bool IsSuccess => Status == FormgenParseStatus.Valid && CondensedBlock != null;
     public bool HasSuggestedFix => !string.IsNullOrWhiteSpace(SuggestedFix);
+    public IReadOnlyList<string> SuggestedFixes { get; init; } =
+        SuggestedFixes ?? (!string.IsNullOrWhiteSpace(SuggestedFix) ? [SuggestedFix] : Array.Empty<string>());
+    public bool HasMultipleSuggestedFixes => SuggestedFixes.Count > 1;
 }
 
 public static class FormgenCodeParser
@@ -426,10 +430,11 @@ public static class FormgenCodeParser
         syntaxIssues = [];
         suggestedFix = null;
         string workingFix = text;
+        workingFix = RepairGluedFunctionsAndTokens(workingFix, syntaxIssues);
         bool hasRecognizedFunctionOrCloseMatch = false;
 
-        // Check if text starts with a known function name but is missing '(' e.g. "IF F72 = 'N', 'A', 'B'" or "ROUND F11, 2"
-        var firstWordMatch = Regex.Match(text, @"^([A-Za-z_][A-Za-z0-9_]*)\s+(?!\b(?:AND|OR)\b)(.+)$");
+        // Check if text starts with a known function name but is missing '(' e.g. "IF F72 = 'N', 'A', 'B'" or "ROUND F11, 2" or "SEPLIST' '"
+        var firstWordMatch = Regex.Match(workingFix, @"^([A-Za-z_][A-Za-z0-9_]*)(?:\s+|(?=['\(]))(?!\b(?:AND|OR)\b)(.+)$");
         if (firstWordMatch.Success)
         {
             var firstWord = firstWordMatch.Groups[1].Value;
@@ -552,7 +557,10 @@ public static class FormgenCodeParser
             workingFix = ReplaceSubstringOutsideQuotes(workingFix, "<>", "!=");
         }
 
-        // 4. SEPLIST malformed separator: assume standard enclosed single space ' '
+        // 4. Missing commas between adjacent arguments
+        workingFix = RepairMissingCommasBetweenAdjacentArguments(workingFix, syntaxIssues);
+
+        // 5. SEPLIST malformed separator: assume standard enclosed single space ' '
         workingFix = RepairSeplistMalformedSeparator(workingFix, syntaxIssues);
 
         // 5. Unclosed single quotes
@@ -1231,7 +1239,17 @@ public static class FormgenCodeParser
     private static bool TryFindClosestFunction(string candidate, out string matchedFunction)
     {
         matchedFunction = string.Empty;
-        if (string.IsNullOrWhiteSpace(candidate) || candidate.Length < 2) return false;
+        if (string.IsNullOrWhiteSpace(candidate)) return false;
+
+        if (candidate.Length == 1)
+        {
+            if (candidate.Equals("I", StringComparison.OrdinalIgnoreCase) || candidate.Equals("F", StringComparison.OrdinalIgnoreCase))
+            {
+                matchedFunction = "IF";
+                return true;
+            }
+            return false;
+        }
 
         if (CommonFunctionAliases.TryGetValue(candidate, out var aliasTarget))
         {
@@ -1343,6 +1361,106 @@ public static class FormgenCodeParser
             sb.Append(text[i++]);
         }
         return sb.ToString();
+    }
+
+    private static bool IsIndexInsideQuotes(string text, int index)
+    {
+        bool inQuotes = false;
+        for (int i = 0; i < index && i < text.Length; i++)
+        {
+            if (text[i] == '\'') inQuotes = !inQuotes;
+        }
+        return inQuotes;
+    }
+
+    private static string RepairGluedFunctionsAndTokens(string text, List<string> syntaxIssues)
+    {
+        // A. Known function followed directly by another known function without '(': e.g. IFNOTBLANK -> IF(NOTBLANK
+        var gluedFuncRegex = new Regex(@"\b(IF)(NOTBLANK|BLANK|CONTAINS|NOT|ROUND|TRUNC|FLOOR|CEILING|ABS|MIN|MAX|SUM|AVG|LEN|UPPER|LOWER|TRIM|SUBSTR|REPLACE|TEXT|NUM|DATE|SEPLIST|CASE)\b", RegexOptions.IgnoreCase);
+        var matches1 = gluedFuncRegex.Matches(text);
+        if (matches1.Count > 0)
+        {
+            for (int i = matches1.Count - 1; i >= 0; i--)
+            {
+                var m = matches1[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing opening parenthesis '(' between nested function calls.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + m.Groups[2].Value + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // B. Known function followed directly by F-field without '(': e.g. NOTBLANKF340 -> NOTBLANK(F340
+        var gluedFieldRegex = new Regex(@"\b(NOTBLANK|BLANK|CONTAINS|NOT|ROUND|TRUNC|FLOOR|CEILING|ABS|MIN|MAX|SUM|AVG|LEN|UPPER|LOWER|TRIM|SUBSTR|REPLACE|TEXT|NUM|DATE|YEAR|MONTH|DAY|SEPLIST|CASE|XIF|XXIF|IF)([Ff]\d{1,5}\b)", RegexOptions.IgnoreCase);
+        var matches2 = gluedFieldRegex.Matches(text);
+        if (matches2.Count > 0)
+        {
+            for (int i = matches2.Count - 1; i >= 0; i--)
+            {
+                var m = matches2[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing opening parenthesis '(' between function name and field argument.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + m.Groups[2].Value + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        return text;
+    }
+
+    private static string RepairMissingCommasBetweenAdjacentArguments(string text, List<string> syntaxIssues)
+    {
+        // 1. Closing paren ')' followed by whitespace and then a quote, F-field, or function header (e.g. ") F340", ") 'TRADE'", ") IF(")
+        var closeParenArgRegex = new Regex(@"\)\s+(?=(?:'|[Ff]\d{1,5}\b|[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        var matches1 = closeParenArgRegex.Matches(text);
+        if (matches1.Count > 0)
+        {
+            for (int i = matches1.Count - 1; i >= 0; i--)
+            {
+                var m = matches1[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing comma (,) separating arguments.");
+                    text = text[..m.Index] + "), " + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // 2. String literal closing quote followed by whitespace and then a function header or F-field (e.g. "' ' IF(", "' ' F340")
+        var quoteArgRegex = new Regex(@"('\s*)\s+(?=(?:[Ff]\d{1,5}\b|[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        var matches2 = quoteArgRegex.Matches(text);
+        if (matches2.Count > 0)
+        {
+            for (int i = matches2.Count - 1; i >= 0; i--)
+            {
+                var m = matches2[i];
+                if (!IsIndexInsideQuotes(text, m.Index + m.Groups[1].Length))
+                {
+                    syntaxIssues.Add("Missing comma (,) separating arguments.");
+                    text = text[..m.Index] + m.Groups[1].Value + ", " + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // 3. F-field followed by whitespace and then a function header or quote (e.g. "F479 IF(", "F479 'TEXT'")
+        var fieldArgRegex = new Regex(@"\b([Ff]\d{1,5})\s+(?=(?:'|[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        var matches3 = fieldArgRegex.Matches(text);
+        if (matches3.Count > 0)
+        {
+            for (int i = matches3.Count - 1; i >= 0; i--)
+            {
+                var m = matches3[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing comma (,) separating arguments.");
+                    text = text[..m.Index] + m.Groups[1].Value + ", " + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        return text;
     }
 
     private static string RepairSeplistMalformedSeparator(string text, List<string> syntaxIssues)
@@ -1631,9 +1749,9 @@ public static class FormgenCodeParser
                 var code = thirdTree.GetCode();
                 return string.Equals(code.Trim(), originalInput.Trim(), StringComparison.Ordinal) ? null : code;
             }
-            return secondStageFix;
+            return null;
         }
-        return string.Equals(candidateFix.Trim(), originalInput.Trim(), StringComparison.Ordinal) ? null : candidateFix;
+        return null;
     }
 
     private sealed class ParenFrame
