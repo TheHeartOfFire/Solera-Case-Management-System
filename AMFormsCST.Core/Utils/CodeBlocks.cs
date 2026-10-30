@@ -77,6 +77,9 @@ public class CodeBlocks : ICodeBlocks
         AddDefaultBlock(new FormgenFunctionCode("ADDMONTHS", "Add Months (ADDMONTHS)", ["Date", "Months"]));
         AddDefaultBlock(new FormgenFunctionCode("ADDYEARS", "Add Years (ADDYEARS)", ["Date", "Years"]));
 
+        // Fields & Variables
+        AddDefaultBlock(new SmartFieldCode());
+
         // Math & Conversion Functions + Operators
         AddDefaultBlock(new OperatorCode());
         AddDefaultBlock(new RoundCode());

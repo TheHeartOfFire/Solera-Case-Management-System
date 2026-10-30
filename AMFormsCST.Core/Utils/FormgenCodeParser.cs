@@ -151,6 +151,120 @@ public static class FormgenCodeParser
         // Reject multi-line prose paragraphs quickly unless it looks like a multi-line FormGen formula
         var normalizedWhitespace = CollapseMultilineWhitespace(input);
 
+        // A. Check for bare F-field token (e.g. F72, F10, f2490)
+        var fFieldMatch = Regex.Match(normalizedWhitespace, @"^[Ff](\d{1,5})$");
+        if (fFieldMatch.Success)
+        {
+            var fNum = int.Parse(fFieldMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+            var fToken = $"F{fNum}";
+            var fieldInfo = FormgenReferenceCatalog.TryGetField(fToken);
+            var leaf = new SmartFieldCode(fToken);
+            var title = $"Field {fToken}";
+            var desc = fieldInfo != null
+                ? $"Valid FormGen field '{fToken}' ({fieldInfo.Description})."
+                : $"Valid FormGen field '{fToken}'.";
+            var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
+        }
+
+        // B. Check for single-quoted or double-quoted text literal (e.g. 'Debt Cancellation...', "N/A", ' ')
+        if ((normalizedWhitespace.StartsWith('\'') && normalizedWhitespace.EndsWith('\'') && normalizedWhitespace.Length >= 2) ||
+            (normalizedWhitespace.StartsWith('"') && normalizedWhitespace.EndsWith('"') && normalizedWhitespace.Length >= 2))
+        {
+            string? fix = null;
+            if (normalizedWhitespace.StartsWith('"'))
+            {
+                fix = $"'{normalizedWhitespace[1..^1]}'";
+            }
+            var leaf = new SmartFieldCode(normalizedWhitespace);
+            var title = "Text Literal";
+            var desc = $"Valid FormGen text literal ({normalizedWhitespace}).";
+            var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc, fix);
+        }
+
+        // C. Check for pure numeric literal (e.g. 0, 100, 1.05)
+        if (decimal.TryParse(normalizedWhitespace, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
+        {
+            var leaf = new SmartFieldCode(normalizedWhitespace);
+            var title = $"Number: {normalizedWhitespace}";
+            var desc = $"Valid FormGen numeric value ({normalizedWhitespace}).";
+            var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
+        }
+
+        // D. Check for pure static symbol/placeholder text (e.g. ***, ---, N/A)
+        if (Regex.IsMatch(normalizedWhitespace, @"^[\*\-_/\\#@!?+=]+$") ||
+            string.Equals(normalizedWhitespace, "N/A", StringComparison.OrdinalIgnoreCase))
+        {
+            var leaf = new SmartFieldCode(normalizedWhitespace);
+            var title = $"Static Text: {normalizedWhitespace}";
+            var desc = $"Valid FormGen static text symbol ('{normalizedWhitespace}').";
+            var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
+        }
+
+        // E. Check for bare identifier (Smart Field, named variable, or function missing parens)
+        if (Regex.IsMatch(normalizedWhitespace, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+        {
+            var upper = normalizedWhitespace.ToUpperInvariant();
+            if (string.Equals(upper, "PI", StringComparison.OrdinalIgnoreCase))
+            {
+                var leaf = CreateFunctionInstance(KnownFunctions["PI"], 0);
+                var title = "Constant PI";
+                var desc = "Valid FormGen PI constant.";
+                var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+                return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
+            }
+
+            if (string.Equals(upper, "TODAY", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(upper, "RANDOM", StringComparison.OrdinalIgnoreCase))
+            {
+                var fix = $"{upper}()";
+                return new FormgenParseResult(
+                    FormgenParseStatus.MalformedSimilar,
+                    input,
+                    null,
+                    null,
+                    "Malformed FormGen Syntax Detected",
+                    $"In FormGen, {upper}() is a function and requires empty parentheses: write {upper}() instead of {upper}.",
+                    fix);
+            }
+
+            if (KnownFunctions.TryGetValue(normalizedWhitespace, out var spec) && spec.UsesParentheses)
+            {
+                var fix = $"{spec.Prefix}()";
+                return new FormgenParseResult(
+                    FormgenParseStatus.MalformedSimilar,
+                    input,
+                    null,
+                    null,
+                    "Malformed FormGen Syntax Detected",
+                    $"Function '{spec.Prefix}' is missing opening and closing parentheses: write {spec.Prefix}(...).",
+                    fix);
+            }
+
+            if (CommonFunctionAliases.TryGetValue(normalizedWhitespace, out var canonicalFunc))
+            {
+                var fix = $"{canonicalFunc}()";
+                return new FormgenParseResult(
+                    FormgenParseStatus.MalformedSimilar,
+                    input,
+                    null,
+                    null,
+                    "Malformed FormGen Syntax Detected",
+                    $"Unrecognized function '{normalizedWhitespace}' (did you mean '{canonicalFunc}'?) and missing parentheses: write {canonicalFunc}(...).",
+                    fix);
+            }
+
+            // Otherwise, this identifier is a valid FormGen Smart Field / named variable
+            var sfLeaf = new SmartFieldCode(normalizedWhitespace);
+            var sfTitle = $"Smart Field: {normalizedWhitespace}";
+            var sfDesc = $"Valid FormGen Smart Field / variable identifier '{normalizedWhitespace}'.";
+            var sfCondensed = new CustomSnippetCode(sfTitle, sfDesc, sfLeaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, sfLeaf, sfCondensed, sfTitle, sfDesc);
+        }
+
         // 1. Check whether the text has any similarity to a FormGen function or expression
         bool isSimilarToFormgen = LooksLikeFormgenAttempt(normalizedWhitespace, out var PreScanIssues, out var preSuggestedFix);
         if (!isSimilarToFormgen)
@@ -179,7 +293,12 @@ public static class FormgenCodeParser
                 }
             }
 
-            var finalFix = TryRefineSuggestedFix(secondaryFix ?? preSuggestedFix ?? normalizedWhitespace);
+            var rawFixCandidate = secondaryFix ?? preSuggestedFix;
+            var finalFix = rawFixCandidate != null ? TryRefineSuggestedFix(rawFixCandidate, input) : null;
+            if (finalFix != null && string.Equals(finalFix.Trim(), input.Trim(), StringComparison.Ordinal))
+            {
+                finalFix = null;
+            }
             var message = string.Join(" ", PreScanIssues);
             return new FormgenParseResult(
                 FormgenParseStatus.MalformedSimilar,
@@ -201,7 +320,12 @@ public static class FormgenCodeParser
                 ? string.Join(" ", parseDiagnostics)
                 : "The expression is similar to a FormGen function, but contains a syntax error. Check parentheses, commas, and single quotes.";
 
-            var bestFix = TryRefineSuggestedFix(astSuggestedFix ?? preSuggestedFix ?? normalizedWhitespace);
+            var rawFixCandidate = astSuggestedFix ?? preSuggestedFix;
+            var bestFix = rawFixCandidate != null ? TryRefineSuggestedFix(rawFixCandidate, input) : null;
+            if (bestFix != null && string.Equals(bestFix.Trim(), input.Trim(), StringComparison.Ordinal))
+            {
+                bestFix = null;
+            }
             return new FormgenParseResult(
                 FormgenParseStatus.MalformedSimilar,
                 input,
@@ -238,6 +362,14 @@ public static class FormgenCodeParser
             var lhs = assignOp.Inputs[0].Value?.ToString();
             if (!string.IsNullOrWhiteSpace(lhs))
                 return $"Assign {lhs}";
+        }
+        if (parsedTree is OperatorCode op)
+        {
+            return $"Calculate: {op.GetCode()}";
+        }
+        if (parsedTree is SmartFieldCode sf)
+        {
+            return $"Field: {sf.FieldName}";
         }
         if (!string.IsNullOrWhiteSpace(parsedTree.Name))
             return $"Parsed: {parsedTree.Name}";
@@ -446,11 +578,10 @@ public static class FormgenCodeParser
 
     private static bool TryParseSimpleArithmeticOrComparison(string text)
     {
-        // Only treat raw arithmetic/comparison as a FormGen expression if it has a valid operator between two non-empty operands
-        // and contains no prose sentences (more than 1 consecutive space-separated identifier without operators).
         if (!OperatorTokenRegex.IsMatch(text)) return false;
-        var tokens = Regex.Matches(text, @"\b[A-Za-z_][A-Za-z0-9_]*\b");
-        if (tokens.Count > 4) return false;
+        // Check for adjacent words separated only by whitespace without operators (e.g. "this is a sentence + 1")
+        var proseMatch = Regex.Match(text, @"\b(?!AND\b|OR\b)[A-Za-z]{2,}\s+(?!AND\b|OR\b)[A-Za-z]{2,}\b", RegexOptions.IgnoreCase);
+        if (proseMatch.Success) return false;
         return FindTopLevelOperator(text, out _, out _, out _);
     }
 
@@ -1281,25 +1412,29 @@ public static class FormgenCodeParser
     private static string ReplaceWordAt(string text, int index, int length, string replacement) =>
         string.Concat(text.AsSpan(0, index), replacement, text.AsSpan(index + length));
 
-    private static string? TryRefineSuggestedFix(string? candidateFix)
+    private static string? TryRefineSuggestedFix(string? candidateFix, string originalInput)
     {
         if (string.IsNullOrWhiteSpace(candidateFix)) return null;
+        if (string.Equals(candidateFix.Trim(), originalInput.Trim(), StringComparison.Ordinal)) return null;
+
         var diags = new List<string>();
         var tree = TryParseExpression(candidateFix, isTopLevel: true, diags, out var secondStageFix);
         if (tree != null && diags.Count == 0)
         {
-            return tree.GetCode();
+            var code = tree.GetCode();
+            return string.Equals(code.Trim(), originalInput.Trim(), StringComparison.Ordinal) ? null : code;
         }
-        if (!string.IsNullOrWhiteSpace(secondStageFix))
+        if (!string.IsNullOrWhiteSpace(secondStageFix) && !string.Equals(secondStageFix.Trim(), originalInput.Trim(), StringComparison.Ordinal))
         {
             var thirdDiags = new List<string>();
             var thirdTree = TryParseExpression(secondStageFix, isTopLevel: true, thirdDiags, out _);
             if (thirdTree != null && thirdDiags.Count == 0)
             {
-                return thirdTree.GetCode();
+                var code = thirdTree.GetCode();
+                return string.Equals(code.Trim(), originalInput.Trim(), StringComparison.Ordinal) ? null : code;
             }
             return secondStageFix;
         }
-        return candidateFix;
+        return string.Equals(candidateFix.Trim(), originalInput.Trim(), StringComparison.Ordinal) ? null : candidateFix;
     }
 }

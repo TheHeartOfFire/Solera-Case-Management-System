@@ -808,6 +808,7 @@ public partial class CodeSnippetsViewModel : ViewModel
     {
         static string GetFunctionGroupKey(ICodeBase block)
         {
+            if (block is SmartFieldCode) return "Variables";
             if (block is OperatorCode) return "Math";
             return block.Prefix switch
             {
@@ -832,6 +833,7 @@ public partial class CodeSnippetsViewModel : ViewModel
             }
         }
 
+        AddCategoryIfAny("Variables", "Fields & Variables", "#1F10B981", "#CC10B981", "#FF10B981", expanded: true);
         AddCategoryIfAny("Logic", "Logic & Conditionals", "#1FD97706", "#CCD97706", "#FFD97706", expanded: true);
         AddCategoryIfAny("Text", "Text & Formatting", "#1F0D9488", "#CC0D9488", "#FF0D9488", expanded: true);
         AddCategoryIfAny("Date", "Date & Time", "#1F0284C7", "#CC0284C7", "#FF0284C7", expanded: false);

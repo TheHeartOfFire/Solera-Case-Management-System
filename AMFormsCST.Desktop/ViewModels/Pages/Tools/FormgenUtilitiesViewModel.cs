@@ -69,7 +69,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
     private bool _isBusy;
 
     [ObservableProperty]
-    private bool _isSidebarVisible = true;
+    private bool _isSidebarVisible = false;
 
     [ObservableProperty]
     private int _selectedWorkspaceTabIndex = 0;

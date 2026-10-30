@@ -79,10 +79,42 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
-        <!-- Centered DataGrid CheckBox Header Style with zero padding -->
-        <Style x:Key="CenteredCheckBoxHeaderStyle" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+        <!-- Unified Modern DataGrid Column Header Style compliant with Dark/Light themes -->
+        <Style x:Key="ModernDataGridColumnHeaderStyle" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridColumnHeader">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Centered DataGrid CheckBox Header Style inheriting modern theme styling -->
+        <Style x:Key="CenteredCheckBoxHeaderStyle" TargetType="DataGridColumnHeader" BasedOn="{StaticResource ModernDataGridColumnHeaderStyle}">
             <Setter Property="Padding" Value="0" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!-- Default TextBlock Style to ensure theme compliance across all containers -->
+        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         </Style>
 
         <!-- Headless TabControl Style (Content switcher driven by top Segmented Bar) -->
@@ -103,15 +135,28 @@
     <Grid Margin="12">
         <Grid.ColumnDefinitions>
             <!-- Col 0: Left Panel (File Ops & Tree) -->
-            <ColumnDefinition Width="280" MinWidth="220" MaxWidth="400" />
+            <ColumnDefinition Width="240" MinWidth="180" MaxWidth="360" />
             <!-- Col 1: Splitter -->
             <ColumnDefinition Width="Auto" />
             <!-- Col 2: Center Workspace (Manipulate Prompts, Fields, Code) -->
-            <ColumnDefinition Width="*" MinWidth="400" />
+            <ColumnDefinition Width="*" MinWidth="350" />
             <!-- Col 3: Splitter -->
             <ColumnDefinition Width="Auto" />
             <!-- Col 4: Right Sidebar (Properties Inspector - Collapsible) -->
-            <ColumnDefinition Width="320" MinWidth="260" MaxWidth="450" />
+            <ColumnDefinition x:Name="SidebarColumn" Width="280" MinWidth="220" MaxWidth="420">
+                <ColumnDefinition.Style>
+                    <Style TargetType="ColumnDefinition">
+                        <Setter Property="Width" Value="280" />
+                        <Setter Property="MinWidth" Value="220" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSidebarVisible}" Value="False">
+                                <Setter Property="Width" Value="0" />
+                                <Setter Property="MinWidth" Value="0" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ColumnDefinition.Style>
+            </ColumnDefinition>
         </Grid.ColumnDefinitions>
 
         <!-- ========================================================= -->
@@ -390,18 +435,20 @@
                             CanUserResizeColumns="True"
                             HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Auto"
+                            ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
                             ItemsSource="{Binding PromptsList}"
                             SelectedItem="{Binding SelectedPromptItem, Mode=TwoWay}"
                             SelectionMode="Extended"
                             PreviewKeyDown="OnDataGridPreviewKeyDown">
                             <DataGrid.Columns>
-                                <DataGridTemplateColumn Width="56" CanUserResize="False"
+                                <DataGridTemplateColumn Width="46" CanUserResize="False"
                                                         CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
                                                         HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
                                     <DataGridTemplateColumn.Header>
                                         <CheckBox
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center"
+                                            Background="Transparent"
                                             Margin="0" Padding="0" MinWidth="0" MinHeight="0"
                                             IsChecked="{Binding DataContext.AreAllPromptsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
                                             ToolTip="Select / Deselect All" />
@@ -411,18 +458,19 @@
                                             <CheckBox
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
+                                                Background="Transparent"
                                                 Margin="0" Padding="0" MinWidth="0" MinHeight="0"
                                                 IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Binding="{Binding Order}" Header="Order" IsReadOnly="True" Width="60" />
-                                <DataGridTextColumn Binding="{Binding Variable}" Header="Variable" FontWeight="SemiBold" Width="90" />
-                                <DataGridTextColumn Binding="{Binding Type}" Header="Type" IsReadOnly="True" Width="80" />
-                                <DataGridTextColumn Binding="{Binding PromptKind}" Header="Prompt Kind" Width="110" />
-                                <DataGridTextColumn Binding="{Binding Message}" Header="Prompt Message / Label" MinWidth="180" Width="2*" />
-                                <DataGridTextColumn Binding="{Binding Expression}" Header="Expression / Default" MinWidth="180" Width="2*" />
-                                <DataGridTemplateColumn Header="Req" Width="56"
+                                <DataGridTextColumn Binding="{Binding Order}" Header="Order" IsReadOnly="True" Width="55" />
+                                <DataGridTextColumn Binding="{Binding Variable}" Header="Variable" FontWeight="SemiBold" Width="85" />
+                                <DataGridTextColumn Binding="{Binding Type}" Header="Type" IsReadOnly="True" Width="75" />
+                                <DataGridTextColumn Binding="{Binding PromptKind}" Header="Prompt Kind" Width="95" />
+                                <DataGridTextColumn Binding="{Binding Message}" Header="Prompt Message / Label" MinWidth="130" Width="2*" />
+                                <DataGridTextColumn Binding="{Binding Expression}" Header="Expression / Default" MinWidth="130" Width="2*" />
+                                <DataGridTemplateColumn Header="Req" Width="46"
                                                         CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
                                                         HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
                                     <DataGridTemplateColumn.CellTemplate>
@@ -430,12 +478,13 @@
                                             <CheckBox
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
+                                                Background="Transparent"
                                                 Margin="0" Padding="0" MinWidth="0" MinHeight="0"
                                                 IsChecked="{Binding Required, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Binding="{Binding ChoicesText}" Header="Choices" MinWidth="120" Width="1.5*" />
+                                <DataGridTextColumn Binding="{Binding ChoicesText}" Header="Choices" MinWidth="90" Width="1.5*" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </Grid>
@@ -574,18 +623,20 @@
                             CanUserResizeColumns="True"
                             HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Auto"
+                            ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
                             ItemsSource="{Binding FilteredFieldsList}"
                             SelectedItem="{Binding SelectedFieldItem, Mode=TwoWay}"
                             SelectionMode="Extended"
                             PreviewKeyDown="OnDataGridPreviewKeyDown">
                             <DataGrid.Columns>
-                                <DataGridTemplateColumn Width="56" CanUserResize="False"
+                                <DataGridTemplateColumn Width="46" CanUserResize="False"
                                                         CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
                                                         HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
                                     <DataGridTemplateColumn.Header>
                                         <CheckBox
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center"
+                                            Background="Transparent"
                                             Margin="0" Padding="0" MinWidth="0" MinHeight="0"
                                             IsChecked="{Binding DataContext.AreAllFieldsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
                                             ToolTip="Select / Deselect All" />
@@ -595,18 +646,19 @@
                                             <CheckBox
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
+                                                Background="Transparent"
                                                 Margin="0" Padding="0" MinWidth="0" MinHeight="0"
                                                 IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Binding="{Binding ID}" Header="ID" IsReadOnly="True" Width="60" />
-                                <DataGridTextColumn Binding="{Binding PageNumber}" Header="Page" IsReadOnly="True" Width="65" />
-                                <DataGridTextColumn Binding="{Binding Type}" Header="Type" Width="85" />
-                                <DataGridTextColumn Binding="{Binding Expression}" Header="Expression" MinWidth="200" Width="2.5*" />
-                                <DataGridTextColumn Binding="{Binding SampleData}" Header="Sample Data" MinWidth="130" Width="1.5*" />
-                                <DataGridTextColumn Binding="{Binding FontSize}" Header="Font Size" Width="85" />
-                                <DataGridTemplateColumn Header="Bold" Width="56"
+                                <DataGridTextColumn Binding="{Binding ID}" Header="ID" IsReadOnly="True" Width="50" />
+                                <DataGridTextColumn Binding="{Binding PageNumber}" Header="Page" IsReadOnly="True" Width="50" />
+                                <DataGridTextColumn Binding="{Binding Type}" Header="Type" Width="75" />
+                                <DataGridTextColumn Binding="{Binding Expression}" Header="Expression" Width="200" MinWidth="130" />
+                                <DataGridTextColumn Binding="{Binding SampleData}" Header="Sample Data" Width="120" MinWidth="90" />
+                                <DataGridTextColumn Binding="{Binding FontSize}" Header="Font Size" Width="70" />
+                                <DataGridTemplateColumn Header="Bold" Width="46"
                                                         CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
                                                         HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
                                     <DataGridTemplateColumn.CellTemplate>
@@ -614,18 +666,19 @@
                                             <CheckBox
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
+                                                Background="Transparent"
                                                 Margin="0" Padding="0" MinWidth="0" MinHeight="0"
                                                 IsChecked="{Binding Bold, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Binding="{Binding FontAlignment}" Header="Alignment" Width="90" />
-                                <DataGridTextColumn Binding="{Binding LaserRectX}" Header="Laser X" Width="70" />
-                                <DataGridTextColumn Binding="{Binding LaserRectY}" Header="Laser Y" Width="70" />
-                                <DataGridTextColumn Binding="{Binding LaserRectWidth}" Header="Laser W" Width="70" />
-                                <DataGridTextColumn Binding="{Binding LaserRectHeight}" Header="Laser H" Width="70" />
-                                <DataGridTextColumn Binding="{Binding ImpactCol}" Header="Impact Col" Width="85" />
-                                <DataGridTextColumn Binding="{Binding ImpactLine}" Header="Impact Line" Width="85" />
+                                <DataGridTextColumn Binding="{Binding FontAlignment}" Header="Alignment" Width="75" />
+                                <DataGridTextColumn Binding="{Binding LaserRectX}" Header="Laser X" Width="60" />
+                                <DataGridTextColumn Binding="{Binding LaserRectY}" Header="Laser Y" Width="60" />
+                                <DataGridTextColumn Binding="{Binding LaserRectWidth}" Header="Laser W" Width="60" />
+                                <DataGridTextColumn Binding="{Binding LaserRectHeight}" Header="Laser H" Width="60" />
+                                <DataGridTextColumn Binding="{Binding ImpactCol}" Header="Impact Col" Width="75" />
+                                <DataGridTextColumn Binding="{Binding ImpactLine}" Header="Impact Line" Width="75" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </Grid>
@@ -668,6 +721,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="13"
                                     FontWeight="SemiBold"
+                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                     Text="{Binding CodeValidationSummary}" />
                             </Grid>
                         </Border>
@@ -681,6 +735,7 @@
                             CanUserResizeColumns="True"
                             HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Auto"
+                            ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
                             ItemsSource="{Binding CodeValidationIssues}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Binding="{Binding Location}" Header="Location" FontWeight="SemiBold" Width="160" />
@@ -715,7 +770,7 @@
                             BorderThickness="1"
                             CornerRadius="6">
                             <StackPanel Orientation="Vertical">
-                                <TextBlock Text="Interactive Formula Scratchpad &amp; Syntax Checker" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Text="Interactive Formula Scratchpad &amp; Syntax Checker" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,6" />
                                 <Grid Margin="0,0,0,6">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -734,7 +789,7 @@
                                         Icon="{ui:SymbolIcon Checkmark24}" />
                                 </Grid>
                                 <TextBlock
-                                    Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                     Text="{Binding ScratchpadResult.DiagnosticMessage}"
                                     TextWrapping="Wrap" />
                             </StackPanel>
@@ -776,6 +831,7 @@
                                 <TextBlock
                                     Grid.Column="1"
                                     VerticalAlignment="Center"
+                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                     Text="{Binding TransferSourceTitle, StringFormat='Source Form: {0}'}" />
                             </Grid>
                         </Border>
@@ -803,7 +859,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
-                                    <TextBlock Grid.Row="0" Text="Prompts to Import" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                    <TextBlock Grid.Row="0" Text="Prompts to Import" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,6" />
 
                                     <DataGrid
                                         Grid.Row="1"
@@ -812,15 +868,17 @@
                                         CanUserResizeColumns="True"
                                         HorizontalScrollBarVisibility="Auto"
                                         VerticalScrollBarVisibility="Auto"
+                                        ColumnHeaderStyle="{StaticResource ModernDataGridColumnHeaderStyle}"
                                         ItemsSource="{Binding TransferSourcePrompts}">
                                         <DataGrid.Columns>
-                                            <DataGridTemplateColumn Width="56" CanUserResize="False"
+                                            <DataGridTemplateColumn Width="46" CanUserResize="False"
                                                                     CellStyle="{StaticResource CenteredCheckBoxCellStyle}"
                                                                     HeaderStyle="{StaticResource CenteredCheckBoxHeaderStyle}">
                                                 <DataGridTemplateColumn.Header>
                                                     <CheckBox
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
+                                                        Background="Transparent"
                                                         Margin="0" Padding="0" MinWidth="0" MinHeight="0"
                                                         IsChecked="{Binding DataContext.AreAllTransferPromptsSelected, RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}"
                                                         ToolTip="Select / Deselect All" />
@@ -830,6 +888,7 @@
                                                         <CheckBox
                                                             HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
+                                                            Background="Transparent"
                                                             Margin="0" Padding="0" MinWidth="0" MinHeight="0"
                                                             IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                                     </DataTemplate>
@@ -860,15 +919,15 @@
                                 BorderThickness="1"
                                 CornerRadius="6">
                                 <StackPanel Orientation="Vertical">
-                                    <TextBlock Text="Transfer Fields Between Pages" FontWeight="SemiBold" Margin="0,0,0,10" />
+                                    <TextBlock Text="Transfer Fields Between Pages" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10" />
 
-                                    <TextBlock Text="From Source Page:" Margin="0,0,0,4" />
+                                    <TextBlock Text="From Source Page:" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,4" />
                                     <ComboBox
                                         Margin="0,0,0,12"
                                         ItemsSource="{Binding TransferSourcePages}"
                                         SelectedItem="{Binding SelectedTransferSourcePage, Mode=TwoWay}" />
 
-                                    <TextBlock Text="Into Target Page of Active Form:" Margin="0,0,0,4" />
+                                    <TextBlock Text="Into Target Page of Active Form:" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,4" />
                                     <ComboBox
                                         Margin="0,0,0,16"
                                         ItemsSource="{Binding TransferSourcePages}"

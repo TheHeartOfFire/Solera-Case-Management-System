@@ -173,4 +173,119 @@ public class FormgenCodeParserTests
         Assert.Contains("CHECK IF (F10", pseudo);
         Assert.Contains("CONTAINS", pseudo);
     }
+
+    [Fact]
+    public void Parse_BareFField_ReturnsValid()
+    {
+        var result = FormgenCodeParser.Parse("F72");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal("Field F72", result.StatusTitle);
+        Assert.Equal("F72", result.CondensedBlock.GetCode());
+        Assert.False(result.HasSuggestedFix);
+    }
+
+    [Fact]
+    public void Parse_SmartFieldVariable_ReturnsValid()
+    {
+        var result = FormgenCodeParser.Parse("CashPrice");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal("Smart Field: CashPrice", result.StatusTitle);
+        Assert.Equal("CashPrice", result.CondensedBlock.GetCode());
+        Assert.False(result.HasSuggestedFix);
+    }
+
+    [Fact]
+    public void Parse_SingleQuotedTextLiteral_ReturnsValid()
+    {
+        var result = FormgenCodeParser.Parse("'Debt Cancellation - E. Fee Paid'");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal("Text Literal", result.StatusTitle);
+        Assert.Equal("'Debt Cancellation - E. Fee Paid'", result.CondensedBlock.GetCode());
+        Assert.False(result.HasSuggestedFix);
+    }
+
+    [Fact]
+    public void Parse_DoubleQuotedTextLiteral_ReturnsValidWithSingleQuoteSuggestion()
+    {
+        var result = FormgenCodeParser.Parse("\"N/A\"");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal("Text Literal", result.StatusTitle);
+        Assert.Equal("'N/A'", result.SuggestedFix);
+    }
+
+    [Fact]
+    public void Parse_PureNumericLiteral_ReturnsValid()
+    {
+        var result = FormgenCodeParser.Parse("100.50");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal("Number: 100.50", result.StatusTitle);
+        Assert.Equal("100.50", result.CondensedBlock.GetCode());
+    }
+
+    [Fact]
+    public void Parse_StaticSymbol_ReturnsValid()
+    {
+        var result = FormgenCodeParser.Parse("***");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal("Static Text: ***", result.StatusTitle);
+        Assert.Equal("***", result.CondensedBlock.GetCode());
+    }
+
+    [Fact]
+    public void Parse_EquationOfFFieldsAndNumbers_ReturnsValid()
+    {
+        var result = FormgenCodeParser.Parse("F10 + F20");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal("F10 + F20", result.CondensedBlock.GetCode());
+        Assert.False(result.HasSuggestedFix);
+    }
+
+    [Fact]
+    public void Parse_EquationWithSmartFields_ReturnsValid()
+    {
+        var result = FormgenCodeParser.Parse("CashPrice - F2867");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal("CashPrice - F2867", result.CondensedBlock.GetCode());
+    }
+
+    [Fact]
+    public void Parse_MultiTokenEquation_ReturnsValid()
+    {
+        var result = FormgenCodeParser.Parse("ACC01_PRICE + ACC02_PRICE + ACC03_PRICE + ACC04_PRICE + ACC05_PRICE");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.False(result.HasSuggestedFix);
+    }
+
+    [Fact]
+    public void Parse_MalformedFunction_DoesNotSuggestNullFix()
+    {
+        // When syntax is malformed, suggested fix should never match the original input text
+        var result = FormgenCodeParser.Parse("UNKNOWNFUNC(F10, 'TEST')");
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
+        if (result.SuggestedFix != null)
+        {
+            Assert.NotEqual("UNKNOWNFUNC(F10, 'TEST')", result.SuggestedFix);
+        }
+    }
+
+    [Fact]
+    public void SmartFieldCode_OutputsBareNameAndClonesCleanly()
+    {
+        var sf = new SmartFieldCode("TradeCreditN");
+        Assert.Equal("TradeCreditN", sf.GetCode());
+        Assert.Equal("SF", sf.Prefix);
+
+        var clone = (SmartFieldCode)sf.Clone();
+        Assert.Equal("TradeCreditN", clone.FieldName);
+        Assert.Equal("TradeCreditN", clone.GetCode());
+    }
 }
