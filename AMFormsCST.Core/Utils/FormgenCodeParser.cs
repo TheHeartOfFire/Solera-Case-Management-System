@@ -556,8 +556,8 @@ public static class FormgenCodeParser
         int singleQuoteCount = workingFix.Count(c => c == '\'');
         if (singleQuoteCount % 2 != 0)
         {
-            syntaxIssues.Add("Unclosed single-quoted text literal — missing a closing single quote (').");
-            workingFix = RepairUnclosedSingleQuote(workingFix);
+            workingFix = RepairUnbalancedSingleQuote(workingFix, out var quoteIssue);
+            syntaxIssues.Add(quoteIssue);
         }
 
         // 5. Unbalanced parentheses outside quotes
@@ -1335,19 +1335,143 @@ public static class FormgenCodeParser
         return sb.ToString();
     }
 
-    private static string RepairUnclosedSingleQuote(string text)
+    private static string RepairUnbalancedSingleQuote(string text, out string issue)
     {
-        int lastQuote = text.LastIndexOf('\'');
-        if (lastQuote < 0) return text;
+        issue = "Unclosed single-quoted text literal — missing an opening or closing single quote (').";
+        if (string.IsNullOrEmpty(text)) return text;
 
-        // Place closing quote before the next comma or closing parenthesis, or at the end
-        for (int i = lastQuote + 1; i < text.Length; i++)
+        var candidates = new List<(string Repaired, string Issue)>();
+
+        // 1. Look for orphaned closing quotes (missing opening quote)
+        // e.g., ", TRADE #2: '," or "= NEW',"
+        for (int i = 0; i < text.Length; i++)
         {
-            if (text[i] is ',' or ')')
+            if (text[i] != '\'') continue;
+
+            // Find previous delimiter before this quote
+            int prevDelim = i - 1;
+            while (prevDelim >= 0 && text[prevDelim] != ',' && text[prevDelim] != '(' &&
+                   text[prevDelim] != '=' && text[prevDelim] != '!' && text[prevDelim] != '<' &&
+                   text[prevDelim] != '>' && text[prevDelim] != '+' && text[prevDelim] != '-' &&
+                   text[prevDelim] != '*' && text[prevDelim] != '/' && text[prevDelim] != '\'')
             {
-                return text[..i] + "'" + text[i..];
+                prevDelim--;
+            }
+
+            // If stopped at another single quote, this is part of another quoted literal
+            if (prevDelim >= 0 && text[prevDelim] == '\'')
+            {
+                continue;
+            }
+
+            int contentStart = prevDelim + 1;
+            while (contentStart < i && char.IsWhiteSpace(text[contentStart]))
+            {
+                contentStart++;
+            }
+
+            if (contentStart < i)
+            {
+                var candidate = text.Insert(contentStart, "'");
+                var snippet = text[contentStart..i].Trim();
+                var desc = $"Missing opening single quote (') before '{snippet}'.";
+                candidates.Add((candidate, desc));
             }
         }
+
+        // 2. Look for orphaned opening quotes (missing closing quote)
+        // e.g., ", 'TRADE #2: ," or "= 'NEW,"
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] != '\'') continue;
+
+            // Check if this quote is preceded by a delimiter (or whitespace)
+            int checkBack = i - 1;
+            while (checkBack >= 0 && char.IsWhiteSpace(text[checkBack])) checkBack--;
+            bool isAfterDelim = checkBack < 0 || text[checkBack] is ',' or '(' or '=' or '!' or '<' or '>' or '+' or '-' or '*' or '/';
+
+            if (!isAfterDelim) continue;
+
+            // Find next delimiter after this quote
+            int nextDelim = i + 1;
+            while (nextDelim < text.Length && text[nextDelim] != ',' && text[nextDelim] != ')' &&
+                   text[nextDelim] != '=' && text[nextDelim] != '!' && text[nextDelim] != '<' &&
+                   text[nextDelim] != '>' && text[nextDelim] != '+' && text[nextDelim] != '-' &&
+                   text[nextDelim] != '*' && text[nextDelim] != '/' && text[nextDelim] != '\'')
+            {
+                nextDelim++;
+            }
+
+            // If stopped at another single quote, it already has a closing quote
+            if (nextDelim < text.Length && text[nextDelim] == '\'')
+            {
+                continue;
+            }
+
+            int contentEnd = nextDelim;
+            while (contentEnd > i + 1 && char.IsWhiteSpace(text[contentEnd - 1]))
+            {
+                contentEnd--;
+            }
+
+            if (contentEnd > i)
+            {
+                var candidate = text.Insert(contentEnd, "'");
+                var snippet = text[(i + 1)..contentEnd].Trim();
+                var desc = $"Missing closing single quote (') after '{snippet}'.";
+                candidates.Add((candidate, desc));
+            }
+        }
+
+        // 3. Fallback: closing quote before next ',' or ')' after last quote, or at end
+        int lastQuote = text.LastIndexOf('\'');
+        if (lastQuote >= 0)
+        {
+            bool placed = false;
+            for (int k = lastQuote + 1; k < text.Length; k++)
+            {
+                if (text[k] is ',' or ')')
+                {
+                    candidates.Add((text[..k] + "'" + text[k..], "Unclosed single-quoted text literal — missing a closing single quote (')."));
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed)
+            {
+                candidates.Add((text + "'", "Unclosed single-quoted text literal — missing a closing single quote (') at the end of the expression."));
+            }
+        }
+
+        // Evaluate candidates using TryParseExpression to find the best syntactically valid candidate
+        (string Repaired, string Issue)? bestCandidate = null;
+        int bestDiagnosticCount = int.MaxValue;
+
+        foreach (var (candText, candIssue) in candidates)
+        {
+            var testDiags = new List<string>();
+            var tree = TryParseExpression(candText, isTopLevel: true, testDiags, out _);
+
+            // Perfect candidate: parses with zero errors!
+            if (tree != null && testDiags.Count == 0)
+            {
+                issue = candIssue;
+                return candText;
+            }
+
+            if (testDiags.Count < bestDiagnosticCount)
+            {
+                bestDiagnosticCount = testDiags.Count;
+                bestCandidate = (candText, candIssue);
+            }
+        }
+
+        if (bestCandidate.HasValue)
+        {
+            issue = bestCandidate.Value.Issue;
+            return bestCandidate.Value.Repaired;
+        }
+
         return text + "'";
     }
 

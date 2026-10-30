@@ -416,4 +416,26 @@ public class FormgenCodeParserTests
         var reparsed = FormgenCodeParser.Parse(result.SuggestedFix);
         Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
     }
+
+    [Fact]
+    public void Parse_MissingOpeningQuoteInNestedArgument_RepairsOpeningQuoteCleanly()
+    {
+        // User test case: opening quote before TRADE #2: was removed
+        var input = "SEPLIST(' ', IF(NOTBLANK(F340),TRADE #2: ',' '), F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)";
+
+        var result = FormgenCodeParser.Parse(input);
+
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
+        Assert.NotNull(result.SuggestedFix);
+
+        // Crucial requirement: Must NOT create corrupted triple quotes like ' ' ' or extra trailing arguments!
+        Assert.DoesNotContain("' ' '", result.SuggestedFix);
+        Assert.DoesNotContain("', '')", result.SuggestedFix);
+        Assert.Contains("'TRADE #2: '", result.SuggestedFix);
+        Assert.Contains("'TRADE #3: '", result.SuggestedFix);
+
+        var reparsed = FormgenCodeParser.Parse(result.SuggestedFix);
+        Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
+        Assert.NotNull(reparsed.CondensedBlock);
+    }
 }
