@@ -438,4 +438,25 @@ public class FormgenCodeParserTests
         Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
         Assert.NotNull(reparsed.CondensedBlock);
     }
+
+    [Fact]
+    public void Parse_SeplistMalformedSeparator_DefaultsToSingleSpace()
+    {
+        // User test case: SEPLIST( ', with unclosed quote and TRADE #2: missing opening quote
+        var input = "SEPLIST( ', IF(NOTBLANK(F340),TRADE #2: ',' '), F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)";
+
+        var result = FormgenCodeParser.Parse(input);
+
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
+        Assert.NotNull(result.SuggestedFix);
+
+        // Crucial requirement: SEPLIST separator must be an enclosed single space ' ', NOT an empty string ''!
+        Assert.StartsWith("SEPLIST( ' '", result.SuggestedFix);
+        Assert.Contains("'TRADE #2: '", result.SuggestedFix);
+        Assert.Contains("'TRADE #3: '", result.SuggestedFix);
+
+        var reparsed = FormgenCodeParser.Parse(result.SuggestedFix);
+        Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
+        Assert.NotNull(reparsed.CondensedBlock);
+    }
 }

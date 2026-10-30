@@ -552,7 +552,10 @@ public static class FormgenCodeParser
             workingFix = ReplaceSubstringOutsideQuotes(workingFix, "<>", "!=");
         }
 
-        // 4. Unclosed single quotes
+        // 4. SEPLIST malformed separator: assume standard enclosed single space ' '
+        workingFix = RepairSeplistMalformedSeparator(workingFix, syntaxIssues);
+
+        // 5. Unclosed single quotes
         int singleQuoteCount = workingFix.Count(c => c == '\'');
         if (singleQuoteCount % 2 != 0)
         {
@@ -862,10 +865,17 @@ public static class FormgenCodeParser
     {
         if (prefix == "ROUND" && index == 1) return "2";
         if (prefix is "ADDDAYS" or "ADDWEEKS" or "ADDMONTHS" or "ADDYEARS" && index == 1) return "1";
+        if (string.Equals(prefix, "SEPLIST", StringComparison.OrdinalIgnoreCase) && index == 0)
+        {
+            return "' '";
+        }
+        if (argLabel.Contains("Separator", StringComparison.OrdinalIgnoreCase))
+        {
+            return "' '";
+        }
         if (argLabel.Contains("Result", StringComparison.OrdinalIgnoreCase) ||
             argLabel.Contains("Default", StringComparison.OrdinalIgnoreCase) ||
-            argLabel.Contains("Text", StringComparison.OrdinalIgnoreCase) ||
-            argLabel.Contains("Separator", StringComparison.OrdinalIgnoreCase))
+            argLabel.Contains("Text", StringComparison.OrdinalIgnoreCase))
         {
             return "''";
         }
@@ -1335,6 +1345,41 @@ public static class FormgenCodeParser
         return sb.ToString();
     }
 
+    private static string RepairSeplistMalformedSeparator(string text, List<string> syntaxIssues)
+    {
+        var matches = Regex.Matches(text, @"\bSEPLIST\s*\(", RegexOptions.IgnoreCase);
+        if (matches.Count == 0) return text;
+
+        for (int m = matches.Count - 1; m >= 0; m--)
+        {
+            var match = matches[m];
+            int start = match.Index + match.Length;
+
+            // Check if separator is a valid 2-quote literal: '...',
+            var validLiteralMatch = Regex.Match(text[start..], @"^\s*'([^'()]{0,10})'\s*,");
+            if (validLiteralMatch.Success)
+            {
+                // Already a well-formed separator like '', ' ', ', ', '-', etc.
+                continue;
+            }
+
+            // Check if separator has malformed quotes with no delimiter characters (e.g. " '", "' ", "'", or just whitespace) before the next comma
+            var malformedMatch = Regex.Match(text[start..], @"^(\s*'?\s*'?\s*),");
+            if (malformedMatch.Success)
+            {
+                var sepText = malformedMatch.Groups[1].Value;
+                if (sepText.Count(c => c == '\'') < 2 && string.IsNullOrWhiteSpace(sepText.Replace("'", "")))
+                {
+                    syntaxIssues.Add("SEPLIST() separator argument has malformed quotes; assuming standard single-space separator (' ').");
+                    int replaceLen = malformedMatch.Length;
+                    text = text[..start] + "' ', " + text[(start + replaceLen)..].TrimStart();
+                }
+            }
+        }
+
+        return text;
+    }
+
     private static string RepairUnbalancedSingleQuote(string text, out string issue)
     {
         issue = "Unclosed single-quoted text literal — missing an opening or closing single quote (').";
@@ -1370,7 +1415,13 @@ public static class FormgenCodeParser
                 contentStart++;
             }
 
-            if (contentStart < i)
+            if (contentStart == i && prevDelim + 1 < i)
+            {
+                // The argument between delimiters consists only of whitespace ending with a quote (e.g. ' ')
+                var wsCandidate = text.Insert(prevDelim + 1, "'");
+                candidates.Add((wsCandidate, "Missing opening single quote (') before single-space text literal (' ')."));
+            }
+            else if (contentStart < i)
             {
                 var candidate = text.Insert(contentStart, "'");
                 var snippet = text[contentStart..i].Trim();
@@ -1414,7 +1465,13 @@ public static class FormgenCodeParser
                 contentEnd--;
             }
 
-            if (contentEnd > i)
+            if (contentEnd == i + 1 && i + 1 < nextDelim)
+            {
+                // The argument between delimiters consists only of a quote followed by whitespace (e.g. ' ')
+                var wsCandidate = text.Insert(nextDelim, "'");
+                candidates.Add((wsCandidate, "Missing closing single quote (') after single-space text literal (' ')."));
+            }
+            else if (contentEnd > i)
             {
                 var candidate = text.Insert(contentEnd, "'");
                 var snippet = text[(i + 1)..contentEnd].Trim();
