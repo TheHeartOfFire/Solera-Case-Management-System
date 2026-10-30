@@ -28,19 +28,19 @@ flowchart LR
 
 ---
 
-#### Phase 1: FormGen Utilities Overhaul `[NEXT UP]`
-- [ ] Move editable fields into a dedicated sidebar and open up the center workspace for complex file manipulation (Issue #72)
-- [ ] Prompt manipulation:
-  - [ ] Prompt copying & duplication between forms
-  - [ ] Reordering and deletion shortcuts
-- [ ] Field manipulation:
+#### Phase 1: FormGen Utilities Overhaul `[COMPLETED]`
+- [x] Move editable fields into a dedicated sidebar and open up the center workspace for complex file manipulation (Issue #72)
+- [x] Prompt manipulation:
+  - [x] Prompt copying & duplication between forms
+  - [x] Reordering and deletion shortcuts
+- [x] Field manipulation:
   - [x] Field alignment and distribution
-  - [ ] Field copying and duplication
-  - [ ] Bulk field operations (bold all, font size all, align all across pages)
-- [ ] Code parsing engine for form fields and code lines
-- [ ] Unify FormGen Utilities workspace layout and responsive sizing
+  - [x] Field copying and duplication
+  - [x] Bulk field operations (bold all, font size all, align all across pages)
+- [x] Code parsing engine for form fields and code lines
+- [x] Unify FormGen Utilities workspace layout and responsive sizing
 
-#### Phase 2: Dashboard & Templates Integration (with CST Integration)
+#### Phase 2: Dashboard & Templates Integration (with CST Integration) `[NEXT UP]`
 *Note: Dropped drag-and-drop customization in favor of a single rock-solid, cohesive layout.*
 - [ ] **Dashboard Layout & Component Extraction**:
   - [ ] Address layout, sizing, and scrolling pain points across various resolutions

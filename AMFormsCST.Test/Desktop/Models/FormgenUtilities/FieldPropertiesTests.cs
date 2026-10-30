@@ -78,7 +78,7 @@ public class FieldPropertiesTests
         var displayProperties = wrapper.GetDisplayProperties().ToList();
 
         // Assert
-        Assert.Equal(13, displayProperties.Count);
+        Assert.Equal(15, displayProperties.Count);
         Assert.Contains(displayProperties, dp => dp.Name == "Expression" && dp.Value == "MyExpr");
         Assert.Contains(displayProperties, dp => dp.Name == "SampleData" && dp.Value == "MyData");
         Assert.Contains(displayProperties, dp => dp.Name == "FormattingOption" && dp.Value.ToString() == "NAIfBlank");
@@ -92,6 +92,8 @@ public class FieldPropertiesTests
         Assert.Contains(displayProperties, dp => dp.Name == "LaserRectHeight");
         Assert.Contains(displayProperties, dp => dp.Name == "LaserRectX");
         Assert.Contains(displayProperties, dp => dp.Name == "LaserRectWidth");
+        Assert.Contains(displayProperties, dp => dp.Name == "ImpactPositionCol");
+        Assert.Contains(displayProperties, dp => dp.Name == "ImpactPositionLine");
     }
 
     [Fact]

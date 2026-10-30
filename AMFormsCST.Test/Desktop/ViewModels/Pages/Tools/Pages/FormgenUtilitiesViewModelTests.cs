@@ -269,4 +269,77 @@ public class FormgenUtilitiesViewModelTests
         Assert.Equal("Save", viewModel.SaveButtonText);
         Assert.False(viewModel.IsSaving);
     }
+
+    [Fact]
+    public void FieldItemViewModel_EditsLaserRectAndCoordinates_ResolvesIssue72()
+    {
+        var coreField = new FormField
+        {
+            Expression = "'TestField'",
+            Settings =
+            {
+                ID = 42,
+                LaserRect = new System.Drawing.Rectangle(10, 20, 100, 30),
+                ImpactPosition = new System.Drawing.Point(5, 12)
+            }
+        };
+        var page = new FormPage();
+        page.Fields.Add(coreField);
+
+        bool changedNotified = false;
+        var vm = new AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils.FieldItemViewModel(coreField, page, () => changedNotified = true);
+
+        Assert.Equal(10, vm.LaserRectX);
+        Assert.Equal(20, vm.LaserRectY);
+        Assert.Equal(100, vm.LaserRectWidth);
+        Assert.Equal(30, vm.LaserRectHeight);
+        Assert.Equal(5, vm.ImpactCol);
+        Assert.Equal(12, vm.ImpactLine);
+
+        // Edit LaserRect properties directly
+        vm.LaserRectX = 55;
+        vm.LaserRectY = 75;
+        vm.LaserRectWidth = 200;
+        vm.LaserRectHeight = 45;
+        vm.ImpactCol = 8;
+        vm.ImpactLine = 15;
+
+        // Verify underlying core model was updated (Issue #72 resolution)
+        Assert.True(changedNotified);
+        Assert.Equal(55, coreField.Settings.LaserRect.X);
+        Assert.Equal(75, coreField.Settings.LaserRect.Y);
+        Assert.Equal(200, coreField.Settings.LaserRect.Width);
+        Assert.Equal(45, coreField.Settings.LaserRect.Height);
+        Assert.Equal(8, coreField.Settings.ImpactPosition.X);
+        Assert.Equal(15, coreField.Settings.ImpactPosition.Y);
+    }
+
+    [Fact]
+    public void ScanAllCode_DetectsMalformedCodeAndSuggestedFix()
+    {
+        var viewModel = new FormgenUtilitiesViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object);
+        var fakeFormgen = new DotFormgen();
+        var page = new FormPage();
+        var badField = new FormField
+        {
+            Expression = "IF(F10 = \"NEW\", 'N', 'U')", // double quotes trigger malformed syntax warning with single-quote suggested fix
+            Settings = { ID = 1 }
+        };
+        page.Fields.Add(badField);
+        fakeFormgen.Pages.Add(page);
+
+        _mockFormgenUtils.Setup(fu => fu.ParsedFormgenFile).Returns(fakeFormgen);
+
+        viewModel.ScanAllCodeCommand.Execute(null);
+
+        Assert.NotEmpty(viewModel.CodeValidationIssues);
+        var issue = viewModel.CodeValidationIssues[0];
+        Assert.True(issue.HasSuggestedFix);
+        Assert.Contains("single quotes", issue.DiagnosticMessage);
+
+        // Apply fix
+        viewModel.ApplyCodeFixCommand.Execute(issue);
+        Assert.Equal("IF( F10 = 'NEW', 'N', 'U' )", badField.Expression);
+        Assert.True(issue.IsValid);
+    }
 }

@@ -19,6 +19,14 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
             Settings.PropertyChanged += (s, e) => OnPropertyChanged(); 
         }
 
+        public PromptData(PromptData other)
+        {
+            Settings = other.Settings != null ? new PromptDataSettings(other.Settings) : new PromptDataSettings();
+            Message = other.Message;
+            Choices = new List<string>(other.Choices);
+            if (Settings is not null) Settings.PropertyChanged += (s, e) => OnPropertyChanged();
+        }
+
         public PromptData(XmlNode node)
         {
             if (node.Attributes != null) Settings = new PromptDataSettings(node.Attributes);

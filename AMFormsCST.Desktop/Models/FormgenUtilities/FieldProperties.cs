@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using System.Drawing;
 using AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure;
 using AMFormsCST.Desktop.Interfaces;
@@ -111,6 +111,40 @@ public partial class FieldProperties : ObservableObject, IFormgenFileProperties
         }
     }
 
+    public int ImpactPositionCol
+    {
+        get => _coreField.Settings?.ImpactPosition.X ?? 0;
+        set
+        {
+            if (_coreField.Settings != null && _coreField.Settings.ImpactPosition.X != value)
+            {
+                var pos = _coreField.Settings.ImpactPosition;
+                pos.X = value;
+                _coreField.Settings.ImpactPosition = pos;
+                if (Settings is FieldSettings fs) fs.ImpactPosition = pos;
+                OnPropertyChanged();
+                _logger?.LogInfo($"Field ImpactPositionCol changed: {value}");
+            }
+        }
+    }
+
+    public int ImpactPositionLine
+    {
+        get => _coreField.Settings?.ImpactPosition.Y ?? 0;
+        set
+        {
+            if (_coreField.Settings != null && _coreField.Settings.ImpactPosition.Y != value)
+            {
+                var pos = _coreField.Settings.ImpactPosition;
+                pos.Y = value;
+                _coreField.Settings.ImpactPosition = pos;
+                if (Settings is FieldSettings fs) fs.ImpactPosition = pos;
+                OnPropertyChanged();
+                _logger?.LogInfo($"Field ImpactPositionLine changed: {value}");
+            }
+        }
+    }
+
     public FieldProperties(FormField field, ILogService? logger = null)
     {
         _coreField = field;
@@ -151,6 +185,14 @@ public partial class FieldProperties : ObservableObject, IFormgenFileProperties
         var laserRectHeightProp = selfType.GetProperty(nameof(LaserRectHeight));
         if (laserRectHeightProp != null)
             yield return new DisplayProperty(this, laserRectHeightProp, false, _logger);
+
+        var impactColProp = selfType.GetProperty(nameof(ImpactPositionCol));
+        if (impactColProp != null)
+            yield return new DisplayProperty(this, impactColProp, false, _logger);
+
+        var impactLineProp = selfType.GetProperty(nameof(ImpactPositionLine));
+        if (impactLineProp != null)
+            yield return new DisplayProperty(this, impactLineProp, false, _logger);
 
         if (Settings is FieldSettings fieldSettings)
         {

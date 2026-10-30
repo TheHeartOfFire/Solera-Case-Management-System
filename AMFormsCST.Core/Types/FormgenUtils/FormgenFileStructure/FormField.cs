@@ -30,6 +30,16 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
             Settings.PropertyChanged += (s, e) => OnPropertyChanged();
         }
 
+        public FormField(FormField other, int newId = 0)
+        {
+            Settings = other.Settings != null ? new FormFieldSettings(other.Settings, newId) : new FormFieldSettings { ID = newId };
+            Expression = other.Expression;
+            SampleData = other.SampleData;
+            FormattingOption = other.FormattingOption;
+            if (Settings is not null)
+                Settings.PropertyChanged += (s, e) => OnPropertyChanged();
+        }
+
         public FormField(XmlNode node)
         {
             var xmlAttributeCollection = node.ChildNodes[1]?.Attributes;
