@@ -14,6 +14,9 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Xml;
+using MessageBoxButton = System.Windows.MessageBoxButton;
+using MessageBoxImage = System.Windows.MessageBoxImage;
+using SymbolRegular = Wpf.Ui.Controls.SymbolRegular;
 using static AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure.DotFormgen;
 
 namespace AMFormsCST.Desktop.ViewModels.Pages.Tools;
@@ -38,6 +41,10 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             {
                 UpdateSelectedNodeProperties();
                 SyncSelectionWithTables(value?.Data);
+                OnPropertyChanged(nameof(HasSelectedFieldItem));
+                OnPropertyChanged(nameof(HasSelectedPromptItem));
+                OnPropertyChanged(nameof(HasSelectedNodeProperties));
+                OnPropertyChanged(nameof(IsFormOverviewActive));
                 _logger?.LogInfo($"Selected node changed: {value?.Header}");
             }
         }
@@ -45,6 +52,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasChanged))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedNodeProperties))]
     private ObservableCollection<DisplayProperty>? _selectedNodeProperties;
 
     [ObservableProperty]
@@ -115,6 +123,8 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         {
             if (SetProperty(ref _selectedPromptItem, value))
             {
+                OnPropertyChanged(nameof(HasSelectedPromptItem));
+                OnPropertyChanged(nameof(IsFormOverviewActive));
                 if (value?.CodeLine != null)
                 {
                     SelectTreeNodeForData(value.CodeLine);
@@ -131,12 +141,90 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         {
             if (SetProperty(ref _selectedFieldItem, value))
             {
+                OnPropertyChanged(nameof(HasSelectedFieldItem));
+                OnPropertyChanged(nameof(IsFormOverviewActive));
                 if (value?.Field != null)
                 {
                     SelectTreeNodeForData(value.Field);
                 }
             }
         }
+    }
+
+    public bool HasSelectedFieldItem => SelectedFieldItem != null;
+    public bool HasSelectedPromptItem => SelectedPromptItem != null;
+    public bool HasSelectedNodeProperties => SelectedNodeProperties != null && SelectedNodeProperties.Count > 0;
+    public bool IsFormOverviewActive => SelectedFieldItem == null && SelectedPromptItem == null;
+
+    [ObservableProperty]
+    private bool _isHierarchyInspectorVisible = true;
+
+    public string InspectorToggleText => IsHierarchyInspectorVisible ? "Hide Inspector" : "Show Inspector";
+
+    partial void OnIsHierarchyInspectorVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(InspectorToggleText));
+    }
+
+    [RelayCommand]
+    private void ToggleHierarchyInspector()
+    {
+        IsHierarchyInspectorVisible = !IsHierarchyInspectorVisible;
+    }
+
+    // Vehicle Merchandising (VM) Safety
+    [ObservableProperty]
+    private VmSafetyAnalysis? _vmSafety;
+
+    public bool IsVmSafe => VmSafety?.IsVmSafe ?? false;
+
+    public string VmSafetyBadgeText => !IsFileLoaded
+        ? "No Form"
+        : (IsVmSafe ? "VM Safe" : "Deal Only");
+
+    public SymbolRegular VmSafetySymbol => IsVmSafe ? SymbolRegular.Checkmark24 : SymbolRegular.Dismiss24;
+
+    public string VmSafetySummary => VmSafety?.GetSummary() ?? "No form loaded.";
+
+    public string VmSafetyTooltip => VmSafety == null
+        ? "Load a form to check Vehicle Merchandising compatibility."
+        : (VmSafety.IsVmSafe
+            ? "This form uses only Vehicle Merchandising supported fields and variables.\nIt is eligible to publish and print from Vehicle Merchandising."
+            : $"This form is Deal Only (Not VM Safe).\n\nReasons:\n" + string.Join("\n", VmSafety.Violations.Take(12)) + (VmSafety.Violations.Count > 12 ? $"\n...and {VmSafety.Violations.Count - 12} more" : ""));
+
+    public string VmSafetyBadgeBackground => !IsFileLoaded
+        ? "#20808080"
+        : (IsVmSafe ? "#20107C41" : "#20D83B01");
+
+    public string VmSafetyBadgeBorderBrush => !IsFileLoaded
+        ? "#40808080"
+        : (IsVmSafe ? "#60107C41" : "#60D83B01");
+
+    public string VmSafetyBadgeForeground => !IsFileLoaded
+        ? "#808080"
+        : (IsVmSafe ? "#107C41" : "#D83B01");
+
+    public int TotalPages => _supportTool?.FormgenUtils.ParsedFormgenFile?.Pages.Count ?? 0;
+    public int TotalFieldsCount => FieldsList.Count;
+    public int TotalPromptsCount => PromptsList.Count;
+    public string FormTypeDisplay => _supportTool?.FormgenUtils.ParsedFormgenFile?.FormType.ToString() ?? "Unknown";
+
+    public void UpdateVmSafety()
+    {
+        var form = _supportTool?.FormgenUtils.ParsedFormgenFile;
+        VmSafety = form != null ? FormgenReferenceCatalog.CheckVehicleMerchandisingSafety(form) : null;
+        OnPropertyChanged(nameof(IsVmSafe));
+        OnPropertyChanged(nameof(VmSafetyBadgeText));
+        OnPropertyChanged(nameof(VmSafetySymbol));
+        OnPropertyChanged(nameof(VmSafetySummary));
+        OnPropertyChanged(nameof(VmSafetyTooltip));
+        OnPropertyChanged(nameof(VmSafetyBadgeBackground));
+        OnPropertyChanged(nameof(VmSafetyBadgeBorderBrush));
+        OnPropertyChanged(nameof(VmSafetyBadgeForeground));
+        OnPropertyChanged(nameof(TotalPages));
+        OnPropertyChanged(nameof(TotalFieldsCount));
+        OnPropertyChanged(nameof(TotalPromptsCount));
+        OnPropertyChanged(nameof(FormTypeDisplay));
     }
 
     private bool? _areAllPromptsSelected = false;
@@ -661,6 +749,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         SelectedPromptItem = null;
         SelectedFieldItem = null;
         _supportTool?.FormgenUtils.CloseFile();
+        UpdateVmSafety();
         _logger?.LogInfo("Formgen file cleared.");
     }
 
@@ -716,6 +805,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             }
 
             PopulateInteractiveLists(fileData);
+            UpdateVmSafety();
 
             _logger?.LogInfo($"Formgen file content loaded: {path}");
         }
@@ -821,6 +911,16 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             _selectedFieldItem = null;
             OnPropertyChanged(nameof(SelectedFieldItem));
         }
+        else
+        {
+            _selectedFieldItem = null;
+            _selectedPromptItem = null;
+            OnPropertyChanged(nameof(SelectedFieldItem));
+            OnPropertyChanged(nameof(SelectedPromptItem));
+        }
+        OnPropertyChanged(nameof(HasSelectedFieldItem));
+        OnPropertyChanged(nameof(HasSelectedPromptItem));
+        OnPropertyChanged(nameof(IsFormOverviewActive));
     }
 
     private void SelectTreeNodeForData(object targetData)
@@ -1229,6 +1329,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         rootNode.IsExpanded = true;
 
         PopulateInteractiveLists(file);
+        UpdateVmSafety();
         OnPropertyChanged(nameof(HasChanged));
     }
 

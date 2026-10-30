@@ -215,6 +215,24 @@
                                    Command="{Binding RegenerateUuidCommand}" ToolTip="Regenerate new UUID"
                                    Icon="{ui:SymbolIcon ArrowReset24}" />
                     </StackPanel>
+
+                    <!-- Vehicle Merchandising (VM) Safety Badge -->
+                    <Border Margin="14,0,0,0" Padding="8,4" CornerRadius="6"
+                            Background="{Binding VmSafetyBadgeBackground}"
+                            BorderBrush="{Binding VmSafetyBadgeBorderBrush}"
+                            BorderThickness="1"
+                            VerticalAlignment="Center"
+                            ToolTip="{Binding VmSafetyTooltip}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:SymbolIcon Symbol="{Binding VmSafetySymbol}"
+                                           FontSize="13" Margin="0,0,5,0"
+                                           Foreground="{Binding VmSafetyBadgeForeground}" />
+                            <TextBlock Text="{Binding VmSafetyBadgeText}"
+                                       FontWeight="SemiBold" FontSize="11"
+                                       Foreground="{Binding VmSafetyBadgeForeground}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
                 </WrapPanel>
             </WrapPanel>
         </Border>
@@ -724,21 +742,57 @@
                     </TabItem>
 
                     <!-- ================================================= -->
+                    <!-- ================================================= -->
                     <!-- TAB 2: Form Hierarchy & Inspector Workspace       -->
                     <!-- ================================================= -->
                     <TabItem Header="Hierarchy &amp; Inspector">
                         <Grid Margin="0,2,0,0">
                             <Grid.ColumnDefinitions>
-                                <!-- Left Column: TreeView -->
-                                <ColumnDefinition Width="320" MinWidth="180" MaxWidth="500" />
+                                <!-- Left Column: TreeView (Expands to full available width) -->
+                                <ColumnDefinition Width="*" MinWidth="350" />
                                 <!-- Splitter -->
-                                <ColumnDefinition Width="5" />
+                                <ColumnDefinition Width="5">
+                                    <ColumnDefinition.Style>
+                                        <Style TargetType="ColumnDefinition">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsHierarchyInspectorVisible}" Value="False">
+                                                    <Setter Property="Width" Value="0" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ColumnDefinition.Style>
+                                </ColumnDefinition>
                                 <!-- Right Column: Properties Inspector -->
-                                <ColumnDefinition Width="*" MinWidth="200" />
+                                <ColumnDefinition Width="380" MinWidth="280" MaxWidth="600">
+                                    <ColumnDefinition.Style>
+                                        <Style TargetType="ColumnDefinition">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsHierarchyInspectorVisible}" Value="False">
+                                                    <Setter Property="Width" Value="0" />
+                                                    <Setter Property="MinWidth" Value="0" />
+                                                    <Setter Property="MaxWidth" Value="0" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ColumnDefinition.Style>
+                                </ColumnDefinition>
                             </Grid.ColumnDefinitions>
 
                             <!-- Left: Form Hierarchy TreeView Card -->
-                            <ui:CardControl Grid.Column="0" Header="Form Structure &amp; Hierarchy (Double-click item to navigate)" HorizontalContentAlignment="Stretch">
+                            <ui:CardControl Grid.Column="0" HorizontalContentAlignment="Stretch">
+                                <ui:CardControl.Header>
+                                    <DockPanel LastChildFill="False">
+                                        <TextBlock Text="Form Structure &amp; Hierarchy (Double-click item to navigate)"
+                                                   FontWeight="SemiBold" VerticalAlignment="Center" DockPanel.Dock="Left" />
+                                        <ui:Button Appearance="Secondary"
+                                                   Content="{Binding InspectorToggleText}"
+                                                   Command="{Binding ToggleHierarchyInspectorCommand}"
+                                                   Icon="{ui:SymbolIcon DocumentBulletList24}"
+                                                   Padding="8,4"
+                                                   DockPanel.Dock="Right"
+                                                   ToolTip="Toggle Properties Inspector sidebar" />
+                                    </DockPanel>
+                                </ui:CardControl.Header>
                                 <Grid>
                                     <ui:ProgressRing
                                         IsIndeterminate="True"
@@ -748,6 +802,9 @@
                                         ItemsSource="{Binding TreeViewNodes}"
                                         Style="{StaticResource {x:Type TreeView}}"
                                         MouseDoubleClick="TreeView_MouseDoubleClick"
+                                        SelectedItemChanged="TreeView_SelectedItemChanged"
+                                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                        ScrollViewer.VerticalScrollBarVisibility="Auto"
                                         Visibility="{Binding IsFileLoaded, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TreeView.ItemContainerStyle>
                                             <Style BasedOn="{StaticResource {x:Type TreeViewItem}}" TargetType="{x:Type TreeViewItem}">
@@ -758,7 +815,7 @@
                                         </TreeView.ItemContainerStyle>
                                         <TreeView.ItemTemplate>
                                             <HierarchicalDataTemplate DataType="{x:Type vms:TreeItemNodeViewModel}" ItemsSource="{Binding Children}">
-                                                <TextBlock Text="{Binding Header}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Header}" />
                                             </HierarchicalDataTemplate>
                                         </TreeView.ItemTemplate>
                                     </TreeView>
@@ -781,16 +838,72 @@
                                 </Grid>
                             </ui:CardControl>
 
-                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="Transparent" />
+                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="Transparent"
+                                          Visibility="{Binding IsHierarchyInspectorVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                             <!-- Right: Live Properties Inspector -->
-                            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                          Visibility="{Binding IsHierarchyInspectorVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <StackPanel Orientation="Vertical">
-                                    <!-- Selected Field Live Editor Card -->
+                                    <!-- 1. Form Overview & VM Safety Card (Active when form root or non-field/prompt node selected) -->
+                                    <ui:CardControl
+                                        Header="Form Overview &amp; VM Compatibility"
+                                        HorizontalContentAlignment="Left"
+                                        Visibility="{Binding IsFormOverviewActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <StackPanel Orientation="Vertical">
+                                            <!-- VM Compatibility Status Banner -->
+                                            <Border Padding="10,8" CornerRadius="6"
+                                                    Background="{Binding VmSafetyBadgeBackground}"
+                                                    BorderBrush="{Binding VmSafetyBadgeBorderBrush}"
+                                                    BorderThickness="1" Margin="0,0,0,10">
+                                                <StackPanel Orientation="Vertical">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <ui:SymbolIcon Symbol="{Binding VmSafetySymbol}" FontSize="18"
+                                                                       Foreground="{Binding VmSafetyBadgeForeground}" Margin="0,0,8,0" />
+                                                        <TextBlock Text="{Binding VmSafetyBadgeText}" FontWeight="Bold" FontSize="13"
+                                                                   Foreground="{Binding VmSafetyBadgeForeground}" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding VmSafetySummary}" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"
+                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Form Statistics -->
+                                            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Form Statistics" />
+                                            <Grid Margin="0,2,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="Total Pages" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{Binding TotalPages}" FontSize="13" FontWeight="SemiBold" Margin="0,2,0,4" />
+                                                    <TextBlock Text="Form Type" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{Binding FormTypeDisplay}" FontSize="13" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="Total Fields" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{Binding TotalFieldsCount}" FontSize="13" FontWeight="SemiBold" Margin="0,2,0,4" />
+                                                    <TextBlock Text="Prompts &amp; Lines" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{Binding TotalPromptsCount}" FontSize="13" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- Form Identification -->
+                                            <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Identification" />
+                                            <TextBlock Text="Title" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock Text="{Binding FormTitle}" FontSize="12" Margin="0,2,0,6" TextWrapping="Wrap" />
+                                            <TextBlock Text="UUID" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock Text="{Binding Uuid}" FontSize="11" FontFamily="Consolas" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </ui:CardControl>
+
+                                    <!-- 2. Selected Field Live Editor Card -->
                                     <ui:CardControl
                                         Header="Field Properties"
                                         HorizontalContentAlignment="Left"
-                                        Visibility="{Binding SelectedFieldItem, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        Visibility="{Binding HasSelectedFieldItem, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <StackPanel Orientation="Vertical">
                                             <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Laser Coordinates (Pixels)" />
                                             <Grid Margin="0,2,0,4">
@@ -869,12 +982,49 @@
                                         </StackPanel>
                                     </ui:CardControl>
 
-                                    <!-- Full Node Properties List (Dynamic Extension) -->
+                                    <!-- 3. Selected Prompt & Code Line Editor Card -->
+                                    <ui:CardControl
+                                        Margin="0,8,0,0"
+                                        Header="Prompt &amp; Code Properties"
+                                        HorizontalContentAlignment="Left"
+                                        Visibility="{Binding HasSelectedPromptItem, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <StackPanel Orientation="Vertical">
+                                            <Grid Margin="0,2,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="70" />
+                                                    <ColumnDefinition Width="8" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="Order" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{Binding SelectedPromptItem.Order}" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="Type" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{Binding SelectedPromptItem.Type}" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <TextBlock Text="Variable" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                                            <ui:TextBox Margin="0,2,0,6" Text="{Binding SelectedPromptItem.Variable, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                            <TextBlock Text="Prompt Label / Message" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                                            <ui:TextBox Margin="0,2,0,6" Text="{Binding SelectedPromptItem.Message, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" />
+
+                                            <TextBlock Text="Choices / Options" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                                            <ui:TextBox Margin="0,2,0,6" Text="{Binding SelectedPromptItem.ChoicesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                            <TextBlock Text="Expression" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" />
+                                            <ui:TextBox Margin="0,2,0,6" Text="{Binding SelectedPromptItem.Expression, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas" />
+                                        </StackPanel>
+                                    </ui:CardControl>
+
+                                    <!-- 4. Full Node Properties List (Dynamic Extension) -->
                                     <ui:CardControl
                                         Margin="0,8,0,0"
                                         Header="Item Properties"
                                         HorizontalContentAlignment="Left"
-                                        Visibility="{Binding SelectedNodeProperties, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        Visibility="{Binding HasSelectedNodeProperties, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <ItemsControl ItemsSource="{Binding SelectedNodeProperties}">
                                             <ItemsControl.Resources>
                                                 <DataTemplate x:Key="StringEditorTemplate" DataType="{x:Type models:DisplayProperty}">

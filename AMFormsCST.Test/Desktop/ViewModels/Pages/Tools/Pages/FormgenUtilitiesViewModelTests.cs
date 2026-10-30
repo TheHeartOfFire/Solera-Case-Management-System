@@ -389,4 +389,96 @@ public class FormgenUtilitiesViewModelTests
 
         _mockFormgenUtils.Verify(fu => fu.DeletePrompts(It.Is<IEnumerable<CodeLine>>(lines => lines.Count() == 2)), Times.Once);
     }
+
+    [Fact]
+    public void CheckVehicleMerchandisingSafety_IdentifiesSafeAndDisallowedForms()
+    {
+        // 1. Safe form: only vehicle fields (F61: VIN, F62: Year, F71: Make, F776: Mileage)
+        var safeForm = new DotFormgen();
+        var page1 = new FormPage();
+        page1.Fields.Add(new FormField { Settings = { ID = 1 }, Expression = "F61" });
+        page1.Fields.Add(new FormField { Settings = { ID = 2 }, Expression = "F62" });
+        page1.Fields.Add(new FormField { Settings = { ID = 3 }, Expression = "F71" });
+        page1.Fields.Add(new FormField { Settings = { ID = 4 }, Expression = "F776" });
+        safeForm.Pages.Add(page1);
+
+        var safeAnalysis = AMFormsCST.Core.Utils.FormgenReferenceCatalog.CheckVehicleMerchandisingSafety(safeForm);
+        Assert.True(safeAnalysis.IsVmSafe);
+        Assert.Empty(safeAnalysis.DisallowedFields);
+        Assert.Empty(safeAnalysis.DisallowedVariables);
+        Assert.Empty(safeAnalysis.Violations);
+        Assert.Equal("VM Safe ?", safeAnalysis.BadgeText);
+
+        // 2. Unsafe form: contains Deal fields (F3: Buyer Name, F35: Cash Price)
+        var unsafeForm = new DotFormgen();
+        var page2 = new FormPage();
+        page2.Fields.Add(new FormField { Settings = { ID = 1 }, Expression = "F61" });
+        page2.Fields.Add(new FormField { Settings = { ID = 2 }, Expression = "F3" }); // Buyer Name -> Non-VM!
+        unsafeForm.Pages.Add(page2);
+
+        var unsafeAnalysis = AMFormsCST.Core.Utils.FormgenReferenceCatalog.CheckVehicleMerchandisingSafety(unsafeForm);
+        Assert.False(unsafeAnalysis.IsVmSafe);
+        Assert.Contains(3, unsafeAnalysis.DisallowedFields);
+        Assert.NotEmpty(unsafeAnalysis.Violations);
+        Assert.Equal("Deal Only", unsafeAnalysis.BadgeText);
+
+        // 3. Unsafe form: contains Buyer variables or Accessory variables
+        var varForm = new DotFormgen();
+        var page3 = new FormPage();
+        page3.Fields.Add(new FormField { Settings = { ID = 1 }, Expression = "BUYERCITYSTATEZIP" });
+        page3.Fields.Add(new FormField { Settings = { ID = 2 }, Expression = "ACC01_NAME" });
+        varForm.Pages.Add(page3);
+
+        var varAnalysis = AMFormsCST.Core.Utils.FormgenReferenceCatalog.CheckVehicleMerchandisingSafety(varForm);
+        Assert.False(varAnalysis.IsVmSafe);
+        Assert.Contains("BUYERCITYSTATEZIP", varAnalysis.DisallowedVariables);
+        Assert.Contains("ACC01_NAME", varAnalysis.DisallowedVariables);
+    }
+
+    [Fact]
+    public void HierarchyInspector_SelectionPropertiesAndToggle_WorkCorrectly()
+    {
+        var viewModel = new FormgenUtilitiesViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object);
+
+        // Default state
+        Assert.True(viewModel.IsHierarchyInspectorVisible);
+        Assert.Equal("Hide Inspector", viewModel.InspectorToggleText);
+        Assert.True(viewModel.IsFormOverviewActive);
+        Assert.False(viewModel.HasSelectedFieldItem);
+        Assert.False(viewModel.HasSelectedPromptItem);
+
+        // Toggle inspector
+        viewModel.ToggleHierarchyInspectorCommand.Execute(null);
+        Assert.False(viewModel.IsHierarchyInspectorVisible);
+        Assert.Equal("Show Inspector", viewModel.InspectorToggleText);
+
+        viewModel.ToggleHierarchyInspectorCommand.Execute(null);
+        Assert.True(viewModel.IsHierarchyInspectorVisible);
+
+        // When a field is selected
+        var page = new FormPage();
+        var field = new FormField { Settings = { ID = 101 }, Expression = "F61" };
+        var fieldVm = new AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils.FieldItemViewModel(field, page);
+        viewModel.SelectedFieldItem = fieldVm;
+
+        Assert.True(viewModel.HasSelectedFieldItem);
+        Assert.False(viewModel.IsFormOverviewActive);
+
+        // When selection cleared
+        viewModel.SelectedFieldItem = null;
+        Assert.False(viewModel.HasSelectedFieldItem);
+        Assert.True(viewModel.IsFormOverviewActive);
+
+        // When a prompt is selected
+        var codeLine = new CodeLine { Settings = { Order = 1, Variable = "MY_VAR", Type = CodeLineSettings.CodeType.PROMPT } };
+        var promptVm = new AMFormsCST.Desktop.ViewModels.Pages.Tools.FormgenUtils.PromptItemViewModel(codeLine);
+        viewModel.SelectedPromptItem = promptVm;
+
+        Assert.True(viewModel.HasSelectedPromptItem);
+        Assert.False(viewModel.IsFormOverviewActive);
+
+        viewModel.SelectedPromptItem = null;
+        Assert.False(viewModel.HasSelectedPromptItem);
+        Assert.True(viewModel.IsFormOverviewActive);
+    }
 }

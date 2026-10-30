@@ -94,6 +94,14 @@ namespace AMFormsCST.Desktop.Views.Pages.Tools
             CenterDataGridItem(FieldsDataGrid, item);
         }
 
+        private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (e.NewValue is TreeItemNodeViewModel node)
+            {
+                ViewModel.SelectedNode = node;
+            }
+        }
+
         private void TreeView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (sender is TreeView tv && tv.SelectedItem is TreeItemNodeViewModel node)
