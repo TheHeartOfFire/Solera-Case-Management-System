@@ -65,6 +65,51 @@ public class FormgenCodeParserTests
     }
 
     [Fact]
+    public void Parse_TextLiteralWithEscapedQuote_ReturnsValid()
+    {
+        var code = @"'This is \'quoted\' text'";
+        var result = FormgenCodeParser.Parse(code);
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+        Assert.Equal(@"'This is \'quoted\' text'", result.CondensedBlock.GetCode());
+    }
+
+    [Fact]
+    public void Parse_IfStatementWithEscapedQuotes_ReturnsValid()
+    {
+        var code = @"IF(F1 = 'Don\'t', 1, 0)";
+        var result = FormgenCodeParser.Parse(code);
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+    }
+
+    [Fact]
+    public void Parse_IfStatementWithEscapedQuoteAndCommaInLiteral_ReturnsValid()
+    {
+        var code = @"IF(F1 = 'Hello, \'Dakota, Jr.\'', 1, 0)";
+        var result = FormgenCodeParser.Parse(code);
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+        Assert.NotNull(result.CondensedBlock);
+    }
+
+    [Fact]
+    public void Parse_EscapedBackslashFollowedByQuote_DetectsClosingQuote()
+    {
+        var code = @"IF(F1 = 'Path C:\\' + F2, 1, 0)";
+        var result = FormgenCodeParser.Parse(code);
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+    }
+
+    [Fact]
+    public void Parse_StringEndingWithEscapedQuote_FlagsUnclosedStringLiteral()
+    {
+        // Here the string literal ends with \' instead of an unescaped closing quote
+        var code = @"'This ends with an escaped quote\'";
+        var result = FormgenCodeParser.Parse(code);
+        Assert.NotEqual(FormgenParseStatus.Valid, result.Status);
+    }
+
+    [Fact]
     public void Parse_ValidNestedExpression_ReturnsValid()
     {
         var result = FormgenCodeParser.Parse("IF(CONTAINS(F10, 'TEST'), 'MATCH', 'NO')");

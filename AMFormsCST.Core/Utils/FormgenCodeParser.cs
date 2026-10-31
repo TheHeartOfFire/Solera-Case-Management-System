@@ -180,8 +180,8 @@ public static class FormgenCodeParser
         }
 
         // B. Check for single-quoted or double-quoted text literal (e.g. 'Debt Cancellation...', "N/A", ' ')
-        if ((normalizedCandidate.StartsWith('\'') && normalizedCandidate.EndsWith('\'') && normalizedCandidate.Length >= 2) ||
-            (normalizedCandidate.StartsWith('"') && normalizedCandidate.EndsWith('"') && normalizedCandidate.Length >= 2))
+        if ((normalizedCandidate.StartsWith('\'') && normalizedCandidate.EndsWith('\'') && normalizedCandidate.Length >= 2 && !IsCharEscaped(normalizedCandidate, normalizedCandidate.Length - 1) && IsValidFormgenLeaf(normalizedCandidate, out _)) ||
+            (normalizedCandidate.StartsWith('"') && normalizedCandidate.EndsWith('"') && normalizedCandidate.Length >= 2 && !IsCharEscaped(normalizedCandidate, normalizedCandidate.Length - 1)))
         {
             string? fix = null;
             if (normalizedCandidate.StartsWith('"'))
@@ -448,10 +448,11 @@ public static class FormgenCodeParser
         bool inDoubleQuotes = false;
         bool lastWasSpace = false;
 
-        foreach (char c in input)
+        for (int i = 0; i < input.Length; i++)
         {
-            if (c == '\'' && !inDoubleQuotes) inSingleQuotes = !inSingleQuotes;
-            else if (c == '"' && !inSingleQuotes) inDoubleQuotes = !inDoubleQuotes;
+            char c = input[i];
+            if (c == '\'' && !inDoubleQuotes && !IsCharEscaped(input, i)) inSingleQuotes = !inSingleQuotes;
+            else if (c == '"' && !inSingleQuotes && !IsCharEscaped(input, i)) inDoubleQuotes = !inDoubleQuotes;
 
             if (!inSingleQuotes && !inDoubleQuotes && (c == '\r' || c == '\n' || c == '\t'))
             {
@@ -492,13 +493,6 @@ public static class FormgenCodeParser
         {
             syntaxIssues.Add("Stripped redundant leading '+' operator.");
             workingFix = workingFix[1..].TrimStart();
-        }
-
-        // Backslash escaped single quotes \' -> ''
-        if (workingFix.Contains(@"\'"))
-        {
-            syntaxIssues.Add("FormGen escapes quotes inside text literals with double single-quotes ('') instead of backslash (\\').");
-            workingFix = workingFix.Replace(@"\'", "''");
         }
 
         // Double quotes -> Single quotes (escaping any internal apostrophes to '' so "MANUFACTURER'S" -> 'MANUFACTURER''S')
@@ -654,7 +648,7 @@ public static class FormgenCodeParser
         workingFix = RepairSeplistMalformedSeparator(workingFix, syntaxIssues);
 
         // 5. Unclosed single quotes (must balance quotes before detecting missing commas or parens)
-        int singleQuoteCount = workingFix.Count(c => c == '\'');
+        int singleQuoteCount = CountUnescapedSingleQuotes(workingFix);
         if (singleQuoteCount % 2 != 0)
         {
             workingFix = RepairUnbalancedSingleQuote(workingFix, out var quoteIssue, out var validFixes);
@@ -937,18 +931,35 @@ public static class FormgenCodeParser
         // 1. Quoted string literal: '...'
         if (text.StartsWith('\''))
         {
-            if (!text.EndsWith('\'') || text.Length < 2)
+            if (!text.EndsWith('\'') || text.Length < 2 || IsCharEscaped(text, text.Length - 1))
             {
                 error = $"Unclosed string literal in '{text}'.";
                 return false;
             }
 
-            // Inside the quotes, any internal quote must be escaped as '' or \'
-            var interior = text[1..^1].Replace("''", "").Replace(@"\'", "");
-            if (interior.Contains('\''))
+            // Inside the quotes (from index 1 to text.Length - 2), any internal quote must be escaped as \' or ''
+            int i = 1;
+            while (i < text.Length - 1)
             {
-                error = $"Malformed string literal or unescaped quotes in '{text}'.";
-                return false;
+                if (text[i] == '\'')
+                {
+                    if (IsCharEscaped(text, i))
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    // Check for '' pair (both unescaped)
+                    if (i + 1 < text.Length - 1 && text[i + 1] == '\'' && !IsCharEscaped(text, i + 1))
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    error = $"Malformed string literal or unescaped quotes in '{text}'.";
+                    return false;
+                }
+                i++;
             }
 
             return true;
@@ -1196,7 +1207,7 @@ public static class FormgenCodeParser
         for (int i = openIdx; i < expr.Length; i++)
         {
             char c = expr[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(expr, i))
             {
                 inQuotes = !inQuotes;
                 continue;
@@ -1238,7 +1249,7 @@ public static class FormgenCodeParser
         for (int i = 0; i < argsInterior.Length; i++)
         {
             char c = argsInterior[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(argsInterior, i))
             {
                 inQuotes = !inQuotes;
                 continue;
@@ -1305,7 +1316,7 @@ public static class FormgenCodeParser
             for (int i = 0; i < expr.Length; i++)
             {
                 char c = expr[i];
-                if (c == '\'')
+                if (c == '\'' && !IsCharEscaped(expr, i))
                 {
                     inQuotes = !inQuotes;
                     continue;
@@ -1398,7 +1409,7 @@ public static class FormgenCodeParser
         for (int i = 0; i < expr.Length; i++)
         {
             char c = expr[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(expr, i))
             {
                 inQuotes = !inQuotes;
                 continue;
@@ -1484,12 +1495,39 @@ public static class FormgenCodeParser
         return dp[n, m];
     }
 
+    private static bool IsCharEscaped(string text, int index)
+    {
+        if (index <= 0 || index >= text.Length) return false;
+        int backslashCount = 0;
+        int j = index - 1;
+        while (j >= 0 && text[j] == '\\')
+        {
+            backslashCount++;
+            j--;
+        }
+        return (backslashCount % 2) != 0;
+    }
+
+    private static int CountUnescapedSingleQuotes(string text)
+    {
+        int count = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\'' && !IsCharEscaped(text, i))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private static bool ContainsCharOutsideQuotes(string text, char target)
     {
         bool inQuotes = false;
-        foreach (char c in text)
+        for (int i = 0; i < text.Length; i++)
         {
-            if (c == '\'') inQuotes = !inQuotes;
+            char c = text[i];
+            if (c == '\'' && !IsCharEscaped(text, i)) inQuotes = !inQuotes;
             else if (!inQuotes && c == target) return true;
         }
         return false;
@@ -1499,9 +1537,10 @@ public static class FormgenCodeParser
     {
         var sb = new StringBuilder(text.Length);
         bool inQuotes = false;
-        foreach (char c in text)
+        for (int i = 0; i < text.Length; i++)
         {
-            if (c == '\'') inQuotes = !inQuotes;
+            char c = text[i];
+            if (c == '\'' && !IsCharEscaped(text, i)) inQuotes = !inQuotes;
             sb.Append(!inQuotes && c == target ? replacement : c);
         }
         return sb.ToString();
@@ -1512,7 +1551,7 @@ public static class FormgenCodeParser
         bool inQuotes = false;
         for (int i = 0; i <= text.Length - sub.Length; i++)
         {
-            if (text[i] == '\'') inQuotes = !inQuotes;
+            if (text[i] == '\'' && !IsCharEscaped(text, i)) inQuotes = !inQuotes;
             else if (!inQuotes && text.AsSpan(i, sub.Length).Equals(sub, StringComparison.Ordinal))
                 return true;
         }
@@ -1526,7 +1565,7 @@ public static class FormgenCodeParser
         int i = 0;
         while (i < text.Length)
         {
-            if (text[i] == '\'')
+            if (text[i] == '\'' && !IsCharEscaped(text, i))
             {
                 inQuotes = !inQuotes;
                 sb.Append(text[i++]);
@@ -1549,7 +1588,7 @@ public static class FormgenCodeParser
         bool inQuotes = false;
         for (int i = 0; i < index && i < text.Length; i++)
         {
-            if (text[i] == '\'') inQuotes = !inQuotes;
+            if (text[i] == '\'' && !IsCharEscaped(text, i)) inQuotes = !inQuotes;
         }
         return inQuotes;
     }
@@ -1976,7 +2015,7 @@ public static class FormgenCodeParser
         for (int i = 0; i < text.Length; i++)
         {
             char c = text[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(text, i))
             {
                 inQuotes = !inQuotes;
                 continue;
@@ -2007,9 +2046,10 @@ public static class FormgenCodeParser
         int depth = 0;
         int removed = 0;
 
-        foreach (char c in text)
+        for (int i = 0; i < text.Length; i++)
         {
-            if (c == '\'')
+            char c = text[i];
+            if (c == '\'' && !IsCharEscaped(text, i))
             {
                 inQuotes = !inQuotes;
                 sb.Append(c);
@@ -2094,7 +2134,7 @@ public static class FormgenCodeParser
         for (int i = 0; i < text.Length; i++)
         {
             char c = text[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(text, i))
             {
                 inQuotes = !inQuotes;
                 sb.Append(c);
