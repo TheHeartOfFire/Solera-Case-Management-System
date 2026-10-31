@@ -579,6 +579,22 @@ public static class FormgenCodeParser
             workingFix = ReplaceSubstringOutsideQuotes(workingFix, "<>", "!=");
         }
 
+        // 3b. Single '&' outside quotes -> '&&'
+        var singleAmpRegex = new Regex(@"(?<!&)&(?!&)");
+        var ampMatches = singleAmpRegex.Matches(workingFix);
+        if (ampMatches.Count > 0)
+        {
+            for (int i = ampMatches.Count - 1; i >= 0; i--)
+            {
+                var m = ampMatches[i];
+                if (!IsIndexInsideQuotes(workingFix, m.Index))
+                {
+                    syntaxIssues.Add("FormGen uses '&&' for logical AND, not a single '&'.");
+                    workingFix = workingFix[..m.Index] + "&&" + workingFix[(m.Index + 1)..];
+                }
+            }
+        }
+
         // 4. SEPLIST malformed separator: assume standard enclosed single space ' '
         workingFix = RepairSeplistMalformedSeparator(workingFix, syntaxIssues);
 
@@ -1489,6 +1505,46 @@ public static class FormgenCodeParser
                 {
                     syntaxIssues.Add("Missing opening parenthesis '(' between function name and field argument.");
                     text = text[..m.Index] + m.Groups[1].Value + "(" + m.Groups[2].Value + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // C. Known function followed directly by string quote without '(': e.g. SEPLIST' ' -> SEPLIST(' '
+        var gluedQuoteRegex = new Regex(@"\b(NOTBLANK|BLANK|CONTAINS|NOT|ROUND|TRUNC|FLOOR|CEILING|ABS|MIN|MAX|SUM|AVG|LEN|UPPER|LOWER|TRIM|LTRIM|RTRIM|SUBSTR|REPLACE|TEXT|NUM|DATE|YEAR|MONTH|DAY|SEPLIST|CASE|XIF|XXIF|IF)\s*(')", RegexOptions.IgnoreCase);
+        var matches3 = gluedQuoteRegex.Matches(text);
+        if (matches3.Count > 0)
+        {
+            for (int i = matches3.Count - 1; i >= 0; i--)
+            {
+                var m = matches3[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add($"Missing opening parenthesis '(' between function '{m.Groups[1].Value}' and string literal.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + m.Groups[2].Value + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // D. IF or CONTAINS followed directly by an identifier without '(': e.g. IFWPAD -> IF(WPAD, IFRebate -> IF(Rebate
+        var gluedIfVarRegex = new Regex(@"\b(IF|CONTAINS)\s*([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*(?:[=!<>]|\bCONTAINS\b|\bAND\b|\bOR\b|&&|\|\||,|\)))", RegexOptions.IgnoreCase);
+        var matches4 = gluedIfVarRegex.Matches(text);
+        if (matches4.Count > 0)
+        {
+            for (int i = matches4.Count - 1; i >= 0; i--)
+            {
+                var m = matches4[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    var varName = m.Groups[2].Value;
+                    // Do not split if the identifier is an alias like IFF or IFELSE
+                    if (string.Equals(varName, "F", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(varName, "ELSE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    syntaxIssues.Add($"Missing opening parenthesis '(' after function '{m.Groups[1].Value}'.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + varName + text[(m.Index + m.Length)..];
                 }
             }
         }

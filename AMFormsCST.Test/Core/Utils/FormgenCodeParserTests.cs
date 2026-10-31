@@ -492,6 +492,43 @@ public class FormgenCodeParserTests
         Assert.NotNull(reparsed.CondensedBlock);
     }
 
+    [Fact]
+    public void Parse_SingleAmpersandOutsideQuotes_RepairsToDoubleAmpersand()
+    {
+        var input = "IF(GapType = 'GAP' & F667 > 0, F14, ' ')";
+        var result = FormgenCodeParser.Parse(input);
+
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
+        Assert.NotNull(result.SuggestedFix);
+        Assert.Contains("&&", result.SuggestedFix);
+        Assert.Equal("IF(GapType = 'GAP' && F667 > 0, F14, ' ')", result.SuggestedFix);
+
+        var reparsed = FormgenCodeParser.Parse(result.SuggestedFix);
+        Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
+    }
+
+    [Fact]
+    public void Parse_MissingOpeningParenthesisAfterIfOrKnownFunction_RepairsParenthesis()
+    {
+        // 1. Top-level IF missing '(' before variable
+        var input1 = "IFWPAD = 'WEEKLY', 'WEEKLY', 'OTHER')";
+        var res1 = FormgenCodeParser.Parse(input1);
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, res1.Status);
+        Assert.Equal("IF(WPAD = 'WEEKLY', 'WEEKLY', 'OTHER')", res1.SuggestedFix);
+
+        // 2. Nested IF missing '(' before variable
+        var input2 = "IF(A = 1, 'YES', IFRebate = 'R2', 'R2', 'NO'))";
+        var res2 = FormgenCodeParser.Parse(input2);
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, res2.Status);
+        Assert.Equal("IF(A = 1, 'YES', IF(Rebate = 'R2', 'R2', 'NO'))", res2.SuggestedFix);
+
+        // 3. SEPLIST missing '(' before quote
+        var input3 = "SEPLIST' ', F1, F2)";
+        var res3 = FormgenCodeParser.Parse(input3);
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, res3.Status);
+        Assert.Equal("SEPLIST(' ', F1, F2)", res3.SuggestedFix);
+    }
+
     [Theory]
     [InlineData("SEPLIST(' ', IF(NOTBLANK(F340), 'TRADE #2: ', ' '), F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)")]
     [InlineData("IF(WPAD = 'WEEKLY', 'WEEKLY', IF(WPAD = 'BI-WEEKLY', 'BI-WEEKLY', IF(WPAD = 'SEMI-MONTHLY', 'SEMI-MONTHLY', IF(F678 = 1, 'MONTHLY', IF(F678 = 3, 'QUARTERLY', IF(F678 = 6, 'BI-ANNUALLY', IF(F678 = 12, 'ANNUALLY', ' ')))))))")]
