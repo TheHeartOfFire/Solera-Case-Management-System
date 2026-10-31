@@ -529,6 +529,46 @@ public class FormgenCodeParserTests
         Assert.Equal("SEPLIST(' ', F1, F2)", res3.SuggestedFix);
     }
 
+    [Fact]
+    public void Parse_MissingComparisonOperator_RepairsWithDefaultAndOffersOptions()
+    {
+        // 1. Missing operator in string comparison
+        var inputString = "IF(WPAD 'WEEKLY', 'WEEKLY', 'OTHER')";
+        var resString = FormgenCodeParser.Parse(inputString);
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, resString.Status);
+        Assert.Equal("IF(WPAD = 'WEEKLY', 'WEEKLY', 'OTHER')", resString.SuggestedFix);
+        Assert.True(resString.HasMultipleSuggestedFixes);
+        Assert.Contains(resString.SuggestedFixes, f => f.Contains("WPAD = 'WEEKLY'"));
+        Assert.Contains(resString.SuggestedFixes, f => f.Contains("WPAD != 'WEEKLY'"));
+
+        // 2. Missing operator in number comparison
+        var inputNum = "IF(F678 1, 'MONTHLY', 'OTHER')";
+        var resNum = FormgenCodeParser.Parse(inputNum);
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, resNum.Status);
+        Assert.Equal("IF(F678 = 1, 'MONTHLY', 'OTHER')", resNum.SuggestedFix);
+        Assert.True(resNum.HasMultipleSuggestedFixes);
+        Assert.Contains(resNum.SuggestedFixes, f => f.Contains("F678 = 1"));
+        Assert.Contains(resNum.SuggestedFixes, f => f.Contains("F678 > 1"));
+    }
+
+    [Fact]
+    public void Parse_MissingTrailingArgumentInNestedIf_RepairsTypedDefault()
+    {
+        // 1. Numeric formula missing fallback before final ')'
+        var inputNumeric = "IF(Rebate = 'R1', F955, IF(Rebate = 'R2', F964, ))";
+        var resNumeric = FormgenCodeParser.Parse(inputNumeric);
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, resNumeric.Status);
+        Assert.Equal("IF(Rebate = 'R1', F955, IF(Rebate = 'R2', F964, 0))", resNumeric.SuggestedFix);
+        Assert.True(resNumeric.HasMultipleSuggestedFixes);
+
+        // 2. String formula missing fallback before final ')'
+        var inputString = "IF(WPAD = 'WEEKLY', 'WEEKLY', IF(WPAD = 'BI-WEEKLY', 'BI-WEEKLY', ))";
+        var resString = FormgenCodeParser.Parse(inputString);
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, resString.Status);
+        Assert.Equal("IF(WPAD = 'WEEKLY', 'WEEKLY', IF(WPAD = 'BI-WEEKLY', 'BI-WEEKLY', ' '))", resString.SuggestedFix);
+        Assert.True(resString.HasMultipleSuggestedFixes);
+    }
+
     [Theory]
     [InlineData("SEPLIST(' ', IF(NOTBLANK(F340), 'TRADE #2: ', ' '), F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)")]
     [InlineData("IF(WPAD = 'WEEKLY', 'WEEKLY', IF(WPAD = 'BI-WEEKLY', 'BI-WEEKLY', IF(WPAD = 'SEMI-MONTHLY', 'SEMI-MONTHLY', IF(F678 = 1, 'MONTHLY', IF(F678 = 3, 'QUARTERLY', IF(F678 = 6, 'BI-ANNUALLY', IF(F678 = 12, 'ANNUALLY', ' ')))))))")]

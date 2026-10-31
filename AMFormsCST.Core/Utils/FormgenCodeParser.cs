@@ -359,6 +359,25 @@ public static class FormgenCodeParser
             {
                 bestFix = null;
             }
+
+            var refinedAltFixes = altFixes?
+                .Select(f => TryRefineSuggestedFix(f, input))
+                .OfType<string>()
+                .Where(f => !string.IsNullOrEmpty(f) && !string.Equals(f, bestFix, StringComparison.Ordinal))
+                .Distinct()
+                .ToList();
+
+            List<string>? combinedFixes = null;
+            if (bestFix != null)
+            {
+                combinedFixes = [bestFix];
+                if (refinedAltFixes != null) combinedFixes.AddRange(refinedAltFixes);
+            }
+            else if (refinedAltFixes != null && refinedAltFixes.Count > 0)
+            {
+                combinedFixes = refinedAltFixes;
+            }
+
             return new FormgenParseResult(
                 FormgenParseStatus.MalformedSimilar,
                 input,
@@ -366,7 +385,8 @@ public static class FormgenCodeParser
                 null,
                 "Malformed FormGen Syntax Detected",
                 diagText,
-                bestFix);
+                bestFix,
+                combinedFixes);
         }
 
         // 4. Build condensed block ready for expansion and examination
@@ -610,8 +630,14 @@ public static class FormgenCodeParser
             }
         }
 
-        // 6. Missing commas between adjacent arguments (quote parity is now accurate)
+        // 6. Missing comparison operator between adjacent terms (must run before missing commas!)
+        workingFix = RepairMissingComparisonOperator(workingFix, syntaxIssues, ref alternativeFixes);
+
+        // 7. Missing commas between adjacent arguments (quote parity is now accurate)
         workingFix = RepairMissingCommasBetweenAdjacentArguments(workingFix, syntaxIssues);
+
+        // 8. Missing trailing default argument before ')' (e.g. ", )" at end of nested IF)
+        workingFix = RepairMissingTrailingArgument(workingFix, syntaxIssues, ref alternativeFixes);
 
         // 5. Unbalanced parentheses outside quotes
         CountParenthesesOutsideQuotes(workingFix, out int openParens, out int closeParens, out int firstExtraCloseIndex);
@@ -1546,6 +1572,121 @@ public static class FormgenCodeParser
                     syntaxIssues.Add($"Missing opening parenthesis '(' after function '{m.Groups[1].Value}'.");
                     text = text[..m.Index] + m.Groups[1].Value + "(" + varName + text[(m.Index + m.Length)..];
                 }
+            }
+        }
+
+        return text;
+    }
+
+    private static string RepairMissingComparisonOperator(
+        string text,
+        List<string> syntaxIssues,
+        ref List<string>? alternativeFixes)
+    {
+        var missingOpRegexes = new[]
+        {
+            new Regex(@"(?<=\(|,|^|\bAND\b|\bOR\b|&&|\|\|)\s*(?<left>(?!\b(?:AND|OR|IF|NOT|BLANK|NOTBLANK|SEPLIST|CASE|ROUND|TEXT|DATE)\b)(?:[Ff]\d{1,5}|[A-Za-z_][A-Za-z0-9_]*))\s+(?<right>'[^']*'|\d+(?:\.\d+)?)\s*(?=(?:,|\)|&&|\|\||\bAND\b|\bOR\b))", RegexOptions.IgnoreCase),
+            new Regex(@"(?<=\(|,|^|\bAND\b|\bOR\b|&&|\|\|)\s*(?<left>'[^']*'|\d+(?:\.\d+)?)\s+(?<right>(?!\b(?:AND|OR|IF|NOT|BLANK|NOTBLANK|SEPLIST|CASE|ROUND|TEXT|DATE)\b)(?:[Ff]\d{1,5}|[A-Za-z_][A-Za-z0-9_]*))\s*(?=(?:,|\)|&&|\|\||\bAND\b|\bOR\b))", RegexOptions.IgnoreCase),
+            new Regex(@"(?<=\(|,|^|\bAND\b|\bOR\b|&&|\|\|)\s*(?<left>[Ff]\d{1,5})\s+(?<right>[Ff]\d{1,5})\s*(?=(?:,|\)|&&|\|\||\bAND\b|\bOR\b))", RegexOptions.IgnoreCase)
+        };
+
+        List<string> generatedOptions = [];
+
+        foreach (var regex in missingOpRegexes)
+        {
+            var matches = regex.Matches(text);
+            if (matches.Count == 0) continue;
+
+            for (int i = matches.Count - 1; i >= 0; i--)
+            {
+                var m = matches[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    var left = m.Groups["left"].Value;
+                    var right = m.Groups["right"].Value;
+                    int leftEnd = m.Groups["left"].Index + m.Groups["left"].Length;
+                    int rightStart = m.Groups["right"].Index;
+
+                    bool isStringComparison = left.StartsWith('\'') || right.StartsWith('\'');
+                    string[] validOps = isStringComparison
+                        ? ["=", "!="]
+                        : ["=", "!=", ">", "<", ">=", "<="];
+
+                    syntaxIssues.Add($"Missing comparison operator between '{left}' and '{right}'; assumed '='. Did you mean '=', '!=', or another operator?");
+
+                    // Generate alternative choices for the user before mutating text
+                    foreach (var op in validOps)
+                    {
+                        string candidate = text[..leftEnd] + $" {op} " + text[rightStart..];
+                        generatedOptions.Add(candidate);
+                    }
+
+                    // Apply default '=' operator to workingFix
+                    text = text[..leftEnd] + " = " + text[rightStart..];
+                }
+            }
+        }
+
+        if (generatedOptions.Count > 0)
+        {
+            if (alternativeFixes == null)
+            {
+                alternativeFixes = generatedOptions;
+            }
+            else
+            {
+                alternativeFixes.AddRange(generatedOptions);
+            }
+        }
+
+        return text;
+    }
+
+    private static string RepairMissingTrailingArgument(
+        string text,
+        List<string> syntaxIssues,
+        ref List<string>? alternativeFixes)
+    {
+        // Matches a comma followed by whitespace and a closing paren: e.g. ", )"
+        var missingTrailingArgRegex = new Regex(@",\s*(?=\))");
+        var matches = missingTrailingArgRegex.Matches(text);
+        if (matches.Count == 0) return text;
+
+        // Check if formula appears to output numbers or strings
+        // If it has result branches returning strings ('...'), default to ' '; otherwise default to 0
+        bool appearsNumeric = !Regex.IsMatch(text, @",\s*'[^']*'\s*[,)]");
+
+        string defaultVal = appearsNumeric ? "0" : "' '";
+        string altVal = appearsNumeric ? "' '" : "0";
+
+        List<string> generatedOptions = [];
+
+        for (int i = matches.Count - 1; i >= 0; i--)
+        {
+            var m = matches[i];
+            if (!IsIndexInsideQuotes(text, m.Index))
+            {
+                syntaxIssues.Add($"Missing default/fallback argument before ')' in function call; assumed {defaultVal}.");
+
+                string candidateDefault = text[..m.Index] + ", " + defaultVal + text[(m.Index + m.Length)..];
+                string candidateAlt = text[..m.Index] + ", " + altVal + text[(m.Index + m.Length)..];
+
+                generatedOptions.Add(candidateDefault);
+                generatedOptions.Add(candidateAlt);
+
+                text = candidateDefault;
+            }
+        }
+
+        if (generatedOptions.Count > 0)
+        {
+            if (alternativeFixes == null)
+            {
+                alternativeFixes = generatedOptions;
+            }
+            else
+            {
+                alternativeFixes.AddRange(generatedOptions);
             }
         }
 
