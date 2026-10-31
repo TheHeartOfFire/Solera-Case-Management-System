@@ -1,4 +1,4 @@
-using AMFormsCST.Desktop.ViewModels.Pages.Tools.CodeSnippets;
+﻿using AMFormsCST.Desktop.ViewModels.Pages.Tools.CodeSnippets;
 using AMFormsCST.Core.Interfaces.CodeBlocks;
 using Moq;
 using System.Collections.ObjectModel;
@@ -578,7 +578,7 @@ public class CodeSnippetsViewModelTests
         Assert.Equal(8, vm.FunctionCategories.Count);
         Assert.Contains(vm.FunctionCategories, c => c.Name == "Smart Fields: Deal & Financial");
         Assert.Contains(vm.FunctionCategories, c => c.Name == "Smart Fields: Buyer / Co-Buyer");
-        Assert.Contains(vm.FunctionCategories, c => c.Name == "Smart Fields: Accessories (ACC01�15)");
+        Assert.Contains(vm.FunctionCategories, c => c.Name == "Smart Fields: Accessories (ACC01–15)");
         Assert.Contains(vm.FunctionCategories, c => c.Name == "Logic & Conditionals");
         Assert.Contains(vm.FunctionCategories, c => c.Name == "Text & Formatting");
         Assert.Contains(vm.FunctionCategories, c => c.Name == "Date & Time");
@@ -791,7 +791,7 @@ public class CodeSnippetsViewModelTests
         Assert.True(vm.IsPasteAssistantVisible);
         Assert.Equal(AMFormsCST.Core.Utils.FormgenParseStatus.MalformedSimilar, vm.PasteParseStatus);
         Assert.Contains("double quotes", vm.PasteDiagnosticMessage.ToLowerInvariant());
-        Assert.Equal("IF( F72 = 'N', 'NEW', 'USED' )", vm.PasteSuggestedFix);
+        Assert.Equal("IF(F72 = 'N', 'NEW', 'USED')", vm.PasteSuggestedFix);
 
         // Apply fix and commit
         vm.ApplyPasteSuggestionCommand.Execute(null);

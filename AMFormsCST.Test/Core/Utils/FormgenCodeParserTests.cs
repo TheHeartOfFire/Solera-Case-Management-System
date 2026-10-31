@@ -80,7 +80,7 @@ public class FormgenCodeParserTests
         Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
         Assert.Contains("double quotes", result.DiagnosticMessage.ToLowerInvariant());
         Assert.NotNull(result.SuggestedFix);
-        Assert.Equal("IF( F72 = 'N', 'NEW', 'USED' )", result.SuggestedFix);
+        Assert.Equal("IF(F72 = 'N', 'NEW', 'USED')", result.SuggestedFix);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class FormgenCodeParserTests
         Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
         Assert.Contains("SEPLIST", result.DiagnosticMessage);
         Assert.NotNull(result.SuggestedFix);
-        Assert.Equal("SEPLIST( ', ', F1, F2 )", result.SuggestedFix);
+        Assert.Equal("SEPLIST(', ', F1, F2)", result.SuggestedFix);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class FormgenCodeParserTests
         Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
         Assert.Contains("semicolon", result.DiagnosticMessage.ToLowerInvariant());
         Assert.NotNull(result.SuggestedFix);
-        Assert.Equal("IF( F72 = 'N', 'NEW', 'USED' )", result.SuggestedFix);
+        Assert.Equal("IF(F72 = 'N', 'NEW', 'USED')", result.SuggestedFix);
     }
 
     [Fact]
@@ -448,6 +448,30 @@ public class FormgenCodeParserTests
     }
 
     [Fact]
+    public void Parse_MissingClosingQuoteInNestedArgument_RepairsWithinDistance1()
+    {
+        // User test case: closing quote after TRADE #2: was removed
+        var original = "SEPLIST(' ', IF(NOTBLANK(F340), 'TRADE #2: ', ' '), F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)";
+        var mutated = "SEPLIST(' ', IF(NOTBLANK(F340), 'TRADE #2: , ' '), F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)";
+
+        var result = FormgenCodeParser.Parse(mutated);
+
+        Assert.Equal(FormgenParseStatus.MalformedSimilar, result.Status);
+        Assert.NotNull(result.SuggestedFix);
+
+        // Crucial requirement: Must NOT generate naked text like ' 'TRADE #2: or leave unclosed quote before comma!
+        Assert.DoesNotContain("' 'TRADE", result.SuggestedFix);
+        Assert.Contains("'TRADE #2: '", result.SuggestedFix);
+
+        // Minimal edit: suggested fix must match the original formula (distance <= 1)
+        Assert.True(LevenshteinDistance(result.SuggestedFix, original) <= 1, $"Expected distance <= 1, got '{result.SuggestedFix}'");
+
+        var reparsed = FormgenCodeParser.Parse(result.SuggestedFix);
+        Assert.Equal(FormgenParseStatus.Valid, reparsed.Status);
+        Assert.NotNull(reparsed.CondensedBlock);
+    }
+
+    [Fact]
     public void Parse_SeplistMalformedSeparator_DefaultsToSingleSpace()
     {
         // User test case: SEPLIST( ', with unclosed quote and TRADE #2: missing opening quote
@@ -459,7 +483,7 @@ public class FormgenCodeParserTests
         Assert.NotNull(result.SuggestedFix);
 
         // Crucial requirement: SEPLIST separator must be an enclosed single space ' ', NOT an empty string ''!
-        Assert.StartsWith("SEPLIST( ' '", result.SuggestedFix);
+        Assert.StartsWith("SEPLIST(' '", result.SuggestedFix);
         Assert.Contains("'TRADE #2: '", result.SuggestedFix);
         Assert.Contains("'TRADE #3: '", result.SuggestedFix);
 

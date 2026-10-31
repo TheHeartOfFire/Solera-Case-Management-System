@@ -279,7 +279,7 @@ public static class FormgenCodeParser
         }
 
         // 1. Check whether the text has any similarity to a FormGen function or expression
-        bool isSimilarToFormgen = LooksLikeFormgenAttempt(normalizedWhitespace, out var PreScanIssues, out var preSuggestedFix);
+        bool isSimilarToFormgen = LooksLikeFormgenAttempt(normalizedWhitespace, out var PreScanIssues, out var preSuggestedFix, out var altFixes);
         if (!isSimilarToFormgen)
         {
             return new FormgenParseResult(
@@ -312,6 +312,25 @@ public static class FormgenCodeParser
             {
                 finalFix = null;
             }
+
+            var refinedAltFixes = altFixes?
+                .Select(f => TryRefineSuggestedFix(f, input))
+                .OfType<string>()
+                .Where(f => !string.IsNullOrEmpty(f) && !string.Equals(f, finalFix, StringComparison.Ordinal))
+                .Distinct()
+                .ToList();
+
+            List<string>? combinedFixes = null;
+            if (finalFix != null)
+            {
+                combinedFixes = [finalFix];
+                if (refinedAltFixes != null) combinedFixes.AddRange(refinedAltFixes);
+            }
+            else if (refinedAltFixes != null && refinedAltFixes.Count > 0)
+            {
+                combinedFixes = refinedAltFixes;
+            }
+
             var message = string.Join(" ", PreScanIssues);
             return new FormgenParseResult(
                 FormgenParseStatus.MalformedSimilar,
@@ -320,7 +339,8 @@ public static class FormgenCodeParser
                 null,
                 "Malformed FormGen Syntax Detected",
                 message,
-                finalFix);
+                finalFix,
+                combinedFixes);
         }
 
         // 3. Attempt full recursive AST parse
@@ -425,10 +445,12 @@ public static class FormgenCodeParser
     private static bool LooksLikeFormgenAttempt(
         string text,
         out List<string> syntaxIssues,
-        out string? suggestedFix)
+        out string? suggestedFix,
+        out List<string>? alternativeFixes)
     {
         syntaxIssues = [];
         suggestedFix = null;
+        alternativeFixes = null;
         string workingFix = text;
         workingFix = RepairGluedFunctionsAndTokens(workingFix, syntaxIssues);
         bool hasRecognizedFunctionOrCloseMatch = false;
@@ -557,19 +579,23 @@ public static class FormgenCodeParser
             workingFix = ReplaceSubstringOutsideQuotes(workingFix, "<>", "!=");
         }
 
-        // 4. Missing commas between adjacent arguments
-        workingFix = RepairMissingCommasBetweenAdjacentArguments(workingFix, syntaxIssues);
-
-        // 5. SEPLIST malformed separator: assume standard enclosed single space ' '
+        // 4. SEPLIST malformed separator: assume standard enclosed single space ' '
         workingFix = RepairSeplistMalformedSeparator(workingFix, syntaxIssues);
 
-        // 5. Unclosed single quotes
+        // 5. Unclosed single quotes (must balance quotes before detecting missing commas or parens)
         int singleQuoteCount = workingFix.Count(c => c == '\'');
         if (singleQuoteCount % 2 != 0)
         {
-            workingFix = RepairUnbalancedSingleQuote(workingFix, out var quoteIssue);
+            workingFix = RepairUnbalancedSingleQuote(workingFix, out var quoteIssue, out var validFixes);
             syntaxIssues.Add(quoteIssue);
+            if (validFixes.Count > 1)
+            {
+                alternativeFixes = validFixes;
+            }
         }
+
+        // 6. Missing commas between adjacent arguments (quote parity is now accurate)
+        workingFix = RepairMissingCommasBetweenAdjacentArguments(workingFix, syntaxIssues);
 
         // 5. Unbalanced parentheses outside quotes
         CountParenthesesOutsideQuotes(workingFix, out int openParens, out int closeParens, out int firstExtraCloseIndex);
@@ -800,8 +826,68 @@ public static class FormgenCodeParser
         }
 
         // Leaf literal, F-field, or variable identifier
+        if (!IsValidFormgenLeaf(unwrapped, out var leafError))
+        {
+            diagnostics.Add(leafError ?? $"Invalid operand '{unwrapped}'.");
+            return false;
+        }
+
         parent.SetInputValue(slotIndex, unwrapped);
         return true;
+    }
+
+    private static bool IsValidFormgenLeaf(string text, out string? error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            error = "Argument cannot be blank or empty.";
+            return false;
+        }
+
+        // 1. Quoted string literal: '...'
+        if (text.StartsWith('\''))
+        {
+            if (!text.EndsWith('\'') || text.Length < 2)
+            {
+                error = $"Unclosed string literal in '{text}'.";
+                return false;
+            }
+
+            // Inside the quotes, any internal quote must be escaped as ''
+            var interior = text[1..^1].Replace("''", "");
+            if (interior.Contains('\''))
+            {
+                error = $"Malformed string literal or unescaped quotes in '{text}'.";
+                return false;
+            }
+
+            return true;
+        }
+
+        // String cannot contain single quotes if it didn't start with quote
+        if (text.Contains('\''))
+        {
+            error = $"Misplaced or unclosed single quote in '{text}'.";
+            return false;
+        }
+
+        // 2. Numeric literal (integer or floating point, optionally signed)
+        if (decimal.TryParse(text, NumberStyles.Integer | NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _))
+        {
+            return true;
+        }
+
+        // 3. Identifier / field reference / variable name:
+        // Must start with optional sign followed by letter or underscore, and alphanumeric or underscores.
+        // FormGen variables/fields (e.g. F340, WPAD, SYS_DATE, MyVar) cannot contain spaces or symbols.
+        if (Regex.IsMatch(text, @"^[+-]?[A-Za-z_][A-Za-z0-9_]*$"))
+        {
+            return true;
+        }
+
+        error = $"Invalid token, field, or variable name '{text}'. Field and variable names must start with a letter and contain no spaces or special characters.";
+        return false;
     }
 
     private static bool ValidateArgumentCount(
@@ -1514,153 +1600,89 @@ public static class FormgenCodeParser
         return text;
     }
 
-    private static string RepairUnbalancedSingleQuote(string text, out string issue)
+    private static string RepairUnbalancedSingleQuote(string text, out string issue, out List<string> validFixes)
     {
         issue = "Unclosed single-quoted text literal — missing an opening or closing single quote (').";
+        validFixes = new List<string>();
         if (string.IsNullOrEmpty(text)) return text;
 
-        var candidates = new List<(string Repaired, string Issue)>();
+        var zeroErrorCandidates = new List<(string Candidate, string Description, int Score)>();
+        var fallbackCandidates = new List<(string Candidate, string Description, int DiagCount)>();
 
-        // 1. Look for orphaned closing quotes (missing opening quote)
-        // e.g., ", TRADE #2: '," or "= NEW',"
-        for (int i = 0; i < text.Length; i++)
+        // Phase 1: Test inserting a single quote (') at every plausible position.
+        // For a single-character deletion of a quote, inserting "'" at the deletion point restores the exact original.
+        for (int k = 0; k <= text.Length; k++)
         {
-            if (text[i] != '\'') continue;
-
-            // Find previous delimiter before this quote
-            int prevDelim = i - 1;
-            while (prevDelim >= 0 && text[prevDelim] != ',' && text[prevDelim] != '(' &&
-                   text[prevDelim] != '=' && text[prevDelim] != '!' && text[prevDelim] != '<' &&
-                   text[prevDelim] != '>' && text[prevDelim] != '+' && text[prevDelim] != '-' &&
-                   text[prevDelim] != '*' && text[prevDelim] != '/' && text[prevDelim] != '\'')
-            {
-                prevDelim--;
-            }
-
-            // If stopped at another single quote, this is part of another quoted literal
-            if (prevDelim >= 0 && text[prevDelim] == '\'')
+            // Skip inserting inside an identifier (e.g. between letters or digits)
+            if (k > 0 && k < text.Length && char.IsLetterOrDigit(text[k - 1]) && char.IsLetterOrDigit(text[k]))
             {
                 continue;
             }
 
-            int contentStart = prevDelim + 1;
-            while (contentStart < i && char.IsWhiteSpace(text[contentStart]))
-            {
-                contentStart++;
-            }
-
-            if (contentStart == i && prevDelim + 1 < i)
-            {
-                // The argument between delimiters consists only of whitespace ending with a quote (e.g. ' ')
-                var wsCandidate = text.Insert(prevDelim + 1, "'");
-                candidates.Add((wsCandidate, "Missing opening single quote (') before single-space text literal (' ')."));
-            }
-            else if (contentStart < i)
-            {
-                var candidate = text.Insert(contentStart, "'");
-                var snippet = text[contentStart..i].Trim();
-                var desc = $"Missing opening single quote (') before '{snippet}'.";
-                candidates.Add((candidate, desc));
-            }
-        }
-
-        // 2. Look for orphaned opening quotes (missing closing quote)
-        // e.g., ", 'TRADE #2: ," or "= 'NEW,"
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (text[i] != '\'') continue;
-
-            // Check if this quote is preceded by a delimiter (or whitespace)
-            int checkBack = i - 1;
-            while (checkBack >= 0 && char.IsWhiteSpace(text[checkBack])) checkBack--;
-            bool isAfterDelim = checkBack < 0 || text[checkBack] is ',' or '(' or '=' or '!' or '<' or '>' or '+' or '-' or '*' or '/';
-
-            if (!isAfterDelim) continue;
-
-            // Find next delimiter after this quote
-            int nextDelim = i + 1;
-            while (nextDelim < text.Length && text[nextDelim] != ',' && text[nextDelim] != ')' &&
-                   text[nextDelim] != '=' && text[nextDelim] != '!' && text[nextDelim] != '<' &&
-                   text[nextDelim] != '>' && text[nextDelim] != '+' && text[nextDelim] != '-' &&
-                   text[nextDelim] != '*' && text[nextDelim] != '/' && text[nextDelim] != '\'')
-            {
-                nextDelim++;
-            }
-
-            // If stopped at another single quote, it already has a closing quote
-            if (nextDelim < text.Length && text[nextDelim] == '\'')
-            {
-                continue;
-            }
-
-            int contentEnd = nextDelim;
-            while (contentEnd > i + 1 && char.IsWhiteSpace(text[contentEnd - 1]))
-            {
-                contentEnd--;
-            }
-
-            if (contentEnd == i + 1 && i + 1 < nextDelim)
-            {
-                // The argument between delimiters consists only of a quote followed by whitespace (e.g. ' ')
-                var wsCandidate = text.Insert(nextDelim, "'");
-                candidates.Add((wsCandidate, "Missing closing single quote (') after single-space text literal (' ')."));
-            }
-            else if (contentEnd > i)
-            {
-                var candidate = text.Insert(contentEnd, "'");
-                var snippet = text[(i + 1)..contentEnd].Trim();
-                var desc = $"Missing closing single quote (') after '{snippet}'.";
-                candidates.Add((candidate, desc));
-            }
-        }
-
-        // 3. Fallback: closing quote before next ',' or ')' after last quote, or at end
-        int lastQuote = text.LastIndexOf('\'');
-        if (lastQuote >= 0)
-        {
-            bool placed = false;
-            for (int k = lastQuote + 1; k < text.Length; k++)
-            {
-                if (text[k] is ',' or ')')
-                {
-                    candidates.Add((text[..k] + "'" + text[k..], "Unclosed single-quoted text literal — missing a closing single quote (')."));
-                    placed = true;
-                    break;
-                }
-            }
-            if (!placed)
-            {
-                candidates.Add((text + "'", "Unclosed single-quoted text literal — missing a closing single quote (') at the end of the expression."));
-            }
-        }
-
-        // Evaluate candidates using TryParseExpression to find the best syntactically valid candidate
-        (string Repaired, string Issue)? bestCandidate = null;
-        int bestDiagnosticCount = int.MaxValue;
-
-        foreach (var (candText, candIssue) in candidates)
-        {
+            var cand = text.Insert(k, "'");
             var testDiags = new List<string>();
-            var tree = TryParseExpression(candText, isTopLevel: true, testDiags, out _);
+            var tree = TryParseExpression(cand, isTopLevel: true, testDiags, out _);
 
-            // Perfect candidate: parses with zero errors!
             if (tree != null && testDiags.Count == 0)
             {
-                issue = candIssue;
-                return candText;
-            }
+                // Score candidates: prefer inserting quote immediately adjacent to delimiters like ',' or ')' or '('
+                // rather than leaving floating spaces (e.g. "'TRADE #2: ', " is preferred over "'TRADE #2:' , ")
+                int score = 0;
+                if (k < text.Length && (text[k] is ',' or ')' or '=' or '!' or '<' or '>')) score += 10;
+                if (k > 0 && (text[k - 1] is ',' or '(' or '=' or '!' or '<' or '>')) score += 10;
+                // Penalize leaving whitespace between quote and delimiter outside quotes (e.g. "'foo' ,")
+                if (k < text.Length && text[k] == ' ' && k + 1 < text.Length && (text[k + 1] is ',' or ')')) score -= 15;
+                if (k > 0 && text[k - 1] == ' ' && k - 2 >= 0 && (text[k - 2] is ',' or '(')) score -= 15;
 
-            if (testDiags.Count < bestDiagnosticCount)
+                string snippet = k < text.Length ? text[k..Math.Min(text.Length, k + 8)].Trim() : "";
+                string desc = !string.IsNullOrEmpty(snippet)
+                    ? $"Inserted missing single quote (') before '{snippet}'."
+                    : "Inserted missing closing single quote (') at the end.";
+
+                zeroErrorCandidates.Add((cand, desc, score));
+            }
+            else
             {
-                bestDiagnosticCount = testDiags.Count;
-                bestCandidate = (candText, candIssue);
+                fallbackCandidates.Add((cand, "Missing single quote (').", testDiags.Count));
             }
         }
 
-        if (bestCandidate.HasValue)
+        // Phase 2: If no insertion worked, test removing an errant extra single quote
+        if (zeroErrorCandidates.Count == 0)
         {
-            issue = bestCandidate.Value.Issue;
-            return bestCandidate.Value.Repaired;
+            for (int q = 0; q < text.Length; q++)
+            {
+                if (text[q] != '\'') continue;
+                var cand = text.Remove(q, 1);
+                var testDiags = new List<string>();
+                var tree = TryParseExpression(cand, isTopLevel: true, testDiags, out _);
+                if (tree != null && testDiags.Count == 0)
+                {
+                    zeroErrorCandidates.Add((cand, "Removed extra single quote (').", 0));
+                }
+            }
+        }
+
+        if (zeroErrorCandidates.Count > 0)
+        {
+            var sortedCandidates = zeroErrorCandidates
+                .OrderByDescending(c => c.Score)
+                .Select(c => c.Candidate)
+                .Distinct()
+                .ToList();
+
+            validFixes = sortedCandidates;
+            var best = zeroErrorCandidates.OrderByDescending(c => c.Score).First();
+            issue = best.Description;
+            return best.Candidate;
+        }
+
+        // Phase 3: Fallback if compound errors exist
+        if (fallbackCandidates.Count > 0)
+        {
+            var bestFallback = fallbackCandidates.OrderBy(c => c.DiagCount).First();
+            issue = bestFallback.Description;
+            return bestFallback.Candidate;
         }
 
         return text + "'";
@@ -1753,8 +1775,7 @@ public static class FormgenCodeParser
         var tree = TryParseExpression(candidateFix, isTopLevel: true, diags, out var secondStageFix);
         if (tree != null && diags.Count == 0)
         {
-            var code = tree.GetCode();
-            return string.Equals(code.Trim(), originalInput.Trim(), StringComparison.Ordinal) ? null : code;
+            return candidateFix;
         }
         if (!string.IsNullOrWhiteSpace(secondStageFix) && !string.Equals(secondStageFix.Trim(), originalInput.Trim(), StringComparison.Ordinal))
         {
@@ -1762,8 +1783,7 @@ public static class FormgenCodeParser
             var thirdTree = TryParseExpression(secondStageFix, isTopLevel: true, thirdDiags, out _);
             if (thirdTree != null && thirdDiags.Count == 0)
             {
-                var code = thirdTree.GetCode();
-                return string.Equals(code.Trim(), originalInput.Trim(), StringComparison.Ordinal) ? null : code;
+                return secondStageFix;
             }
             return null;
         }

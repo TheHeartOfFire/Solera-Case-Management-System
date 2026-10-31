@@ -339,7 +339,7 @@ public class FormgenUtilitiesViewModelTests
 
         // Apply fix
         viewModel.ApplyCodeFixCommand.Execute(issue);
-        Assert.Equal("IF( F10 = 'NEW', 'N', 'U' )", badField.Expression);
+        Assert.Equal("IF(F10 = 'NEW', 'N', 'U')", badField.Expression);
         Assert.True(issue.IsValid);
     }
 
