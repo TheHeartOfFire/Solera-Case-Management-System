@@ -488,7 +488,8 @@ public class FormgenCodeParserTests
         int invalidFixCount = 0;
         int exactOrCloseFixCount = 0;
 
-        string normalizedOriginal = NormalizeWhitespace(originalFormula);
+        var origParsed = FormgenCodeParser.Parse(originalFormula);
+        string canonicalOriginal = origParsed.CondensedBlock?.GetCode() ?? NormalizeWhitespace(originalFormula);
 
         for (int i = 0; i < originalFormula.Length; i++)
         {
@@ -509,13 +510,16 @@ public class FormgenCodeParserTests
                     if (fixCheck.Status == FormgenParseStatus.Valid)
                     {
                         malformedWithFixCount++;
-                        string normalizedFix = NormalizeWhitespace(result.SuggestedFix);
-                        if (string.Equals(normalizedFix, normalizedOriginal, StringComparison.OrdinalIgnoreCase) ||
-                            LevenshteinDistance(normalizedFix, normalizedOriginal) <= 3)
+                        string canonicalFix = fixCheck.CondensedBlock?.GetCode() ?? result.SuggestedFix;
+                        if (string.Equals(canonicalFix, canonicalOriginal, StringComparison.OrdinalIgnoreCase) ||
+                            LevenshteinDistance(NormalizeWhitespace(result.SuggestedFix), NormalizeWhitespace(originalFormula)) <= 3)
                         {
                             exactOrCloseFixCount++;
                         }
-                        // else { _output?.WriteLine($"[DIVERGENT FIX idx {i} ('{removedChar}')]: mutated='{mutated}' => fix='{result.SuggestedFix}'"); }
+                        else
+                        {
+                            _output?.WriteLine($"[DIVERGENT FIX idx {i} ('{removedChar}')]: mutated='{mutated}' => fix='{result.SuggestedFix}'");
+                        }
                     }
                     else
                     {

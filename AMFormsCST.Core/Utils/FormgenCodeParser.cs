@@ -1412,8 +1412,8 @@ public static class FormgenCodeParser
 
     private static string RepairMissingCommasBetweenAdjacentArguments(string text, List<string> syntaxIssues)
     {
-        // 1. Closing paren ')' followed by whitespace and then a quote, F-field, or function header (e.g. ") F340", ") 'TRADE'", ") IF(")
-        var closeParenArgRegex = new Regex(@"\)\s+(?=(?:'|[Ff]\d{1,5}\b|[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        // 1. Closing paren ')' followed by whitespace and then another argument (quote, field, number, function, or nested paren)
+        var closeParenArgRegex = new Regex(@"\)\s+(?=(?:'|[Ff]\d{1,5}\b|\d+\b|(?!AND\b|OR\b)[A-Za-z_][A-Za-z0-9_]*|\())");
         var matches1 = closeParenArgRegex.Matches(text);
         if (matches1.Count > 0)
         {
@@ -1428,8 +1428,8 @@ public static class FormgenCodeParser
             }
         }
 
-        // 2. String literal closing quote followed by whitespace and then a function header or F-field (e.g. "' ' IF(", "' ' F340")
-        var quoteArgRegex = new Regex(@"('\s*)\s+(?=(?:[Ff]\d{1,5}\b|[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        // 2. String literal closing quote followed by whitespace and then another argument (quote, field, number, or identifier)
+        var quoteArgRegex = new Regex(@"('\s*)\s+(?=(?:'|[Ff]\d{1,5}\b|\d+\b|(?!AND\b|OR\b)[A-Za-z_][A-Za-z0-9_]*|\())");
         var matches2 = quoteArgRegex.Matches(text);
         if (matches2.Count > 0)
         {
@@ -1444,14 +1444,30 @@ public static class FormgenCodeParser
             }
         }
 
-        // 3. F-field followed by whitespace and then a function header or quote (e.g. "F479 IF(", "F479 'TEXT'")
-        var fieldArgRegex = new Regex(@"\b([Ff]\d{1,5})\s+(?=(?:'|[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        // 3. F-field followed by whitespace and then a function header, quote, or other argument
+        var fieldArgRegex = new Regex(@"\b([Ff]\d{1,5})\s+(?=(?:'|[Ff]\d{1,5}\b|\d+\b|(?!AND\b|OR\b)[A-Za-z_][A-Za-z0-9_]*\s*\())");
         var matches3 = fieldArgRegex.Matches(text);
         if (matches3.Count > 0)
         {
             for (int i = matches3.Count - 1; i >= 0; i--)
             {
                 var m = matches3[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing comma (,) separating arguments.");
+                    text = text[..m.Index] + m.Groups[1].Value + ", " + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // 4. Number literal followed by whitespace and then a quote, F-field, or function header (e.g. "12 'ANNUALLY'", "12 F10")
+        var numberArgRegex = new Regex(@"\b(\d+)\s+(?=(?:'|[Ff]\d{1,5}\b|(?!AND\b|OR\b)[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        var matches4 = numberArgRegex.Matches(text);
+        if (matches4.Count > 0)
+        {
+            for (int i = matches4.Count - 1; i >= 0; i--)
+            {
+                var m = matches4[i];
                 if (!IsIndexInsideQuotes(text, m.Index))
                 {
                     syntaxIssues.Add("Missing comma (,) separating arguments.");
