@@ -470,6 +470,13 @@ public class FormgenCodeParserTests
 
     [Theory]
     [InlineData("SEPLIST(' ', IF(NOTBLANK(F340), 'TRADE #2: ', ' '), F340, F341, F339, F345, F479, IF(NOTBLANK(F351), 'TRADE #3: ', ' '), F351, F352, F350, F356, F480)")]
+    [InlineData("IF(WPAD = 'WEEKLY', 'WEEKLY', IF(WPAD = 'BI-WEEKLY', 'BI-WEEKLY', IF(WPAD = 'SEMI-MONTHLY', 'SEMI-MONTHLY', IF(F678 = 1, 'MONTHLY', IF(F678 = 3, 'QUARTERLY', IF(F678 = 6, 'BI-ANNUALLY', IF(F678 = 12, 'ANNUALLY', ' ')))))))")]
+    [InlineData("IF(Rebate = 'Rebate #1', F945, IF(Rebate = 'Rebate #2', F946, IF(Rebate = 'Rebate #3', F947, IF(Rebate = 'Rebate #4', F948, IF(Rebate = 'Rebate #5', F949, IF(Rebate = 'Rebate #6', F950, IF(Rebate = 'Rebate #7', F951, IF(Rebate = 'Rebate #8', F952, IF(Rebate = 'Rebate #9', F953, IF(Rebate = 'Rebate #10', F954, ' '))))))))))")]
+    [InlineData("IF(Rebate = 'Rebate #1', F955, IF(Rebate = 'Rebate #2', F956, IF(Rebate = 'Rebate #3', F957, IF(Rebate = 'Rebate #4', F958, IF(Rebate = 'Rebate #5', F959, IF(Rebate = 'Rebate #6', F960, IF(Rebate = 'Rebate #7', F961, IF(Rebate = 'Rebate #8', F962, IF(Rebate = 'Rebate #9', F963, IF(Rebate = 'Rebate #10', F964, 0))))))))))")]
+    [InlineData("IF(AssignedTo = 'Ally Bank', 'Ally Bank', IF(AssignedTo = 'Ally Financial', 'Ally Financial', F226))")]
+    [InlineData("SEPLIST(', ', SEPLIST(' ', F2975, F2976), SEPLIST(' ', F2977, F2978))")]
+    [InlineData("IF(GapType = 'Debt Cancellation - E. Debt Cancellation Agreement Fee Paid to the Seller' && F667 > 0, F14, ' ')")]
+    [InlineData("IF(GapType = 'GAP - C. Other Optional Insurance Paid to Insurance Company or Companies' && F667 > 0, F14, ' ')")]
     [InlineData("IF(F72 = 'N', 'NEW', 'USED')")]
     [InlineData("SEPLIST(', ', F93, F94)")]
     public void Parse_SingleCharacterDeletionMutation_ExaminesParserResilience(string originalFormula)
