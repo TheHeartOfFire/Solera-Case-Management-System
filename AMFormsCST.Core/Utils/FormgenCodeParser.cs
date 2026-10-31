@@ -21,10 +21,14 @@ public sealed record FormgenParseResult(
     CustomSnippetCode? CondensedBlock,
     string StatusTitle,
     string DiagnosticMessage,
-    string? SuggestedFix = null)
+    string? SuggestedFix = null,
+    IReadOnlyList<string>? SuggestedFixes = null)
 {
     public bool IsSuccess => Status == FormgenParseStatus.Valid && CondensedBlock != null;
     public bool HasSuggestedFix => !string.IsNullOrWhiteSpace(SuggestedFix);
+    public IReadOnlyList<string> SuggestedFixes { get; init; } =
+        SuggestedFixes ?? (!string.IsNullOrWhiteSpace(SuggestedFix) ? [SuggestedFix] : Array.Empty<string>());
+    public bool HasMultipleSuggestedFixes => SuggestedFixes.Count > 1;
 }
 
 public static class FormgenCodeParser
@@ -132,7 +136,7 @@ public static class FormgenCodeParser
 
     private static readonly Regex FunctionCallHeaderRegex = new(@"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", RegexOptions.Compiled);
     private static readonly Regex FFieldTokenRegex = new(@"\b[Ff]\d{1,4}\b", RegexOptions.Compiled);
-    private static readonly Regex OperatorTokenRegex = new(@"(!=|<=|>=|==|<>|[=+\-*/%<>]|\bAND\b|\bOR\b)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex OperatorTokenRegex = new(@"(!=|<=|>=|==|<>|&&|\|\||[=+\-*/%<>]|\bAND\b|\bOR\b)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static FormgenParseResult Parse(string? rawInput)
     {
@@ -151,8 +155,139 @@ public static class FormgenCodeParser
         // Reject multi-line prose paragraphs quickly unless it looks like a multi-line FormGen formula
         var normalizedWhitespace = CollapseMultilineWhitespace(input);
 
+        // Strip redundant matching outer parentheses for bare token/identifier inspection:
+        // e.g. "(CashDeal)" -> "CashDeal", "(F72)" -> "F72"
+        var normalizedCandidate = normalizedWhitespace;
+        while (IsWrappedInMatchingParens(normalizedCandidate))
+        {
+            normalizedCandidate = normalizedCandidate[1..^1].Trim();
+        }
+
+        // A. Check for bare F-field token (e.g. F72, F10, f2490)
+        var fFieldMatch = Regex.Match(normalizedCandidate, @"^[Ff](\d{1,5})$");
+        if (fFieldMatch.Success)
+        {
+            var fNum = int.Parse(fFieldMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+            var fToken = $"F{fNum}";
+            var fieldInfo = FormgenReferenceCatalog.TryGetField(fToken);
+            var leaf = new SmartFieldCode(fToken);
+            var title = $"Field {fToken}";
+            var desc = fieldInfo != null
+                ? $"Valid FormGen field '{fToken}' ({fieldInfo.Description})."
+                : $"Valid FormGen field '{fToken}'.";
+            var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
+        }
+
+        // B. Check for single-quoted or double-quoted text literal (e.g. 'Debt Cancellation...', "N/A", ' ')
+        if ((normalizedCandidate.StartsWith('\'') && normalizedCandidate.EndsWith('\'') && normalizedCandidate.Length >= 2 && !IsCharEscaped(normalizedCandidate, normalizedCandidate.Length - 1) && IsValidFormgenLeaf(normalizedCandidate, out _)) ||
+            (normalizedCandidate.StartsWith('"') && normalizedCandidate.EndsWith('"') && normalizedCandidate.Length >= 2 && !IsCharEscaped(normalizedCandidate, normalizedCandidate.Length - 1)))
+        {
+            string? fix = null;
+            if (normalizedCandidate.StartsWith('"'))
+            {
+                fix = $"'{normalizedCandidate[1..^1]}'";
+            }
+            var leaf = new SmartFieldCode(normalizedCandidate);
+            var title = "Text Literal";
+            var desc = $"Valid FormGen text literal ({normalizedCandidate}).";
+            var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc, fix);
+        }
+
+        // C. Check for pure numeric literal (e.g. 0, 100, 1.05)
+        if (decimal.TryParse(normalizedCandidate, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
+        {
+            var leaf = new SmartFieldCode(normalizedCandidate);
+            var title = $"Number: {normalizedCandidate}";
+            var desc = $"Valid FormGen numeric value ({normalizedCandidate}).";
+            var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
+        }
+
+        // D. Check for pure static symbol/placeholder text (e.g. ***, ---, N/A)
+        if (Regex.IsMatch(normalizedCandidate, @"^[\*\-_/\\#@!?+=]+$") ||
+            string.Equals(normalizedCandidate, "N/A", StringComparison.OrdinalIgnoreCase))
+        {
+            var leaf = new SmartFieldCode(normalizedCandidate);
+            var title = $"Static Text: {normalizedCandidate}";
+            var desc = $"Valid FormGen static text symbol ('{normalizedCandidate}').";
+            var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
+        }
+
+        // E. Check for bare identifier (Smart Field, named variable, or function missing parens)
+        if (Regex.IsMatch(normalizedCandidate, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+        {
+            var upper = normalizedCandidate.ToUpperInvariant();
+            if (string.Equals(upper, "PI", StringComparison.OrdinalIgnoreCase))
+            {
+                var leaf = CreateFunctionInstance(KnownFunctions["PI"], 0);
+                var title = "Constant PI";
+                var desc = "Valid FormGen PI constant.";
+                var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
+                return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
+            }
+
+            if (string.Equals(upper, "TODAY", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(upper, "RANDOM", StringComparison.OrdinalIgnoreCase))
+            {
+                var fix = $"{upper}()";
+                return new FormgenParseResult(
+                    FormgenParseStatus.MalformedSimilar,
+                    input,
+                    null,
+                    null,
+                    "Malformed FormGen Syntax Detected",
+                    $"In FormGen, {upper}() is a function and requires empty parentheses: write {upper}() instead of {upper}.",
+                    fix);
+            }
+
+            if (KnownFunctions.TryGetValue(normalizedCandidate, out var spec) && spec.UsesParentheses)
+            {
+                var fix = $"{spec.Prefix}()";
+                return new FormgenParseResult(
+                    FormgenParseStatus.MalformedSimilar,
+                    input,
+                    null,
+                    null,
+                    "Malformed FormGen Syntax Detected",
+                    $"Function '{spec.Prefix}' is missing opening and closing parentheses: write {spec.Prefix}(...).",
+                    fix);
+            }
+
+            if (CommonFunctionAliases.TryGetValue(normalizedCandidate, out var canonicalFunc))
+            {
+                var fix = $"{canonicalFunc}()";
+                return new FormgenParseResult(
+                    FormgenParseStatus.MalformedSimilar,
+                    input,
+                    null,
+                    null,
+                    "Malformed FormGen Syntax Detected",
+                    $"Unrecognized function '{normalizedCandidate}' (did you mean '{canonicalFunc}'?) and missing parentheses: write {canonicalFunc}(...).",
+                    fix);
+            }
+
+            // Otherwise, check whether this identifier is a predefined FormGen smart field or a user-defined variable
+            if (FormgenReferenceCatalog.TryGetSmartField(normalizedCandidate, out var smartField))
+            {
+                var sfLeaf = new SmartFieldCode(smartField!.Name, isPredefined: true, smartField.Category, smartField.Description);
+                var sfTitle = $"Predefined Smart Field: {smartField.Name}";
+                var sfDesc = $"{smartField.Description} (Category: {smartField.Category}). Predefined FormGen smart variable that reacts dynamically to prompts and deal data.";
+                var sfCondensed = new CustomSnippetCode(sfTitle, sfDesc, sfLeaf, exposeVariableIdentifiers: false);
+                return new FormgenParseResult(FormgenParseStatus.Valid, input, sfLeaf, sfCondensed, sfTitle, sfDesc);
+            }
+
+            var uvLeaf = new SmartFieldCode(normalizedCandidate, isPredefined: false, "User Variable", $"User-defined variable '{normalizedCandidate}'.");
+            var uvTitle = $"User-Defined Variable: {normalizedCandidate}";
+            var uvDesc = $"Valid FormGen user-defined calculation or prompt variable '{normalizedCandidate}'.";
+            var uvCondensed = new CustomSnippetCode(uvTitle, uvDesc, uvLeaf, exposeVariableIdentifiers: false);
+            return new FormgenParseResult(FormgenParseStatus.Valid, input, uvLeaf, uvCondensed, uvTitle, uvDesc);
+        }
+
         // 1. Check whether the text has any similarity to a FormGen function or expression
-        bool isSimilarToFormgen = LooksLikeFormgenAttempt(normalizedWhitespace, out var PreScanIssues, out var preSuggestedFix);
+        bool isSimilarToFormgen = LooksLikeFormgenAttempt(normalizedWhitespace, out var PreScanIssues, out var preSuggestedFix, out var altFixes);
         if (!isSimilarToFormgen)
         {
             return new FormgenParseResult(
@@ -179,7 +314,31 @@ public static class FormgenCodeParser
                 }
             }
 
-            var finalFix = TryRefineSuggestedFix(secondaryFix ?? preSuggestedFix ?? normalizedWhitespace);
+            var rawFixCandidate = secondaryFix ?? preSuggestedFix;
+            var finalFix = rawFixCandidate != null ? TryRefineSuggestedFix(rawFixCandidate, input) : null;
+            if (finalFix != null && string.Equals(finalFix.Trim(), input.Trim(), StringComparison.Ordinal))
+            {
+                finalFix = null;
+            }
+
+            var refinedAltFixes = altFixes?
+                .Select(f => TryRefineSuggestedFix(f, input))
+                .OfType<string>()
+                .Where(f => !string.IsNullOrEmpty(f) && !string.Equals(f, finalFix, StringComparison.Ordinal))
+                .Distinct()
+                .ToList();
+
+            List<string>? combinedFixes = null;
+            if (finalFix != null)
+            {
+                combinedFixes = [finalFix];
+                if (refinedAltFixes != null) combinedFixes.AddRange(refinedAltFixes);
+            }
+            else if (refinedAltFixes != null && refinedAltFixes.Count > 0)
+            {
+                combinedFixes = refinedAltFixes;
+            }
+
             var message = string.Join(" ", PreScanIssues);
             return new FormgenParseResult(
                 FormgenParseStatus.MalformedSimilar,
@@ -188,7 +347,8 @@ public static class FormgenCodeParser
                 null,
                 "Malformed FormGen Syntax Detected",
                 message,
-                finalFix);
+                finalFix,
+                combinedFixes);
         }
 
         // 3. Attempt full recursive AST parse
@@ -201,7 +361,31 @@ public static class FormgenCodeParser
                 ? string.Join(" ", parseDiagnostics)
                 : "The expression is similar to a FormGen function, but contains a syntax error. Check parentheses, commas, and single quotes.";
 
-            var bestFix = TryRefineSuggestedFix(astSuggestedFix ?? preSuggestedFix ?? normalizedWhitespace);
+            var rawFixCandidate = astSuggestedFix ?? preSuggestedFix;
+            var bestFix = rawFixCandidate != null ? TryRefineSuggestedFix(rawFixCandidate, input) : null;
+            if (bestFix != null && string.Equals(bestFix.Trim(), input.Trim(), StringComparison.Ordinal))
+            {
+                bestFix = null;
+            }
+
+            var refinedAltFixes = altFixes?
+                .Select(f => TryRefineSuggestedFix(f, input))
+                .OfType<string>()
+                .Where(f => !string.IsNullOrEmpty(f) && !string.Equals(f, bestFix, StringComparison.Ordinal))
+                .Distinct()
+                .ToList();
+
+            List<string>? combinedFixes = null;
+            if (bestFix != null)
+            {
+                combinedFixes = [bestFix];
+                if (refinedAltFixes != null) combinedFixes.AddRange(refinedAltFixes);
+            }
+            else if (refinedAltFixes != null && refinedAltFixes.Count > 0)
+            {
+                combinedFixes = refinedAltFixes;
+            }
+
             return new FormgenParseResult(
                 FormgenParseStatus.MalformedSimilar,
                 input,
@@ -209,7 +393,8 @@ public static class FormgenCodeParser
                 null,
                 "Malformed FormGen Syntax Detected",
                 diagText,
-                bestFix);
+                bestFix,
+                combinedFixes);
         }
 
         // 4. Build condensed block ready for expansion and examination
@@ -239,6 +424,16 @@ public static class FormgenCodeParser
             if (!string.IsNullOrWhiteSpace(lhs))
                 return $"Assign {lhs}";
         }
+        if (parsedTree is OperatorCode op)
+        {
+            return $"Calculate: {op.GetCode()}";
+        }
+        if (parsedTree is SmartFieldCode sf)
+        {
+            return sf.IsPredefined
+                ? $"Smart Field: {sf.FieldName}"
+                : $"Variable: {sf.FieldName}";
+        }
         if (!string.IsNullOrWhiteSpace(parsedTree.Name))
             return $"Parsed: {parsedTree.Name}";
         if (!string.IsNullOrWhiteSpace(parsedTree.Prefix))
@@ -253,10 +448,11 @@ public static class FormgenCodeParser
         bool inDoubleQuotes = false;
         bool lastWasSpace = false;
 
-        foreach (char c in input)
+        for (int i = 0; i < input.Length; i++)
         {
-            if (c == '\'' && !inDoubleQuotes) inSingleQuotes = !inSingleQuotes;
-            else if (c == '"' && !inSingleQuotes) inDoubleQuotes = !inDoubleQuotes;
+            char c = input[i];
+            if (c == '\'' && !inDoubleQuotes && !IsCharEscaped(input, i)) inSingleQuotes = !inSingleQuotes;
+            else if (c == '"' && !inSingleQuotes && !IsCharEscaped(input, i)) inDoubleQuotes = !inDoubleQuotes;
 
             if (!inSingleQuotes && !inDoubleQuotes && (c == '\r' || c == '\n' || c == '\t'))
             {
@@ -278,15 +474,43 @@ public static class FormgenCodeParser
     private static bool LooksLikeFormgenAttempt(
         string text,
         out List<string> syntaxIssues,
-        out string? suggestedFix)
+        out string? suggestedFix,
+        out List<string>? alternativeFixes)
     {
         syntaxIssues = [];
         suggestedFix = null;
+        alternativeFixes = null;
         string workingFix = text;
+
+        // Strip redundant matching outer parentheses: e.g. "(Registrant = 'BUYER' || ...)"
+        while (IsWrappedInMatchingParens(workingFix))
+        {
+            workingFix = workingFix[1..^1].Trim();
+        }
+
+        // Strip redundant leading unary plus: e.g. "+ F2289 + F2302"
+        if (workingFix.StartsWith('+') && workingFix.Length > 1 && !workingFix.StartsWith("++"))
+        {
+            syntaxIssues.Add("Stripped redundant leading '+' operator.");
+            workingFix = workingFix[1..].TrimStart();
+        }
+
+        // Double quotes -> Single quotes (escaping any internal apostrophes to '' so "MANUFACTURER'S" -> 'MANUFACTURER''S')
+        if (workingFix.Contains('"'))
+        {
+            syntaxIssues.Add("FormGen requires single quotes ('...') for text literals instead of double quotes (\"...\").");
+            workingFix = Regex.Replace(workingFix, @"""([^""]*)""", m => "'" + m.Groups[1].Value.Replace("'", "''") + "'");
+            if (workingFix.Contains('"'))
+            {
+                workingFix = workingFix.Replace('"', '\'');
+            }
+        }
+
+        workingFix = RepairGluedFunctionsAndTokens(workingFix, syntaxIssues);
         bool hasRecognizedFunctionOrCloseMatch = false;
 
-        // Check if text starts with a known function name but is missing '(' e.g. "IF F72 = 'N', 'A', 'B'" or "ROUND F11, 2"
-        var firstWordMatch = Regex.Match(text, @"^([A-Za-z_][A-Za-z0-9_]*)\s+(?!\b(?:AND|OR)\b)(.+)$");
+        // Check if text starts with a known function name but is missing '(' e.g. "IF F72 = 'N', 'A', 'B'" or "ROUND F11, 2" or "SEPLIST' '"
+        var firstWordMatch = Regex.Match(workingFix, @"^([A-Za-z_][A-Za-z0-9_]*)(?:\s+|(?=['\(]))(?!\b(?:AND|OR)\b)(.+)$");
         if (firstWordMatch.Success)
         {
             var firstWord = firstWordMatch.Groups[1].Value;
@@ -383,12 +607,7 @@ public static class FormgenCodeParser
         }
 
         // Now inspect workingFix for common syntax mistakes:
-        // 1. Double quotes -> Single quotes
-        if (workingFix.Contains('"'))
-        {
-            syntaxIssues.Add("FormGen requires single quotes ('...') for text literals instead of double quotes (\"...\").");
-            workingFix = workingFix.Replace('"', '\'');
-        }
+        // 1. Semicolons outside quotes -> commas
 
         // 2. Semicolons outside quotes -> commas
         if (ContainsCharOutsideQuotes(workingFix, ';'))
@@ -409,21 +628,53 @@ public static class FormgenCodeParser
             workingFix = ReplaceSubstringOutsideQuotes(workingFix, "<>", "!=");
         }
 
-        // 4. Unclosed single quotes
-        int singleQuoteCount = workingFix.Count(c => c == '\'');
+        // 3b. Single '&' outside quotes -> '&&'
+        var singleAmpRegex = new Regex(@"(?<!&)&(?!&)");
+        var ampMatches = singleAmpRegex.Matches(workingFix);
+        if (ampMatches.Count > 0)
+        {
+            for (int i = ampMatches.Count - 1; i >= 0; i--)
+            {
+                var m = ampMatches[i];
+                if (!IsIndexInsideQuotes(workingFix, m.Index))
+                {
+                    syntaxIssues.Add("FormGen uses '&&' for logical AND, not a single '&'.");
+                    workingFix = workingFix[..m.Index] + "&&" + workingFix[(m.Index + 1)..];
+                }
+            }
+        }
+
+        // 4. SEPLIST malformed separator: assume standard enclosed single space ' '
+        workingFix = RepairSeplistMalformedSeparator(workingFix, syntaxIssues);
+
+        // 5. Unclosed single quotes (must balance quotes before detecting missing commas or parens)
+        int singleQuoteCount = CountUnescapedSingleQuotes(workingFix);
         if (singleQuoteCount % 2 != 0)
         {
-            syntaxIssues.Add("Unclosed single-quoted text literal — missing a closing single quote (').");
-            workingFix = RepairUnclosedSingleQuote(workingFix);
+            workingFix = RepairUnbalancedSingleQuote(workingFix, out var quoteIssue, out var validFixes);
+            syntaxIssues.Add(quoteIssue);
+            if (validFixes.Count > 1)
+            {
+                alternativeFixes = validFixes;
+            }
         }
+
+        // 6. Missing comparison operator between adjacent terms (must run before missing commas!)
+        workingFix = RepairMissingComparisonOperator(workingFix, syntaxIssues, ref alternativeFixes);
+
+        // 7. Missing commas between adjacent arguments (quote parity is now accurate)
+        workingFix = RepairMissingCommasBetweenAdjacentArguments(workingFix, syntaxIssues);
+
+        // 8. Missing trailing default argument before ')' (e.g. ", )" at end of nested IF)
+        workingFix = RepairMissingTrailingArgument(workingFix, syntaxIssues, ref alternativeFixes);
 
         // 5. Unbalanced parentheses outside quotes
         CountParenthesesOutsideQuotes(workingFix, out int openParens, out int closeParens, out int firstExtraCloseIndex);
         if (openParens > closeParens)
         {
             int missing = openParens - closeParens;
-            syntaxIssues.Add($"Missing {missing} closing parenthesis '{new string(')', missing)}' at the end of the expression.");
-            workingFix += new string(')', missing);
+            workingFix = RepairMissingClosingParentheses(workingFix, missing, out var parenIssues);
+            syntaxIssues.AddRange(parenIssues);
         }
         else if (closeParens > openParens)
         {
@@ -446,11 +697,15 @@ public static class FormgenCodeParser
 
     private static bool TryParseSimpleArithmeticOrComparison(string text)
     {
-        // Only treat raw arithmetic/comparison as a FormGen expression if it has a valid operator between two non-empty operands
-        // and contains no prose sentences (more than 1 consecutive space-separated identifier without operators).
         if (!OperatorTokenRegex.IsMatch(text)) return false;
-        var tokens = Regex.Matches(text, @"\b[A-Za-z_][A-Za-z0-9_]*\b");
-        if (tokens.Count > 4) return false;
+
+        // Strip string literals before prose checking so "'Literal...' + Var" is not rejected as prose
+        string textWithoutQuotes = Regex.Replace(text, @"'[^']*'", "''");
+        textWithoutQuotes = Regex.Replace(textWithoutQuotes, @"""[^""]*""", "''");
+
+        // Check for adjacent words separated only by whitespace without operators (e.g. "this is a sentence + 1")
+        var proseMatch = Regex.Match(textWithoutQuotes, @"\b(?!AND\b|OR\b)[A-Za-z]{2,}\s+(?!AND\b|OR\b)[A-Za-z]{2,}\b", RegexOptions.IgnoreCase);
+        if (proseMatch.Success) return false;
         return FindTopLevelOperator(text, out _, out _, out _);
     }
 
@@ -545,7 +800,13 @@ public static class FormgenCodeParser
             // Validate argument count against FunctionSpec
             if (!ValidateArgumentCount(spec, argStrings, diagnostics, out var fixedArgs))
             {
-                if (fixedArgs != null)
+                if (!isTopLevel && spec.MaxArgs.HasValue && argStrings.Count > spec.MaxArgs.Value)
+                {
+                    var closedCall = $"{spec.Prefix}({string.Join(", ", argStrings.Take(spec.MaxArgs.Value))})";
+                    var remaining = string.Join(", ", argStrings.Skip(spec.MaxArgs.Value));
+                    suggestedFix = $"{closedCall}, {remaining}";
+                }
+                else if (fixedArgs != null)
                 {
                     suggestedFix = $"{spec.Prefix}({string.Join(", ", fixedArgs)})";
                 }
@@ -618,6 +879,13 @@ public static class FormgenCodeParser
             return true;
         }
 
+        // Check if this argument is already a valid quoted string literal (which can contain parentheses in the text!)
+        if (unwrapped.StartsWith('\'') && IsValidFormgenLeaf(unwrapped, out _))
+        {
+            parent.SetInputValue(slotIndex, unwrapped);
+            return true;
+        }
+
         // Check if it looks like a malformed function call inside an argument (e.g. contains '(' or unknown function call)
         if (unwrapped.Contains('(') || unwrapped.Contains(')'))
         {
@@ -641,8 +909,85 @@ public static class FormgenCodeParser
         }
 
         // Leaf literal, F-field, or variable identifier
+        if (!IsValidFormgenLeaf(unwrapped, out var leafError))
+        {
+            diagnostics.Add(leafError ?? $"Invalid operand '{unwrapped}'.");
+            return false;
+        }
+
         parent.SetInputValue(slotIndex, unwrapped);
         return true;
+    }
+
+    private static bool IsValidFormgenLeaf(string text, out string? error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            error = "Argument cannot be blank or empty.";
+            return false;
+        }
+
+        // 1. Quoted string literal: '...'
+        if (text.StartsWith('\''))
+        {
+            if (!text.EndsWith('\'') || text.Length < 2 || IsCharEscaped(text, text.Length - 1))
+            {
+                error = $"Unclosed string literal in '{text}'.";
+                return false;
+            }
+
+            // Inside the quotes (from index 1 to text.Length - 2), any internal quote must be escaped as \' or ''
+            int i = 1;
+            while (i < text.Length - 1)
+            {
+                if (text[i] == '\'')
+                {
+                    if (IsCharEscaped(text, i))
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    // Check for '' pair (both unescaped)
+                    if (i + 1 < text.Length - 1 && text[i + 1] == '\'' && !IsCharEscaped(text, i + 1))
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    error = $"Malformed string literal or unescaped quotes in '{text}'.";
+                    return false;
+                }
+                i++;
+            }
+
+            return true;
+        }
+
+        // String cannot contain single quotes if it didn't start with quote
+        if (text.Contains('\''))
+        {
+            error = $"Misplaced or unclosed single quote in '{text}'.";
+            return false;
+        }
+
+        // 2. Numeric literal (integer or floating point, optionally signed)
+        if (decimal.TryParse(text, NumberStyles.Integer | NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _))
+        {
+            return true;
+        }
+
+        // 3. Identifier / field reference / variable name:
+        // Must start with optional sign followed by letter or underscore, and alphanumeric or underscores.
+        // FormGen variables/fields (e.g. F340, WPAD, SYS_DATE, MyVar) cannot contain spaces or symbols.
+        if (Regex.IsMatch(text, @"^[+-]?[A-Za-z_][A-Za-z0-9_]*$"))
+        {
+            return true;
+        }
+
+        error = $"Invalid token, field, or variable name '{text}'. Field and variable names must start with a letter and contain no spaces or special characters.";
+        return false;
     }
 
     private static bool ValidateArgumentCount(
@@ -714,10 +1059,17 @@ public static class FormgenCodeParser
     {
         if (prefix == "ROUND" && index == 1) return "2";
         if (prefix is "ADDDAYS" or "ADDWEEKS" or "ADDMONTHS" or "ADDYEARS" && index == 1) return "1";
+        if (string.Equals(prefix, "SEPLIST", StringComparison.OrdinalIgnoreCase) && index == 0)
+        {
+            return "' '";
+        }
+        if (argLabel.Contains("Separator", StringComparison.OrdinalIgnoreCase))
+        {
+            return "' '";
+        }
         if (argLabel.Contains("Result", StringComparison.OrdinalIgnoreCase) ||
             argLabel.Contains("Default", StringComparison.OrdinalIgnoreCase) ||
-            argLabel.Contains("Text", StringComparison.OrdinalIgnoreCase) ||
-            argLabel.Contains("Separator", StringComparison.OrdinalIgnoreCase))
+            argLabel.Contains("Text", StringComparison.OrdinalIgnoreCase))
         {
             return "''";
         }
@@ -855,7 +1207,7 @@ public static class FormgenCodeParser
         for (int i = openIdx; i < expr.Length; i++)
         {
             char c = expr[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(expr, i))
             {
                 inQuotes = !inQuotes;
                 continue;
@@ -897,7 +1249,7 @@ public static class FormgenCodeParser
         for (int i = 0; i < argsInterior.Length; i++)
         {
             char c = argsInterior[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(argsInterior, i))
             {
                 inQuotes = !inQuotes;
                 continue;
@@ -946,8 +1298,8 @@ public static class FormgenCodeParser
         // 6. Scientific notation: e
         string[][] precedenceGroups =
         [
-            ["OR"],
-            ["AND"],
+            ["||", "OR"],
+            ["&&", "AND"],
             ["!=", "<=", ">=", "=", "<", ">"],
             ["+", "-"],
             ["*", "/", "%"]
@@ -964,7 +1316,7 @@ public static class FormgenCodeParser
             for (int i = 0; i < expr.Length; i++)
             {
                 char c = expr[i];
-                if (c == '\'')
+                if (c == '\'' && !IsCharEscaped(expr, i))
                 {
                     inQuotes = !inQuotes;
                     continue;
@@ -979,7 +1331,13 @@ public static class FormgenCodeParser
                 {
                     if (MatchesOperatorAt(expr, i, candidateOp))
                     {
-                        // Ignore unary minus at the very start of an expression or immediately after another operator
+                        // A binary operator cannot split if there is no left-hand operand
+                        if (i == 0 || string.IsNullOrWhiteSpace(expr[..i]))
+                        {
+                            continue;
+                        }
+
+                        // Ignore unary minus immediately after another operator
                         if (candidateOp == "-" && IsUnaryMinusAt(expr, i))
                         {
                             continue;
@@ -1051,7 +1409,7 @@ public static class FormgenCodeParser
         for (int i = 0; i < expr.Length; i++)
         {
             char c = expr[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(expr, i))
             {
                 inQuotes = !inQuotes;
                 continue;
@@ -1073,7 +1431,17 @@ public static class FormgenCodeParser
     private static bool TryFindClosestFunction(string candidate, out string matchedFunction)
     {
         matchedFunction = string.Empty;
-        if (string.IsNullOrWhiteSpace(candidate) || candidate.Length < 2) return false;
+        if (string.IsNullOrWhiteSpace(candidate)) return false;
+
+        if (candidate.Length == 1)
+        {
+            if (candidate.Equals("I", StringComparison.OrdinalIgnoreCase) || candidate.Equals("F", StringComparison.OrdinalIgnoreCase))
+            {
+                matchedFunction = "IF";
+                return true;
+            }
+            return false;
+        }
 
         if (CommonFunctionAliases.TryGetValue(candidate, out var aliasTarget))
         {
@@ -1127,12 +1495,39 @@ public static class FormgenCodeParser
         return dp[n, m];
     }
 
+    private static bool IsCharEscaped(string text, int index)
+    {
+        if (index <= 0 || index >= text.Length) return false;
+        int backslashCount = 0;
+        int j = index - 1;
+        while (j >= 0 && text[j] == '\\')
+        {
+            backslashCount++;
+            j--;
+        }
+        return (backslashCount % 2) != 0;
+    }
+
+    private static int CountUnescapedSingleQuotes(string text)
+    {
+        int count = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\'' && !IsCharEscaped(text, i))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private static bool ContainsCharOutsideQuotes(string text, char target)
     {
         bool inQuotes = false;
-        foreach (char c in text)
+        for (int i = 0; i < text.Length; i++)
         {
-            if (c == '\'') inQuotes = !inQuotes;
+            char c = text[i];
+            if (c == '\'' && !IsCharEscaped(text, i)) inQuotes = !inQuotes;
             else if (!inQuotes && c == target) return true;
         }
         return false;
@@ -1142,9 +1537,10 @@ public static class FormgenCodeParser
     {
         var sb = new StringBuilder(text.Length);
         bool inQuotes = false;
-        foreach (char c in text)
+        for (int i = 0; i < text.Length; i++)
         {
-            if (c == '\'') inQuotes = !inQuotes;
+            char c = text[i];
+            if (c == '\'' && !IsCharEscaped(text, i)) inQuotes = !inQuotes;
             sb.Append(!inQuotes && c == target ? replacement : c);
         }
         return sb.ToString();
@@ -1155,7 +1551,7 @@ public static class FormgenCodeParser
         bool inQuotes = false;
         for (int i = 0; i <= text.Length - sub.Length; i++)
         {
-            if (text[i] == '\'') inQuotes = !inQuotes;
+            if (text[i] == '\'' && !IsCharEscaped(text, i)) inQuotes = !inQuotes;
             else if (!inQuotes && text.AsSpan(i, sub.Length).Equals(sub, StringComparison.Ordinal))
                 return true;
         }
@@ -1169,7 +1565,7 @@ public static class FormgenCodeParser
         int i = 0;
         while (i < text.Length)
         {
-            if (text[i] == '\'')
+            if (text[i] == '\'' && !IsCharEscaped(text, i))
             {
                 inQuotes = !inQuotes;
                 sb.Append(text[i++]);
@@ -1187,19 +1583,420 @@ public static class FormgenCodeParser
         return sb.ToString();
     }
 
-    private static string RepairUnclosedSingleQuote(string text)
+    private static bool IsIndexInsideQuotes(string text, int index)
     {
-        int lastQuote = text.LastIndexOf('\'');
-        if (lastQuote < 0) return text;
-
-        // Place closing quote before the next comma or closing parenthesis, or at the end
-        for (int i = lastQuote + 1; i < text.Length; i++)
+        bool inQuotes = false;
+        for (int i = 0; i < index && i < text.Length; i++)
         {
-            if (text[i] is ',' or ')')
+            if (text[i] == '\'' && !IsCharEscaped(text, i)) inQuotes = !inQuotes;
+        }
+        return inQuotes;
+    }
+
+    private static string RepairGluedFunctionsAndTokens(string text, List<string> syntaxIssues)
+    {
+        // A. Known function followed directly by another known function without '(': e.g. IFNOTBLANK -> IF(NOTBLANK
+        var gluedFuncRegex = new Regex(@"\b(IF)(NOTBLANK|BLANK|CONTAINS|NOT|ROUND|TRUNC|FLOOR|CEILING|ABS|MIN|MAX|SUM|AVG|LEN|UPPER|LOWER|TRIM|SUBSTR|REPLACE|TEXT|NUM|DATE|SEPLIST|CASE)\b", RegexOptions.IgnoreCase);
+        var matches1 = gluedFuncRegex.Matches(text);
+        if (matches1.Count > 0)
+        {
+            for (int i = matches1.Count - 1; i >= 0; i--)
             {
-                return text[..i] + "'" + text[i..];
+                var m = matches1[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing opening parenthesis '(' between nested function calls.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + m.Groups[2].Value + text[(m.Index + m.Length)..];
+                }
             }
         }
+
+        // B. Known function followed directly by F-field without '(': e.g. NOTBLANKF340 -> NOTBLANK(F340
+        var gluedFieldRegex = new Regex(@"\b(NOTBLANK|BLANK|CONTAINS|NOT|ROUND|TRUNC|FLOOR|CEILING|ABS|MIN|MAX|SUM|AVG|LEN|UPPER|LOWER|TRIM|SUBSTR|REPLACE|TEXT|NUM|DATE|YEAR|MONTH|DAY|SEPLIST|CASE|XIF|XXIF|IF)([Ff]\d{1,5}\b)", RegexOptions.IgnoreCase);
+        var matches2 = gluedFieldRegex.Matches(text);
+        if (matches2.Count > 0)
+        {
+            for (int i = matches2.Count - 1; i >= 0; i--)
+            {
+                var m = matches2[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing opening parenthesis '(' between function name and field argument.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + m.Groups[2].Value + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // C. Known function followed directly by string quote without '(': e.g. SEPLIST' ' -> SEPLIST(' '
+        var gluedQuoteRegex = new Regex(@"\b(NOTBLANK|BLANK|CONTAINS|NOT|ROUND|TRUNC|FLOOR|CEILING|ABS|MIN|MAX|SUM|AVG|LEN|UPPER|LOWER|TRIM|LTRIM|RTRIM|SUBSTR|REPLACE|TEXT|NUM|DATE|YEAR|MONTH|DAY|SEPLIST|CASE|XIF|XXIF|IF)\s*(')", RegexOptions.IgnoreCase);
+        var matches3 = gluedQuoteRegex.Matches(text);
+        if (matches3.Count > 0)
+        {
+            for (int i = matches3.Count - 1; i >= 0; i--)
+            {
+                var m = matches3[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add($"Missing opening parenthesis '(' between function '{m.Groups[1].Value}' and string literal.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + m.Groups[2].Value + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // D. IF or CONTAINS followed by an identifier without '(':
+        // 1) Spaced: e.g. "IF WPAD = 'Y'", "IF WPAD, 'Y', 'N'"
+        var spacedIfVarRegex = new Regex(@"\b(IF|CONTAINS)\s+([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*(?:[=!<>]|\bCONTAINS\b|\bAND\b|\bOR\b|&&|\|\||,|\)))", RegexOptions.IgnoreCase);
+        var matchesSpaced = spacedIfVarRegex.Matches(text);
+        if (matchesSpaced.Count > 0)
+        {
+            for (int i = matchesSpaced.Count - 1; i >= 0; i--)
+            {
+                var m = matchesSpaced[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    var varName = m.Groups[2].Value;
+                    if (string.Equals(varName, "F", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(varName, "ELSE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    syntaxIssues.Add($"Missing opening parenthesis '(' after function '{m.Groups[1].Value}'.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + varName + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // 2) Glued without space: e.g. "IFWPAD = 'Y'". Must NOT match "IfOther, 'val'" where IfOther is an argument to an enclosing function.
+        var gluedIfVarRegex = new Regex(@"\b(IF|CONTAINS)([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*(?:[=!<>]|\bCONTAINS\b|\bAND\b|\bOR\b|&&|\|\|))", RegexOptions.IgnoreCase);
+        var matchesGlued = gluedIfVarRegex.Matches(text);
+        if (matchesGlued.Count > 0)
+        {
+            for (int i = matchesGlued.Count - 1; i >= 0; i--)
+            {
+                var m = matchesGlued[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    var varName = m.Groups[2].Value;
+                    if (string.Equals(varName, "F", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(varName, "ELSE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    syntaxIssues.Add($"Missing opening parenthesis '(' after function '{m.Groups[1].Value}'.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + varName + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        return text;
+    }
+
+    private static string RepairMissingComparisonOperator(
+        string text,
+        List<string> syntaxIssues,
+        ref List<string>? alternativeFixes)
+    {
+        var missingOpRegexes = new[]
+        {
+            new Regex(@"(?<=\(|,|^|\bAND\b|\bOR\b|&&|\|\|)\s*(?<left>(?!\b(?:AND|OR|IF|NOT|BLANK|NOTBLANK|SEPLIST|CASE|ROUND|TEXT|DATE)\b)(?:[Ff]\d{1,5}|[A-Za-z_][A-Za-z0-9_]*))\s+(?<right>'[^']*'|\d+(?:\.\d+)?)\s*(?=(?:,|\)|&&|\|\||\bAND\b|\bOR\b))", RegexOptions.IgnoreCase),
+            new Regex(@"(?<=\(|,|^|\bAND\b|\bOR\b|&&|\|\|)\s*(?<left>'[^']*'|\d+(?:\.\d+)?)\s+(?<right>(?!\b(?:AND|OR|IF|NOT|BLANK|NOTBLANK|SEPLIST|CASE|ROUND|TEXT|DATE)\b)(?:[Ff]\d{1,5}|[A-Za-z_][A-Za-z0-9_]*))\s*(?=(?:,|\)|&&|\|\||\bAND\b|\bOR\b))", RegexOptions.IgnoreCase),
+            new Regex(@"(?<=\(|,|^|\bAND\b|\bOR\b|&&|\|\|)\s*(?<left>[Ff]\d{1,5})\s+(?<right>[Ff]\d{1,5})\s*(?=(?:,|\)|&&|\|\||\bAND\b|\bOR\b))", RegexOptions.IgnoreCase)
+        };
+
+        List<string> generatedOptions = [];
+
+        foreach (var regex in missingOpRegexes)
+        {
+            var matches = regex.Matches(text);
+            if (matches.Count == 0) continue;
+
+            for (int i = matches.Count - 1; i >= 0; i--)
+            {
+                var m = matches[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    var left = m.Groups["left"].Value;
+                    var right = m.Groups["right"].Value;
+                    int leftEnd = m.Groups["left"].Index + m.Groups["left"].Length;
+                    int rightStart = m.Groups["right"].Index;
+
+                    bool isStringComparison = left.StartsWith('\'') || right.StartsWith('\'');
+                    string[] validOps = isStringComparison
+                        ? ["=", "!="]
+                        : ["=", "!=", ">", "<", ">=", "<="];
+
+                    syntaxIssues.Add($"Missing comparison operator between '{left}' and '{right}'; assumed '='. Did you mean '=', '!=', or another operator?");
+
+                    // Generate alternative choices for the user before mutating text
+                    foreach (var op in validOps)
+                    {
+                        string candidate = text[..leftEnd] + $" {op} " + text[rightStart..];
+                        generatedOptions.Add(candidate);
+                    }
+
+                    // Apply default '=' operator to workingFix
+                    text = text[..leftEnd] + " = " + text[rightStart..];
+                }
+            }
+        }
+
+        if (generatedOptions.Count > 0)
+        {
+            if (alternativeFixes == null)
+            {
+                alternativeFixes = generatedOptions;
+            }
+            else
+            {
+                alternativeFixes.AddRange(generatedOptions);
+            }
+        }
+
+        return text;
+    }
+
+    private static string RepairMissingTrailingArgument(
+        string text,
+        List<string> syntaxIssues,
+        ref List<string>? alternativeFixes)
+    {
+        // Matches a comma followed by whitespace and a closing paren: e.g. ", )"
+        var missingTrailingArgRegex = new Regex(@",\s*(?=\))");
+        var matches = missingTrailingArgRegex.Matches(text);
+        if (matches.Count == 0) return text;
+
+        // Check if formula appears to output numbers or strings
+        // If it has result branches returning strings ('...'), default to ' '; otherwise default to 0
+        bool appearsNumeric = !Regex.IsMatch(text, @",\s*'[^']*'\s*[,)]");
+
+        string defaultVal = appearsNumeric ? "0" : "' '";
+        string altVal = appearsNumeric ? "' '" : "0";
+
+        List<string> generatedOptions = [];
+
+        for (int i = matches.Count - 1; i >= 0; i--)
+        {
+            var m = matches[i];
+            if (!IsIndexInsideQuotes(text, m.Index))
+            {
+                syntaxIssues.Add($"Missing default/fallback argument before ')' in function call; assumed {defaultVal}.");
+
+                string candidateDefault = text[..m.Index] + ", " + defaultVal + text[(m.Index + m.Length)..];
+                string candidateAlt = text[..m.Index] + ", " + altVal + text[(m.Index + m.Length)..];
+
+                generatedOptions.Add(candidateDefault);
+                generatedOptions.Add(candidateAlt);
+
+                text = candidateDefault;
+            }
+        }
+
+        if (generatedOptions.Count > 0)
+        {
+            if (alternativeFixes == null)
+            {
+                alternativeFixes = generatedOptions;
+            }
+            else
+            {
+                alternativeFixes.AddRange(generatedOptions);
+            }
+        }
+
+        return text;
+    }
+
+    private static string RepairMissingCommasBetweenAdjacentArguments(string text, List<string> syntaxIssues)
+    {
+        // 1. Closing paren ')' followed by whitespace and then another argument (quote, field, number, function, or nested paren)
+        var closeParenArgRegex = new Regex(@"\)\s+(?=(?:'|[Ff]\d{1,5}\b|\d+\b|(?!AND\b|OR\b)[A-Za-z_][A-Za-z0-9_]*|\())");
+        var matches1 = closeParenArgRegex.Matches(text);
+        if (matches1.Count > 0)
+        {
+            for (int i = matches1.Count - 1; i >= 0; i--)
+            {
+                var m = matches1[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing comma (,) separating arguments.");
+                    text = text[..m.Index] + "), " + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // 2. String literal closing quote followed by whitespace and then another argument (quote, field, number, or identifier)
+        var quoteArgRegex = new Regex(@"('\s*)\s+(?=(?:'|[Ff]\d{1,5}\b|\d+\b|(?!AND\b|OR\b)[A-Za-z_][A-Za-z0-9_]*|\())");
+        var matches2 = quoteArgRegex.Matches(text);
+        if (matches2.Count > 0)
+        {
+            for (int i = matches2.Count - 1; i >= 0; i--)
+            {
+                var m = matches2[i];
+                if (!IsIndexInsideQuotes(text, m.Index + m.Groups[1].Length))
+                {
+                    syntaxIssues.Add("Missing comma (,) separating arguments.");
+                    text = text[..m.Index] + m.Groups[1].Value + ", " + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // 3. F-field followed by whitespace and then a function header, quote, or other argument
+        var fieldArgRegex = new Regex(@"\b([Ff]\d{1,5})\s+(?=(?:'|[Ff]\d{1,5}\b|\d+\b|(?!AND\b|OR\b)[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        var matches3 = fieldArgRegex.Matches(text);
+        if (matches3.Count > 0)
+        {
+            for (int i = matches3.Count - 1; i >= 0; i--)
+            {
+                var m = matches3[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing comma (,) separating arguments.");
+                    text = text[..m.Index] + m.Groups[1].Value + ", " + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // 4. Number literal followed by whitespace and then a quote, F-field, or function header (e.g. "12 'ANNUALLY'", "12 F10")
+        var numberArgRegex = new Regex(@"\b(\d+)\s+(?=(?:'|[Ff]\d{1,5}\b|(?!AND\b|OR\b)[A-Za-z_][A-Za-z0-9_]*\s*\())");
+        var matches4 = numberArgRegex.Matches(text);
+        if (matches4.Count > 0)
+        {
+            for (int i = matches4.Count - 1; i >= 0; i--)
+            {
+                var m = matches4[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    syntaxIssues.Add("Missing comma (,) separating arguments.");
+                    text = text[..m.Index] + m.Groups[1].Value + ", " + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        return text;
+    }
+
+    private static string RepairSeplistMalformedSeparator(string text, List<string> syntaxIssues)
+    {
+        var matches = Regex.Matches(text, @"\bSEPLIST\s*\(", RegexOptions.IgnoreCase);
+        if (matches.Count == 0) return text;
+
+        for (int m = matches.Count - 1; m >= 0; m--)
+        {
+            var match = matches[m];
+            int start = match.Index + match.Length;
+
+            // Check if separator is a valid 2-quote literal: '...',
+            var validLiteralMatch = Regex.Match(text[start..], @"^\s*'([^'()]{0,10})'\s*,");
+            if (validLiteralMatch.Success)
+            {
+                // Already a well-formed separator like '', ' ', ', ', '-', etc.
+                continue;
+            }
+
+            // Check if separator has malformed quotes with no delimiter characters (e.g. " '", "' ", "'", or just whitespace) before the next comma
+            var malformedMatch = Regex.Match(text[start..], @"^(\s*'?\s*'?\s*),");
+            if (malformedMatch.Success)
+            {
+                var sepText = malformedMatch.Groups[1].Value;
+                if (sepText.Count(c => c == '\'') < 2 && string.IsNullOrWhiteSpace(sepText.Replace("'", "")))
+                {
+                    syntaxIssues.Add("SEPLIST() separator argument has malformed quotes; assuming standard single-space separator (' ').");
+                    int replaceLen = malformedMatch.Length;
+                    text = text[..start] + "' ', " + text[(start + replaceLen)..].TrimStart();
+                }
+            }
+        }
+
+        return text;
+    }
+
+    private static string RepairUnbalancedSingleQuote(string text, out string issue, out List<string> validFixes)
+    {
+        issue = "Unclosed single-quoted text literal — missing an opening or closing single quote (').";
+        validFixes = new List<string>();
+        if (string.IsNullOrEmpty(text)) return text;
+
+        var zeroErrorCandidates = new List<(string Candidate, string Description, int Score)>();
+        var fallbackCandidates = new List<(string Candidate, string Description, int DiagCount)>();
+
+        // Phase 1: Test inserting a single quote (') at every plausible position.
+        // For a single-character deletion of a quote, inserting "'" at the deletion point restores the exact original.
+        for (int k = 0; k <= text.Length; k++)
+        {
+            // Skip inserting inside an identifier (e.g. between letters or digits)
+            if (k > 0 && k < text.Length && char.IsLetterOrDigit(text[k - 1]) && char.IsLetterOrDigit(text[k]))
+            {
+                continue;
+            }
+
+            var cand = text.Insert(k, "'");
+            var testDiags = new List<string>();
+            var tree = TryParseExpression(cand, isTopLevel: true, testDiags, out _);
+
+            if (tree != null && testDiags.Count == 0)
+            {
+                // Score candidates: prefer inserting quote immediately adjacent to delimiters like ',' or ')' or '('
+                // rather than leaving floating spaces (e.g. "'TRADE #2: ', " is preferred over "'TRADE #2:' , ")
+                int score = 0;
+                if (k < text.Length && (text[k] is ',' or ')' or '=' or '!' or '<' or '>')) score += 10;
+                if (k > 0 && (text[k - 1] is ',' or '(' or '=' or '!' or '<' or '>')) score += 10;
+                // Penalize leaving whitespace between quote and delimiter outside quotes (e.g. "'foo' ,")
+                if (k < text.Length && text[k] == ' ' && k + 1 < text.Length && (text[k + 1] is ',' or ')')) score -= 15;
+                if (k > 0 && text[k - 1] == ' ' && k - 2 >= 0 && (text[k - 2] is ',' or '(')) score -= 15;
+
+                string snippet = k < text.Length ? text[k..Math.Min(text.Length, k + 8)].Trim() : "";
+                string desc = !string.IsNullOrEmpty(snippet)
+                    ? $"Inserted missing single quote (') before '{snippet}'."
+                    : "Inserted missing closing single quote (') at the end.";
+
+                zeroErrorCandidates.Add((cand, desc, score));
+            }
+            else
+            {
+                fallbackCandidates.Add((cand, "Missing single quote (').", testDiags.Count));
+            }
+        }
+
+        // Phase 2: If no insertion worked, test removing an errant extra single quote
+        if (zeroErrorCandidates.Count == 0)
+        {
+            for (int q = 0; q < text.Length; q++)
+            {
+                if (text[q] != '\'') continue;
+                var cand = text.Remove(q, 1);
+                var testDiags = new List<string>();
+                var tree = TryParseExpression(cand, isTopLevel: true, testDiags, out _);
+                if (tree != null && testDiags.Count == 0)
+                {
+                    zeroErrorCandidates.Add((cand, "Removed extra single quote (').", 0));
+                }
+            }
+        }
+
+        if (zeroErrorCandidates.Count > 0)
+        {
+            var sortedCandidates = zeroErrorCandidates
+                .OrderByDescending(c => c.Score)
+                .Select(c => c.Candidate)
+                .Distinct()
+                .ToList();
+
+            validFixes = sortedCandidates;
+            var best = zeroErrorCandidates.OrderByDescending(c => c.Score).First();
+            issue = best.Description;
+            return best.Candidate;
+        }
+
+        // Phase 3: Fallback if compound errors exist
+        if (fallbackCandidates.Count > 0)
+        {
+            var bestFallback = fallbackCandidates.OrderBy(c => c.DiagCount).First();
+            issue = bestFallback.Description;
+            return bestFallback.Candidate;
+        }
+
         return text + "'";
     }
 
@@ -1218,7 +2015,7 @@ public static class FormgenCodeParser
         for (int i = 0; i < text.Length; i++)
         {
             char c = text[i];
-            if (c == '\'')
+            if (c == '\'' && !IsCharEscaped(text, i))
             {
                 inQuotes = !inQuotes;
                 continue;
@@ -1249,9 +2046,10 @@ public static class FormgenCodeParser
         int depth = 0;
         int removed = 0;
 
-        foreach (char c in text)
+        for (int i = 0; i < text.Length; i++)
         {
-            if (c == '\'')
+            char c = text[i];
+            if (c == '\'' && !IsCharEscaped(text, i))
             {
                 inQuotes = !inQuotes;
                 sb.Append(c);
@@ -1281,25 +2079,177 @@ public static class FormgenCodeParser
     private static string ReplaceWordAt(string text, int index, int length, string replacement) =>
         string.Concat(text.AsSpan(0, index), replacement, text.AsSpan(index + length));
 
-    private static string? TryRefineSuggestedFix(string? candidateFix)
+    private static string? TryRefineSuggestedFix(string? candidateFix, string originalInput)
     {
         if (string.IsNullOrWhiteSpace(candidateFix)) return null;
+        if (string.Equals(candidateFix.Trim(), originalInput.Trim(), StringComparison.Ordinal)) return null;
+
         var diags = new List<string>();
         var tree = TryParseExpression(candidateFix, isTopLevel: true, diags, out var secondStageFix);
         if (tree != null && diags.Count == 0)
         {
-            return tree.GetCode();
+            return candidateFix;
         }
-        if (!string.IsNullOrWhiteSpace(secondStageFix))
+        if (!string.IsNullOrWhiteSpace(secondStageFix) && !string.Equals(secondStageFix.Trim(), originalInput.Trim(), StringComparison.Ordinal))
         {
             var thirdDiags = new List<string>();
             var thirdTree = TryParseExpression(secondStageFix, isTopLevel: true, thirdDiags, out _);
             if (thirdTree != null && thirdDiags.Count == 0)
             {
-                return thirdTree.GetCode();
+                return secondStageFix;
             }
-            return secondStageFix;
+            return null;
         }
-        return candidateFix;
+        return null;
+    }
+
+    private sealed class ParenFrame
+    {
+        public string FunctionName { get; }
+        public int? MaxArgs { get; }
+        public int ArgCount { get; set; } = 1;
+        public int OpenParenIndex { get; }
+
+        public ParenFrame(string functionName, int? maxArgs, int openParenIndex)
+        {
+            FunctionName = functionName;
+            MaxArgs = maxArgs;
+            OpenParenIndex = openParenIndex;
+        }
+    }
+
+    private static string RepairMissingClosingParentheses(string text, int missingCount, out List<string> issues)
+    {
+        issues = [];
+        if (missingCount <= 0 || string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+        var sb = new StringBuilder(text.Length + missingCount + 8);
+        var stack = new Stack<ParenFrame>();
+        bool inQuotes = false;
+        int remainingMissing = missingCount;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c == '\'' && !IsCharEscaped(text, i))
+            {
+                inQuotes = !inQuotes;
+                sb.Append(c);
+                continue;
+            }
+
+            if (inQuotes)
+            {
+                sb.Append(c);
+                continue;
+            }
+
+            if (c == '(')
+            {
+                string fnName = ExtractPrecedingIdentifier(text, i);
+                int? maxArgs = null;
+                if (!string.IsNullOrEmpty(fnName))
+                {
+                    if (KnownFunctions.TryGetValue(fnName, out var spec))
+                    {
+                        maxArgs = spec.MaxArgs;
+                    }
+                    else if (CommonFunctionAliases.TryGetValue(fnName, out var alias) &&
+                             KnownFunctions.TryGetValue(alias, out var aliasSpec))
+                    {
+                        maxArgs = aliasSpec.MaxArgs;
+                    }
+                }
+
+                stack.Push(new ParenFrame(fnName, maxArgs, sb.Length));
+                sb.Append(c);
+                continue;
+            }
+
+            if (c == ')')
+            {
+                if (stack.Count > 0)
+                {
+                    stack.Pop();
+                }
+                sb.Append(c);
+                continue;
+            }
+
+            if (c == ',')
+            {
+                if (stack.Count > 0)
+                {
+                    var top = stack.Peek();
+                    top.ArgCount++;
+
+                    // If the current function has a known maximum argument count,
+                    // has reached that maximum (top.ArgCount > top.MaxArgs.Value),
+                    // there is an enclosing function on the stack to receive subsequent arguments (stack.Count > 1),
+                    // and there are missing closing parentheses to place:
+                    if (remainingMissing > 0 && stack.Count > 1 && top.MaxArgs.HasValue && top.ArgCount > top.MaxArgs.Value)
+                    {
+                        // Trim trailing whitespace from sb before inserting ')'
+                        int insertPos = sb.Length;
+                        while (insertPos > 0 && char.IsWhiteSpace(sb[insertPos - 1]))
+                        {
+                            insertPos--;
+                        }
+
+                        sb.Insert(insertPos, ')');
+                        stack.Pop();
+                        remainingMissing--;
+
+                        var fnDisplayName = !string.IsNullOrEmpty(top.FunctionName) ? $"'{top.FunctionName}()'" : "function";
+                        issues.Add($"Missing closing parenthesis ')' for {fnDisplayName} after argument {top.MaxArgs.Value}.");
+
+                        // Now the comma belongs to the parent frame on the stack (if any)
+                        if (stack.Count > 0)
+                        {
+                            stack.Peek().ArgCount++;
+                        }
+                    }
+                }
+
+                sb.Append(c);
+                continue;
+            }
+
+            sb.Append(c);
+        }
+
+        // Any remaining unclosed parentheses belong at the end of the expression
+        if (remainingMissing > 0)
+        {
+            sb.Append(new string(')', remainingMissing));
+            issues.Add($"Missing {remainingMissing} closing parenthesis '{new string(')', remainingMissing)}' at the end of the expression.");
+        }
+
+        return sb.ToString();
+    }
+
+    private static string ExtractPrecedingIdentifier(string text, int parenIndex)
+    {
+        int end = parenIndex - 1;
+        while (end >= 0 && char.IsWhiteSpace(text[end]))
+        {
+            end--;
+        }
+        if (end < 0) return string.Empty;
+
+        int start = end;
+        while (start >= 0 && (char.IsLetterOrDigit(text[start]) || text[start] == '_'))
+        {
+            start--;
+        }
+        start++;
+        if (start <= end)
+        {
+            return text[start..(end + 1)];
+        }
+        return string.Empty;
     }
 }

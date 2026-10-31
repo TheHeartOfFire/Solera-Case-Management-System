@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure;
 
 namespace AMFormsCST.Core.Utils;
 
@@ -84,6 +86,18 @@ public sealed record FormgenFieldInfo(
     }
 }
 
+public sealed record FormgenSmartFieldInfo(
+    string Name,
+    string Category,
+    string Description,
+    string? DefaultFormat = null)
+{
+    public string ShortSummary => $"{Name} ({Category}): {Description}";
+
+    public string VerboseTooltip =>
+        $"{Name}\nCategory: {Category}\nDescription: {Description}\n(Predefined FormGen Smart Field: reacts dynamically to deal data and prompts at print runtime)";
+}
+
 public sealed record FormgenFunctionDoc(
     string Prefix,
     string FullName,
@@ -141,6 +155,23 @@ public sealed record FormgenOperatorDoc(
             return sb.ToString();
         }
     }
+}
+
+public sealed record VmSafetyAnalysis(
+    bool IsVmSafe,
+    IReadOnlyList<int> DisallowedFields,
+    IReadOnlyList<string> DisallowedVariables,
+    IReadOnlyList<string> Violations)
+{
+    public static VmSafetyAnalysis Empty { get; } = new(false, [], [], ["No form loaded."]);
+
+    public string SummaryText => IsVmSafe
+        ? "Publishable to Vehicle Merchandising (Inventory Safe)"
+        : "Deal Form Only (Cannot publish to Vehicle Merchandising)";
+
+    public string GetSummary() => SummaryText;
+
+    public string BadgeText => IsVmSafe ? "VM Safe ✓" : "Deal Only";
 }
 
 public static class FormgenReferenceCatalog
@@ -624,13 +655,27 @@ public static class FormgenReferenceCatalog
                 "Condition1 AND Condition2",
                 "Returns TRUE only if both the Left condition and the Right condition evaluate to TRUE.",
                 "(F72 = 'U') AND (F69 < 50000)"),
+            ["&&"] = new(
+                "&&",
+                "Logical AND",
+                "Infix Logical AND (&&) — Both Conditions Must Be True",
+                "Condition1 && Condition2",
+                "Returns TRUE only if both the Left condition and the Right condition evaluate to TRUE.",
+                "(F72 = 'U') && (F69 < 50000)"),
             ["OR"] = new(
                 "OR",
                 "Logical OR",
                 "Infix Logical OR — Either Condition Can Be True",
                 "Condition1 OR Condition2",
                 "Returns TRUE if either the Left condition or the Right condition (or both) evaluates to TRUE.",
-                "(F72 = 'N') OR (F72 = 'D')")
+                "(F72 = 'N') OR (F72 = 'D')"),
+            ["||"] = new(
+                "||",
+                "Logical OR",
+                "Infix Logical OR (||) — Either Condition Can Be True",
+                "Condition1 || Condition2",
+                "Returns TRUE if either the Left condition or the Right condition (or both) evaluates to TRUE.",
+                "(F72 = 'N') || (F72 = 'D')")
         };
 
     public static FormgenFieldInfo? TryGetField(string? tokenOrNumber)
@@ -656,6 +701,240 @@ public static class FormgenReferenceCatalog
 
     public static FormgenOperatorDoc? TryGetOperatorDoc(string? op) =>
         !string.IsNullOrWhiteSpace(op) && Operators.TryGetValue(op.Trim(), out var doc) ? doc : null;
+
+    public static bool IsPredefinedSmartField(string? name) =>
+        !string.IsNullOrWhiteSpace(name) && PredefinedSmartFields.ContainsKey(name.Trim());
+
+    public static bool TryGetSmartField(string? name, out FormgenSmartFieldInfo? info)
+    {
+        info = null;
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        return PredefinedSmartFields.TryGetValue(name.Trim(), out info);
+    }
+
+    public static bool IsVmSafeField(int fieldNum) =>
+        VmFieldSubset.TryGetValue(fieldNum, out var vm) && vm.IsSafe;
+
+    private static readonly Regex FFieldRegex = new(@"\b[Ff](\d+)\b", RegexOptions.Compiled);
+    private static readonly Regex IdentRegex = new(@"\b[A-Za-z_][A-Za-z0-9_]*\b", RegexOptions.Compiled);
+
+    public static VmSafetyAnalysis CheckVehicleMerchandisingSafety(DotFormgen? form)
+    {
+        if (form == null) return VmSafetyAnalysis.Empty;
+
+        var disallowedFields = new HashSet<int>();
+        var disallowedVars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var violations = new List<string>();
+
+        if (form.TradePrompt)
+        {
+            violations.Add("Form requires a Trade-in prompt (Trade prompts cannot be answered in Vehicle Merchandising).");
+        }
+
+        if (form.SalesPersonPrompt)
+        {
+            violations.Add("Form requires a Salesperson prompt (Salesperson prompts cannot be answered in Vehicle Merchandising).");
+        }
+
+        void ScanText(string? expr)
+        {
+            if (string.IsNullOrWhiteSpace(expr)) return;
+
+            // 1. Scan for F-fields
+            foreach (Match m in FFieldRegex.Matches(expr))
+            {
+                if (int.TryParse(m.Groups[1].Value, out int fNum))
+                {
+                    if (!IsVmSafeField(fNum))
+                    {
+                        disallowedFields.Add(fNum);
+                    }
+                }
+            }
+
+            // 2. Scan for smart fields and deal variables
+            foreach (Match m in IdentRegex.Matches(expr))
+            {
+                string word = m.Value;
+                if (IsPredefinedSmartField(word))
+                {
+                    disallowedVars.Add(word);
+                }
+                else if (word.StartsWith("ACC", StringComparison.OrdinalIgnoreCase) ||
+                         word.StartsWith("HASACC", StringComparison.OrdinalIgnoreCase) ||
+                         word.Equals("ACCESSORIES_CHOSEN", StringComparison.OrdinalIgnoreCase))
+                {
+                    disallowedVars.Add(word);
+                }
+            }
+        }
+
+        // Scan all fields on all pages
+        foreach (var page in form.Pages)
+        {
+            foreach (var field in page.Fields)
+            {
+                ScanText(field.Expression);
+            }
+        }
+
+        // Scan all code lines (prompts, init, post screen)
+        foreach (var cl in form.CodeLines)
+        {
+            ScanText(cl.Expression);
+            ScanText(cl.Settings?.Variable);
+            ScanText(cl.PromptData?.Message);
+        }
+
+        if (disallowedFields.Count > 0)
+        {
+            var sortedFields = disallowedFields.OrderBy(f => f).ToList();
+            var fieldNames = sortedFields
+                .Select(f => $"F{f} ({TryGetField(f)?.Description ?? "Unknown Field"})")
+                .ToList();
+            violations.Add($"References {sortedFields.Count} non-VM field(s): {string.Join(", ", fieldNames)}");
+        }
+
+        if (disallowedVars.Count > 0)
+        {
+            var sortedVars = disallowedVars.OrderBy(v => v).ToList();
+            violations.Add($"References {sortedVars.Count} deal/buyer variable(s): {string.Join(", ", sortedVars)}");
+        }
+
+        bool isSafe = violations.Count == 0;
+        return new VmSafetyAnalysis(
+            isSafe,
+            disallowedFields.OrderBy(f => f).ToList(),
+            disallowedVars.OrderBy(v => v).ToList(),
+            violations);
+    }
+
+    public static IReadOnlyDictionary<string, FormgenSmartFieldInfo> PredefinedSmartFields { get; } =
+        BuildPredefinedSmartFields();
+
+    private static IReadOnlyDictionary<string, FormgenSmartFieldInfo> BuildPredefinedSmartFields()
+    {
+        var dict = new Dictionary<string, FormgenSmartFieldInfo>(StringComparer.OrdinalIgnoreCase);
+
+        void AddVar(string name, string category, string description, string? defaultFormat = null)
+        {
+            if (!dict.ContainsKey(name))
+            {
+                dict[name] = new FormgenSmartFieldInfo(name, category, description, defaultFormat);
+            }
+        }
+
+        // 1. Buyer, CoBuyer, Reg, and CoReg Predefined Variables (from FormGen BuyerCobuyerField)
+        var buyerBases = new (string BaseName, string Desc, string Format)[]
+        {
+            ("Name", "Full Name", "ALPHA80"),
+            ("NameStacked", "Full Name (Stacked format)", "ALPHA80"),
+            ("LastFirstStacked", "Last, First (Stacked format)", "ALPHA80"),
+            ("FirstStacked", "First Name (Stacked format)", "ALPHA35"),
+            ("MiddleStacked", "Middle Initial / Name (Stacked format)", "ALPHA1"),
+            ("LastStacked", "Last Name (Stacked format)", "ALPHA50"),
+            ("Addr", "Street Address", "ALPHA35"),
+            ("City", "City", "ALPHA21"),
+            ("St", "State Abbreviation", "ALPHA2"),
+            ("Zip", "ZIP Code", "ALPHA5"),
+            ("First", "First Name", "ALPHA35"),
+            ("Middle", "Middle Initial / Name", "ALPHA1"),
+            ("Last", "Last Name", "ALPHA50"),
+            ("LastFirst", "Last Name, First Name", "ALPHA50"),
+            ("DOB", "Date of Birth", "DATE"),
+            ("SSN", "Social Security / Tax ID Number", "SSN"),
+            ("Age", "Age in Years", "NUMERIC"),
+            ("DriversLic", "Driver's License Number", "ALPHA25"),
+            ("DriversLicSt", "Driver's License State", "ALPHA2"),
+            ("DriversLicExp", "Driver's License Expiration Date", "DATE"),
+            ("Email", "Email Address", "ALPHA60"),
+            ("County", "County", "ALPHA25"),
+            ("Phone", "Phone Number", "PHONE"),
+            ("Gender", "Gender Code", "ALPHA1")
+        };
+
+        var prefixes = new (string Prefix, string Role)[]
+        {
+            ("Buyer", "Buyer"),
+            ("Cobuyer", "Co-Buyer"),
+            ("Reg", "Registered Owner"),
+            ("CoReg", "Co-Registered Owner")
+        };
+
+        foreach (var (pfx, role) in prefixes)
+        {
+            foreach (var (baseName, desc, format) in buyerBases)
+            {
+                AddVar($"{pfx}{baseName}", "Buyer / Co-Buyer", $"{role} {desc}", format);
+            }
+        }
+
+        // Combined City/State/ZIP and Co-Buyer presence flags
+        AddVar("BUYERCITYSTATEZIP", "Buyer / Co-Buyer", "Buyer combined City, State, and ZIP", "BUYERCSZ");
+        AddVar("COBUYERCITYSTATEZIP", "Buyer / Co-Buyer", "Co-Buyer combined City, State, and ZIP", "BUYERCSZ");
+        AddVar("REGCITYSTATEZIP", "Buyer / Co-Buyer", "Registered Owner combined City, State, and ZIP", "BUYERCSZ");
+        AddVar("COREGCITYSTATEZIP", "Buyer / Co-Buyer", "Co-Registered Owner combined City, State, and ZIP", "BUYERCSZ");
+        AddVar("HASCOBUYER", "Buyer / Co-Buyer", "Flag indicating whether deal has an active Co-Buyer (TRUE/FALSE)", "BOOLEAN");
+
+        // 2. Accessory Predefined Variables (ACC01..ACC15 from FormGen AccessoryVar)
+        var accFields = new (string Suffix, string Desc, string Format)[]
+        {
+            ("RESERVE", "Reserve amount", "standardNumeric"),
+            ("COST", "Cost amount", "standardNumeric"),
+            ("FINLSECAP_DESC", "Finance / Lease capitalized description", "ALPHA40"),
+            ("FINLSECAP_PRICE", "Finance / Lease capitalized price", "standardNumeric"),
+            ("LSEINCEP_DESC", "Lease inception description", "ALPHA40"),
+            ("LSEINCEP_PRICE", "Lease inception price", "standardNumeric"),
+            ("LSE_CICODE", "Lease capitalize / inception indicator code", "ALPHA1"),
+            ("POSDESC", "Positional description", "ALPHA40"),
+            ("POSPRICE", "Positional retail price", "standardNumeric"),
+            ("RESIDUAL", "Residual value amount", "standardNumeric"),
+            ("RESIDUALIZE_YN", "Residualize flag (Y/N)", "ALPHA1"),
+            ("TAX", "Tax amount", "standardNumeric"),
+            ("TAXRATE", "Tax rate percentage", "standardNumeric"),
+            ("TAXYN", "Taxable flag (Y/N)", "ALPHA1"),
+            ("SPXCOMM", "Salesperson X commission amount", "standardNumeric"),
+            ("SPXPCT", "Salesperson X commission percentage", "standardNumeric"),
+            ("SP1COMM", "Salesperson 1 commission amount", "standardNumeric"),
+            ("SP1PCT", "Salesperson 1 commission percentage", "standardNumeric"),
+            ("SP2COMM", "Salesperson 2 commission amount", "standardNumeric"),
+            ("SP2PCT", "Salesperson 2 commission percentage", "standardNumeric"),
+            ("SP3COMM", "Salesperson 3 commission amount", "standardNumeric"),
+            ("SP3PCT", "Salesperson 3 commission percentage", "standardNumeric"),
+            ("SM1COMM", "Sales Manager 1 commission amount", "standardNumeric"),
+            ("SM1PCT", "Sales Manager 1 commission percentage", "standardNumeric"),
+            ("SM2COMM", "Sales Manager 2 commission amount", "standardNumeric"),
+            ("SM2PCT", "Sales Manager 2 commission percentage", "standardNumeric"),
+            ("FM1COMM", "Finance Manager 1 commission amount", "standardNumeric"),
+            ("FM1PCT", "Finance Manager 1 commission percentage", "standardNumeric"),
+            ("COMPNAME", "Vendor / Company name", "ALPHA40")
+        };
+
+        for (int i = 1; i <= 15; i++)
+        {
+            string idx = i.ToString("D2");
+            foreach (var (suffix, desc, format) in accFields)
+            {
+                AddVar($"ACC{idx}_{suffix}", "Accessory", $"Accessory {i} {desc}", format);
+            }
+            AddVar($"HASACC{idx}", "Accessory", $"Flag indicating whether Accessory {i} is selected on deal", "BOOLEAN");
+        }
+        AddVar("ACCESSORIES_CHOSEN", "Accessory", "Formatted block of all accessories selected for the deal", "ALPHA80");
+
+        // 3. Other Predefined Variables (from FormGen PredefinedVariable - only working underscored or formatted names)
+        AddVar("_DEALNUM", "Deal / General", "Deal Number (COBOL field F1)", "INTEGER");
+        AddVar("_BUYER_NAME_COBOL_FORMAT", "Buyer / Co-Buyer", "Buyer full name in raw COBOL format (F80)", "ALPHA80");
+        AddVar("_REBATE_AMOUNT", "Financial", "Total rebate amount applied to deal (F229)", "standardNumeric");
+        AddVar("_SALEDATE", "Deal / General", "Deal sale date (F456)", "DATE");
+        AddVar("_SUBCOMPANY", "Deal / General", "Dealership sub-company code (F2887)", "INTEGER");
+        AddVar("TOTALREBATEDESC", "Financial", "Total rebate description (evaluates IF(F229=0,'','REBATE'))", "ALPHA6");
+        AddVar("BUYERNAMES", "Buyer / Co-Buyer", "Buyer and Co-Buyer combined names (First Middle Last)", "ALPHA80");
+        AddVar("BUYERNAMES_LFM", "Buyer / Co-Buyer", "Buyer and Co-Buyer combined names (Last, First Middle)", "ALPHA80");
+        AddVar("REGNAMES", "Buyer / Co-Buyer", "Registered and Co-Registered owner combined names (First Middle Last)", "ALPHA80");
+        AddVar("REGNAMES_LFM", "Buyer / Co-Buyer", "Registered and Co-Registered owner combined names (Last, First Middle)", "ALPHA80");
+
+        return dict;
+    }
 
     private static IReadOnlyDictionary<int, FormgenFieldInfo> LoadMasterFields()
     {

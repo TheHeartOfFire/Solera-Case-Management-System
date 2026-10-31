@@ -808,10 +808,19 @@ public partial class CodeSnippetsViewModel : ViewModel
     {
         static string GetFunctionGroupKey(ICodeBase block)
         {
+            if (block is SmartFieldCode sf)
+            {
+                return sf.Category switch
+                {
+                    "Buyer / Co-Buyer" => "Variables_Buyer",
+                    "Accessory" => "Variables_Accessory",
+                    _ => "Variables_General"
+                };
+            }
             if (block is OperatorCode) return "Math";
             return block.Prefix switch
             {
-                "IF" or "XIF" or "XXIF" or "CASE" or "CASELTE" or "MATCHRANGE" or "CONTAINS" or "NOT" or "AND" or "OR" or "BLANK" or "NOTBLANK" => "Logic",
+                "IF" or "XIF" or "XXIF" or "CASE" or "CASELTE" or "MATCHRANGE" or "CONTAINS" or "NOT" or "AND" or "OR" => "Logic",
                 "TODAY" or "MONTH" or "DAY" or "YEAR" or "DATE" or "ADDDAYS" or "ADDWEEKS" or "ADDMONTHS" or "ADDYEARS" => "Date",
                 "SIN" or "COS" or "TAN" or "ASIN" or "ACOS" or "ATAN" or "SINH" or "COSH" or "TANH" or "RAD" or "DEG" => "Trig",
                 "ROUND" or "NUM" or "FLOOR" or "CEILING" or "ABS" or "MAX" or "MIN" or "SQRT" or "LOG" or "LOG10" or "RANDOM" or "PI" => "Math",
@@ -837,6 +846,10 @@ public partial class CodeSnippetsViewModel : ViewModel
         AddCategoryIfAny("Date", "Date & Time", "#1F0284C7", "#CC0284C7", "#FF0284C7", expanded: false);
         AddCategoryIfAny("Math", "Math & Numbers", "#1F2563EB", "#CC2563EB", "#FF2563EB", expanded: false);
         AddCategoryIfAny("Trig", "Trigonometry", "#1F4F46E5", "#CC4F46E5", "#FF4F46E5", expanded: false);
+        AddCategoryIfAny("Variables", "Fields & Variables", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
+        AddCategoryIfAny("Variables_General", "Smart Fields: Deal & Financial", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
+        AddCategoryIfAny("Variables_Buyer", "Smart Fields: Buyer / Co-Buyer", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
+        AddCategoryIfAny("Variables_Accessory", "Smart Fields: Accessories (ACC01–15)", "#1F10B981", "#CC10B981", "#FF10B981", expanded: false);
 
         FunctionCategories = new ObservableCollection<FunctionCategoryViewModel>(categories);
     }

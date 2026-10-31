@@ -29,6 +29,20 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
         public PromptDataSettings()
         {
         }
+
+        public PromptDataSettings(PromptDataSettings other)
+        {
+            Type = other.Type;
+            IsExpression = other.IsExpression;
+            Required = other.Required;
+            Length = other.Length;
+            DecimalPlaces = other.DecimalPlaces;
+            Delimiter = other.Delimiter;
+            AllowNegative = other.AllowNegative;
+            ForceUpperCase = other.ForceUpperCase;
+            MakeBuyerVars = other.MakeBuyerVars;
+            IncludeNoneAsOption = other.IncludeNoneAsOption;
+        }
         internal void GenerateXml(XmlWriter xml)
         {
             xml.WriteAttributeString("type", GetPromptType(Type));

@@ -6,6 +6,7 @@ using Xunit.Abstractions;
 
 namespace AMFormsCST.Test.Core.Services.IPC;
 
+[Xunit.Collection("IpcSocketTests")]
 public class NamedPipeIpcTests
 {
 

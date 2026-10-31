@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Attributes;
+using AMFormsCST.Core.Attributes;
 using AMFormsCST.Core.Interfaces.Attributes;
 using System.Drawing;
 using System.Xml;
@@ -54,6 +54,25 @@ namespace AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure
         }
 
         public FormFieldSettings() { }
+
+        public FormFieldSettings(FormFieldSettings other, int newId = 0)
+        {
+            ID = newId != 0 ? newId : other.ID;
+            Type = other.Type;
+            ImpactPosition = other.ImpactPosition;
+            LaserRect = other.LaserRect;
+            ManualSize = other.ManualSize;
+            FontSize = other.FontSize;
+            Bold = other.Bold;
+            ShrinkToFit = other.ShrinkToFit;
+            Length = other.Length;
+            DecimalPlaces = other.DecimalPlaces;
+            DisplayPartial = other.DisplayPartial;
+            StartIndex = other.StartIndex;
+            EndIndex = other.EndIndex;
+            Kearning = other.Kearning;
+            FontAlignment = other.FontAlignment;
+        }
 
         public FormFieldSettings(XmlAttributeCollection attributes)
         {

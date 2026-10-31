@@ -77,6 +77,12 @@ public class CodeBlocks : ICodeBlocks
         AddDefaultBlock(new FormgenFunctionCode("ADDMONTHS", "Add Months (ADDMONTHS)", ["Date", "Months"]));
         AddDefaultBlock(new FormgenFunctionCode("ADDYEARS", "Add Years (ADDYEARS)", ["Date", "Years"]));
 
+        // Fields & Variables (FormGen Predefined Smart Fields)
+        foreach (var smartField in FormgenReferenceCatalog.PredefinedSmartFields.Values)
+        {
+            AddDefaultBlock(new SmartFieldCode(smartField.Name));
+        }
+
         // Math & Conversion Functions + Operators
         AddDefaultBlock(new OperatorCode());
         AddDefaultBlock(new RoundCode());

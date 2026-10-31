@@ -1,6 +1,7 @@
 using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure;
+using AMFormsCST.Core.Utils;
 using AMFormsCST.Desktop.Interfaces;
 using AMFormsCST.Desktop.Models.FormgenUtilities;
 using AMFormsCST.Desktop.Models.FormgenUtilities.Grouping;
@@ -13,6 +14,9 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Xml;
+using MessageBoxButton = System.Windows.MessageBoxButton;
+using MessageBoxImage = System.Windows.MessageBoxImage;
+using SymbolRegular = Wpf.Ui.Controls.SymbolRegular;
 using static AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure.DotFormgen;
 
 namespace AMFormsCST.Desktop.ViewModels.Pages.Tools;
@@ -36,6 +40,11 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             if (SetProperty(ref _selectedNode, value))
             {
                 UpdateSelectedNodeProperties();
+                SyncSelectionWithTables(value?.Data);
+                OnPropertyChanged(nameof(HasSelectedFieldItem));
+                OnPropertyChanged(nameof(HasSelectedPromptItem));
+                OnPropertyChanged(nameof(HasSelectedNodeProperties));
+                OnPropertyChanged(nameof(IsFormOverviewActive));
                 _logger?.LogInfo($"Selected node changed: {value?.Header}");
             }
         }
@@ -43,6 +52,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasChanged))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedNodeProperties))]
     private ObservableCollection<DisplayProperty>? _selectedNodeProperties;
 
     [ObservableProperty]
@@ -65,6 +75,328 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
     [ObservableProperty]
     private bool _isBusy;
+
+    [ObservableProperty]
+    private bool _isSidebarVisible = false;
+
+    [ObservableProperty]
+    private int _selectedWorkspaceTabIndex = 0;
+
+    public bool IsPromptsTabSelected => SelectedWorkspaceTabIndex == 0;
+    public bool IsFieldsTabSelected => SelectedWorkspaceTabIndex == 1;
+    public bool IsHierarchyTabSelected => SelectedWorkspaceTabIndex == 2;
+    public bool IsCodeParserTabSelected => SelectedWorkspaceTabIndex == 3;
+    public bool IsTransferTabSelected => SelectedWorkspaceTabIndex == 4;
+
+    partial void OnSelectedWorkspaceTabIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsPromptsTabSelected));
+        OnPropertyChanged(nameof(IsFieldsTabSelected));
+        OnPropertyChanged(nameof(IsHierarchyTabSelected));
+        OnPropertyChanged(nameof(IsCodeParserTabSelected));
+        OnPropertyChanged(nameof(IsTransferTabSelected));
+    }
+
+    [RelayCommand]
+    private void SelectWorkspaceTab(string? tabIndexStr)
+    {
+        if (int.TryParse(tabIndexStr, out int idx))
+        {
+            SelectedWorkspaceTabIndex = idx;
+        }
+    }
+
+    // Center Workspace Collections
+    public ObservableCollection<PromptItemViewModel> PromptsList { get; } = [];
+    public ObservableCollection<FieldItemViewModel> FieldsList { get; } = [];
+    public ObservableCollection<FieldItemViewModel> FilteredFieldsList { get; } = [];
+    public ObservableCollection<string> AvailablePageFilters { get; } = [];
+
+    [ObservableProperty]
+    private string _selectedPageFilter = "All Pages";
+
+    private PromptItemViewModel? _selectedPromptItem;
+    public PromptItemViewModel? SelectedPromptItem
+    {
+        get => _selectedPromptItem;
+        set
+        {
+            if (SetProperty(ref _selectedPromptItem, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedPromptItem));
+                OnPropertyChanged(nameof(IsFormOverviewActive));
+                if (value?.CodeLine != null)
+                {
+                    SelectTreeNodeForData(value.CodeLine);
+                }
+            }
+        }
+    }
+
+    private FieldItemViewModel? _selectedFieldItem;
+    public FieldItemViewModel? SelectedFieldItem
+    {
+        get => _selectedFieldItem;
+        set
+        {
+            if (SetProperty(ref _selectedFieldItem, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedFieldItem));
+                OnPropertyChanged(nameof(IsFormOverviewActive));
+                if (value?.Field != null)
+                {
+                    SelectTreeNodeForData(value.Field);
+                }
+            }
+        }
+    }
+
+    public bool HasSelectedFieldItem => SelectedFieldItem != null;
+    public bool HasSelectedPromptItem => SelectedPromptItem != null;
+    public bool HasSelectedNodeProperties => SelectedNodeProperties != null && SelectedNodeProperties.Count > 0;
+    public bool IsFormOverviewActive => SelectedFieldItem == null && SelectedPromptItem == null;
+
+    [ObservableProperty]
+    private bool _isHierarchyInspectorVisible = true;
+
+    public string InspectorToggleText => IsHierarchyInspectorVisible ? "Hide Inspector" : "Show Inspector";
+
+    partial void OnIsHierarchyInspectorVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(InspectorToggleText));
+    }
+
+    [RelayCommand]
+    private void ToggleHierarchyInspector()
+    {
+        IsHierarchyInspectorVisible = !IsHierarchyInspectorVisible;
+    }
+
+    // Vehicle Merchandising (VM) Safety
+    [ObservableProperty]
+    private VmSafetyAnalysis? _vmSafety;
+
+    public bool IsVmSafe => VmSafety?.IsVmSafe ?? false;
+
+    public string VmSafetyBadgeText => !IsFileLoaded
+        ? "No Form"
+        : (IsVmSafe ? "VM Safe" : "Deal Only");
+
+    public SymbolRegular VmSafetySymbol => IsVmSafe ? SymbolRegular.Checkmark24 : SymbolRegular.Dismiss24;
+
+    public string VmSafetySummary => VmSafety?.GetSummary() ?? "No form loaded.";
+
+    public string VmSafetyTooltip => VmSafety == null
+        ? "Load a form to check Vehicle Merchandising compatibility."
+        : (VmSafety.IsVmSafe
+            ? "This form uses only Vehicle Merchandising supported fields and variables.\nIt is eligible to publish and print from Vehicle Merchandising."
+            : $"This form is Deal Only (Not VM Safe).\n\nReasons:\n" + string.Join("\n", VmSafety.Violations.Take(12)) + (VmSafety.Violations.Count > 12 ? $"\n...and {VmSafety.Violations.Count - 12} more" : ""));
+
+    public string VmSafetyBadgeBackground => !IsFileLoaded
+        ? "#20808080"
+        : (IsVmSafe ? "#20107C41" : "#20D83B01");
+
+    public string VmSafetyBadgeBorderBrush => !IsFileLoaded
+        ? "#40808080"
+        : (IsVmSafe ? "#60107C41" : "#60D83B01");
+
+    public string VmSafetyBadgeForeground => !IsFileLoaded
+        ? "#808080"
+        : (IsVmSafe ? "#107C41" : "#D83B01");
+
+    public int TotalPages => _supportTool?.FormgenUtils.ParsedFormgenFile?.Pages.Count ?? 0;
+    public int TotalFieldsCount => FieldsList.Count;
+    public int TotalPromptsCount => PromptsList.Count;
+    public string FormTypeDisplay => _supportTool?.FormgenUtils.ParsedFormgenFile?.FormType.ToString() ?? "Unknown";
+
+    public void UpdateVmSafety()
+    {
+        var form = _supportTool?.FormgenUtils.ParsedFormgenFile;
+        VmSafety = form != null ? FormgenReferenceCatalog.CheckVehicleMerchandisingSafety(form) : null;
+        OnPropertyChanged(nameof(IsVmSafe));
+        OnPropertyChanged(nameof(VmSafetyBadgeText));
+        OnPropertyChanged(nameof(VmSafetySymbol));
+        OnPropertyChanged(nameof(VmSafetySummary));
+        OnPropertyChanged(nameof(VmSafetyTooltip));
+        OnPropertyChanged(nameof(VmSafetyBadgeBackground));
+        OnPropertyChanged(nameof(VmSafetyBadgeBorderBrush));
+        OnPropertyChanged(nameof(VmSafetyBadgeForeground));
+        OnPropertyChanged(nameof(TotalPages));
+        OnPropertyChanged(nameof(TotalFieldsCount));
+        OnPropertyChanged(nameof(TotalPromptsCount));
+        OnPropertyChanged(nameof(FormTypeDisplay));
+    }
+
+    private bool? _areAllPromptsSelected = false;
+    public bool? AreAllPromptsSelected
+    {
+        get => _areAllPromptsSelected;
+        set
+        {
+            if (SetProperty(ref _areAllPromptsSelected, value))
+            {
+                if (value.HasValue)
+                {
+                    foreach (var p in PromptsList)
+                    {
+                        p.IsSelected = value.Value;
+                    }
+                    OnPropertyChanged(nameof(PromptsSelectedCountText));
+                }
+            }
+        }
+    }
+
+    public string PromptsSelectedCountText
+    {
+        get
+        {
+            int selected = PromptsList.Count(p => p.IsSelected);
+            return selected > 0
+                ? $"{selected} of {PromptsList.Count} Selected"
+                : $"{PromptsList.Count} Prompts & Code Lines";
+        }
+    }
+
+    public void UpdateAreAllPromptsSelected()
+    {
+        if (PromptsList.Count == 0)
+        {
+            _areAllPromptsSelected = false;
+        }
+        else
+        {
+            int count = PromptsList.Count(p => p.IsSelected);
+            if (count == 0)
+                _areAllPromptsSelected = false;
+            else if (count == PromptsList.Count)
+                _areAllPromptsSelected = true;
+            else
+                _areAllPromptsSelected = null;
+        }
+        OnPropertyChanged(nameof(AreAllPromptsSelected));
+        OnPropertyChanged(nameof(PromptsSelectedCountText));
+    }
+
+    private bool? _areAllFieldsSelected = false;
+    public bool? AreAllFieldsSelected
+    {
+        get => _areAllFieldsSelected;
+        set
+        {
+            if (SetProperty(ref _areAllFieldsSelected, value))
+            {
+                if (value.HasValue)
+                {
+                    foreach (var f in FilteredFieldsList)
+                    {
+                        f.IsSelected = value.Value;
+                    }
+                    OnPropertyChanged(nameof(FieldsSelectedCountText));
+                }
+            }
+        }
+    }
+
+    public string FieldsSelectedCountText
+    {
+        get
+        {
+            int selected = FilteredFieldsList.Count(f => f.IsSelected);
+            return selected > 0
+                ? $"{selected} of {FilteredFieldsList.Count} Selected"
+                : $"{FilteredFieldsList.Count} Fields";
+        }
+    }
+
+    public void UpdateAreAllFieldsSelected()
+    {
+        if (FilteredFieldsList.Count == 0)
+        {
+            _areAllFieldsSelected = false;
+        }
+        else
+        {
+            int count = FilteredFieldsList.Count(f => f.IsSelected);
+            if (count == 0)
+                _areAllFieldsSelected = false;
+            else if (count == FilteredFieldsList.Count)
+                _areAllFieldsSelected = true;
+            else
+                _areAllFieldsSelected = null;
+        }
+        OnPropertyChanged(nameof(AreAllFieldsSelected));
+        OnPropertyChanged(nameof(FieldsSelectedCountText));
+    }
+
+    private bool? _areAllTransferPromptsSelected = false;
+    public bool? AreAllTransferPromptsSelected
+    {
+        get => _areAllTransferPromptsSelected;
+        set
+        {
+            if (SetProperty(ref _areAllTransferPromptsSelected, value))
+            {
+                if (value.HasValue)
+                {
+                    foreach (var p in TransferSourcePrompts)
+                    {
+                        p.IsSelected = value.Value;
+                    }
+                }
+            }
+        }
+    }
+
+    public void UpdateAreAllTransferPromptsSelected()
+    {
+        if (TransferSourcePrompts.Count == 0)
+        {
+            _areAllTransferPromptsSelected = false;
+        }
+        else
+        {
+            int count = TransferSourcePrompts.Count(p => p.IsSelected);
+            if (count == 0)
+                _areAllTransferPromptsSelected = false;
+            else if (count == TransferSourcePrompts.Count)
+                _areAllTransferPromptsSelected = true;
+            else
+                _areAllTransferPromptsSelected = null;
+        }
+        OnPropertyChanged(nameof(AreAllTransferPromptsSelected));
+    }
+
+    // Code Parser & Diagnostics
+    public ObservableCollection<FormCodeValidationItem> CodeValidationIssues { get; } = [];
+
+    [ObservableProperty]
+    private string _codeValidationSummary = "No scan performed.";
+
+    [ObservableProperty]
+    private bool _isCodeScanning;
+
+    [ObservableProperty]
+    private string _scratchpadExpression = string.Empty;
+
+    [ObservableProperty]
+    private FormgenParseResult? _scratchpadResult;
+
+    // Cross-Form Transfer
+    [ObservableProperty]
+    private string? _transferSourceFilePath;
+
+    [ObservableProperty]
+    private string _transferSourceTitle = string.Empty;
+
+    public ObservableCollection<PromptItemViewModel> TransferSourcePrompts { get; } = [];
+    public ObservableCollection<int> TransferSourcePages { get; } = [];
+
+    [ObservableProperty]
+    private int _selectedTransferSourcePage = 1;
+
+    [ObservableProperty]
+    private int _selectedTransferTargetPage = 1;
 
     public bool HasChanged
     {
@@ -115,8 +447,6 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         }
         catch (Exception ex)
         {
-            var resources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
-
             var fallbackUuid = Guid.NewGuid().ToString();
             string errorMessage = ex is FileNotFoundException
                 ? "Sample resource file not found. Check Build Action and resource name."
@@ -159,6 +489,8 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
         rootNode.IsSelected = true;
         rootNode.IsExpanded = true;
+
+        PopulateInteractiveLists(sampleFormgen);
     }
     #endregion
 
@@ -171,6 +503,63 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         _logger = logger;
         _supportTool.FormgenUtils.FormgenFileChanged += (s, e) => OnPropertyChanged(nameof(HasChanged));
         _logger?.LogInfo("FormgenUtilitiesViewModel initialized.");
+    }
+
+    public event Action<PromptItemViewModel>? RequestScrollToPrompt;
+    public event Action<FieldItemViewModel>? RequestScrollToField;
+
+    [RelayCommand]
+    public void NavigateToTreeNode(TreeItemNodeViewModel? node)
+    {
+        if (node?.Data == null) return;
+
+        if (node.Data is CodeLine codeLine)
+        {
+            SelectedWorkspaceTabIndex = 0; // Prompts & Code tab
+            var target = PromptsList.FirstOrDefault(c => c.CodeLine == codeLine);
+            if (target != null)
+            {
+                SelectedPromptItem = target;
+                RequestScrollToPrompt?.Invoke(target);
+            }
+        }
+        else if (node.Data is CodeLineGroup codeGroup)
+        {
+            SelectedWorkspaceTabIndex = 0;
+            var target = PromptsList.FirstOrDefault(c => c.Type == codeGroup.Type);
+            if (target != null)
+            {
+                SelectedPromptItem = target;
+                RequestScrollToPrompt?.Invoke(target);
+            }
+        }
+        else if (node.Data is FormField field)
+        {
+            SelectedWorkspaceTabIndex = 1; // Form Fields tab
+            var target = FieldsList.FirstOrDefault(f => f.Field == field);
+            if (target != null)
+            {
+                SelectedFieldItem = target;
+                RequestScrollToField?.Invoke(target);
+            }
+        }
+        else if (node.Data is FormPage page)
+        {
+            SelectedWorkspaceTabIndex = 1;
+            var pageNum = page.Settings?.PageNumber ?? 1;
+            var target = FieldsList.FirstOrDefault(f => f.PageNumber == pageNum);
+            if (target != null)
+            {
+                SelectedFieldItem = target;
+                RequestScrollToField?.Invoke(target);
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleSidebar()
+    {
+        IsSidebarVisible = !IsSidebarVisible;
     }
 
     [RelayCommand]
@@ -280,12 +669,9 @@ public partial class FormgenUtilitiesViewModel : ViewModel
     {
         if (!IsFileLoaded || string.IsNullOrWhiteSpace(FilePath) || IsPushing) return;
 
-        // The button stays disabled while sending and briefly after "Sent", which limits rapid repeat pushes
-        // (each push saves to disk and triggers a full form reload in FormGen).
         IsPushing = true;
         PushButtonText = PushSendingText;
         IsBusy = true;
-        bool? success = null;
         try
         {
             if (_supportTool?.FormgenUtils.ParsedFormgenFile is not null)
@@ -298,7 +684,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
             var path = FilePath;
             var uuid = Uuid;
             var logger = _logger;
-            success = await Task.Run(() => FormGenLauncherHelper.PushFormToFormGen(path, uuid, formgenBatPath, logger));
+            var success = await Task.Run(() => FormGenLauncherHelper.PushFormToFormGen(path, uuid, formgenBatPath, logger));
 
             if (success == true)
             {
@@ -354,7 +740,16 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         TreeViewNodes.Clear();
         SelectedNode = null;
         SelectedNodeProperties = null;
+        PromptsList.Clear();
+        FieldsList.Clear();
+        FilteredFieldsList.Clear();
+        AvailablePageFilters.Clear();
+        CodeValidationIssues.Clear();
+        CodeValidationSummary = "No scan performed.";
+        SelectedPromptItem = null;
+        SelectedFieldItem = null;
         _supportTool?.FormgenUtils.CloseFile();
+        UpdateVmSafety();
         _logger?.LogInfo("Formgen file cleared.");
     }
 
@@ -366,9 +761,6 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         _logger?.LogInfo($"UUID regenerated: {Uuid}");
     }
 
-    /// <summary>
-    /// Loads a .formgen file directly from an external file path (e.g. from Windows Explorer or IPC).
-    /// </summary>
     public void LoadFormgenFile(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !_fileSystem.FileExists(path)) return;
@@ -386,7 +778,7 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         TreeViewNodes.Clear();
         SelectedNode = null;
 
-        var path = filePath is not null ? filePath : FilePath;
+        var path = filePath ?? FilePath;
 
         try
         {
@@ -411,6 +803,10 @@ public partial class FormgenUtilitiesViewModel : ViewModel
                 rootNode.IsSelected = true;
                 rootNode.IsExpanded = true;
             }
+
+            PopulateInteractiveLists(fileData);
+            UpdateVmSafety();
+
             _logger?.LogInfo($"Formgen file content loaded: {path}");
         }
         catch (Exception ex)
@@ -423,6 +819,518 @@ public partial class FormgenUtilitiesViewModel : ViewModel
         {
             IsBusy = false;
         }
+    }
+
+    private void PopulateInteractiveLists(DotFormgen fileData)
+    {
+        PromptsList.Clear();
+        foreach (var cl in fileData.CodeLines)
+        {
+            PromptsList.Add(new PromptItemViewModel(
+                cl,
+                () =>
+                {
+                    OnPropertyChanged(nameof(HasChanged));
+                    SelectedNode?.RefreshHeader();
+                },
+                UpdateAreAllPromptsSelected));
+        }
+        UpdateAreAllPromptsSelected();
+
+        FieldsList.Clear();
+        AvailablePageFilters.Clear();
+        AvailablePageFilters.Add("All Pages");
+
+        for (int pIdx = 0; pIdx < fileData.Pages.Count; pIdx++)
+        {
+            var page = fileData.Pages[pIdx];
+            int pageNum = page.Settings?.PageNumber ?? (pIdx + 1);
+            AvailablePageFilters.Add($"Page {pageNum}");
+            foreach (var f in page.Fields)
+            {
+                FieldsList.Add(new FieldItemViewModel(
+                    f,
+                    page,
+                    () =>
+                    {
+                        OnPropertyChanged(nameof(HasChanged));
+                        SelectedNode?.RefreshHeader();
+                    },
+                    UpdateAreAllFieldsSelected));
+            }
+        }
+
+        SelectedPageFilter = "All Pages";
+        ApplyPageFilter();
+    }
+
+    partial void OnSelectedPageFilterChanged(string value)
+    {
+        ApplyPageFilter();
+    }
+
+    private void ApplyPageFilter()
+    {
+        FilteredFieldsList.Clear();
+        if (string.IsNullOrEmpty(SelectedPageFilter) || SelectedPageFilter == "All Pages")
+        {
+            foreach (var f in FieldsList) FilteredFieldsList.Add(f);
+        }
+        else if (SelectedPageFilter.StartsWith("Page "))
+        {
+            if (int.TryParse(SelectedPageFilter.Substring(5).Trim(), out int pageNum))
+            {
+                foreach (var f in FieldsList.Where(field => field.PageNumber == pageNum))
+                    FilteredFieldsList.Add(f);
+            }
+        }
+        UpdateAreAllFieldsSelected();
+    }
+
+    private void SyncSelectionWithTables(object? data)
+    {
+        if (data is FormField field)
+        {
+            var match = FieldsList.FirstOrDefault(f => f.Field == field);
+            if (match != null && _selectedFieldItem != match)
+            {
+                _selectedFieldItem = match;
+                OnPropertyChanged(nameof(SelectedFieldItem));
+            }
+            _selectedPromptItem = null;
+            OnPropertyChanged(nameof(SelectedPromptItem));
+        }
+        else if (data is CodeLine line)
+        {
+            var match = PromptsList.FirstOrDefault(p => p.CodeLine == line);
+            if (match != null && _selectedPromptItem != match)
+            {
+                _selectedPromptItem = match;
+                OnPropertyChanged(nameof(SelectedPromptItem));
+            }
+            _selectedFieldItem = null;
+            OnPropertyChanged(nameof(SelectedFieldItem));
+        }
+        else
+        {
+            _selectedFieldItem = null;
+            _selectedPromptItem = null;
+            OnPropertyChanged(nameof(SelectedFieldItem));
+            OnPropertyChanged(nameof(SelectedPromptItem));
+        }
+        OnPropertyChanged(nameof(HasSelectedFieldItem));
+        OnPropertyChanged(nameof(HasSelectedPromptItem));
+        OnPropertyChanged(nameof(IsFormOverviewActive));
+    }
+
+    private void SelectTreeNodeForData(object targetData)
+    {
+        var node = FindTreeNode(TreeViewNodes, targetData);
+        if (node != null && node != SelectedNode)
+        {
+            node.IsSelected = true;
+        }
+    }
+
+    private static TreeItemNodeViewModel? FindTreeNode(IEnumerable<TreeItemNodeViewModel> nodes, object targetData)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Data == targetData) return node;
+            var found = FindTreeNode(node.Children, targetData);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    #region Prompt Manipulation Commands
+    [RelayCommand]
+    private void CloneSelectedPrompts(object? commandParameter = null)
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        var selectedFromCheckboxes = PromptsList.Where(p => p.IsSelected).Select(p => p.CodeLine);
+        var selectedFromGrid = (commandParameter as System.Collections.IList)?
+            .OfType<PromptItemViewModel>()
+            .Select(p => p.CodeLine) ?? Enumerable.Empty<CodeLine>();
+
+        var selected = selectedFromCheckboxes.Concat(selectedFromGrid).Distinct().ToArray();
+        if (selected.Length == 0 && SelectedPromptItem != null)
+        {
+            selected = [SelectedPromptItem.CodeLine];
+        }
+
+        if (selected.Length == 0) return;
+
+        _supportTool.FormgenUtils.ClonePrompt(selected);
+        RefreshTreeAndLists();
+        _logger?.LogInfo($"Cloned {selected.Length} prompts.");
+    }
+
+    [RelayCommand]
+    private void DeleteSelectedPrompts(object? commandParameter = null)
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        var selectedFromCheckboxes = PromptsList.Where(p => p.IsSelected).Select(p => p.CodeLine);
+        var selectedFromGrid = (commandParameter as System.Collections.IList)?
+            .OfType<PromptItemViewModel>()
+            .Select(p => p.CodeLine) ?? Enumerable.Empty<CodeLine>();
+
+        var selected = selectedFromCheckboxes.Concat(selectedFromGrid).Distinct().ToList();
+        if (selected.Count == 0 && SelectedPromptItem != null)
+        {
+            selected.Add(SelectedPromptItem.CodeLine);
+        }
+
+        if (selected.Count == 0) return;
+
+        _supportTool.FormgenUtils.DeletePrompts(selected);
+        RefreshTreeAndLists();
+        _logger?.LogInfo($"Deleted {selected.Count} prompts.");
+    }
+
+    [RelayCommand]
+    private void MoveSelectedPromptUp()
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null || SelectedPromptItem == null) return;
+
+        _supportTool.FormgenUtils.MovePrompt(SelectedPromptItem.CodeLine, moveUp: true);
+        RefreshTreeAndLists();
+    }
+
+    [RelayCommand]
+    private void MoveSelectedPromptDown()
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null || SelectedPromptItem == null) return;
+
+        _supportTool.FormgenUtils.MovePrompt(SelectedPromptItem.CodeLine, moveUp: false);
+        RefreshTreeAndLists();
+    }
+    #endregion
+
+    #region Field Manipulation Commands
+    [RelayCommand]
+    private void CloneSelectedFields(object? commandParameter = null)
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        var selectedFromCheckboxes = FilteredFieldsList.Where(f => f.IsSelected);
+        var selectedFromGrid = (commandParameter as System.Collections.IList)?
+            .OfType<FieldItemViewModel>() ?? Enumerable.Empty<FieldItemViewModel>();
+
+        var selected = selectedFromCheckboxes.Concat(selectedFromGrid).Distinct().ToList();
+        if (selected.Count == 0 && SelectedFieldItem != null)
+        {
+            selected.Add(SelectedFieldItem);
+        }
+
+        if (selected.Count == 0) return;
+
+        foreach (var item in selected)
+        {
+            _supportTool.FormgenUtils.CloneField(item.Page, item.Field);
+        }
+
+        RefreshTreeAndLists();
+        _logger?.LogInfo($"Cloned {selected.Count} fields.");
+    }
+
+    [RelayCommand]
+    private void DeleteSelectedFields(object? commandParameter = null)
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        var selectedFromCheckboxes = FilteredFieldsList.Where(f => f.IsSelected);
+        var selectedFromGrid = (commandParameter as System.Collections.IList)?
+            .OfType<FieldItemViewModel>() ?? Enumerable.Empty<FieldItemViewModel>();
+
+        var selected = selectedFromCheckboxes.Concat(selectedFromGrid).Distinct().ToList();
+        if (selected.Count == 0 && SelectedFieldItem != null)
+        {
+            selected.Add(SelectedFieldItem);
+        }
+
+        if (selected.Count == 0) return;
+
+        foreach (var group in selected.GroupBy(item => item.Page))
+        {
+            _supportTool.FormgenUtils.DeleteFields(group.Key, group.Select(i => i.Field));
+        }
+
+        RefreshTreeAndLists();
+        _logger?.LogInfo($"Deleted {selected.Count} fields.");
+    }
+
+    [RelayCommand]
+    private void AlignFields(string modeStr)
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+        if (!Enum.TryParse<FieldAlignmentMode>(modeStr, true, out var mode)) return;
+
+        var selected = FilteredFieldsList.Where(f => f.IsSelected).Select(f => f.Field).ToList();
+        if (selected.Count < 2) return;
+
+        _supportTool.FormgenUtils.AlignFields(selected, mode);
+        foreach (var f in FilteredFieldsList.Where(f => f.IsSelected))
+        {
+            f.RefreshProperties();
+        }
+        OnPropertyChanged(nameof(HasChanged));
+        UpdateSelectedNodeProperties();
+    }
+
+    [RelayCommand]
+    private void DistributeFields(string modeStr)
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+        if (!Enum.TryParse<FieldDistributionMode>(modeStr, true, out var mode)) return;
+
+        var selected = FilteredFieldsList.Where(f => f.IsSelected).Select(f => f.Field).ToList();
+        if (selected.Count < 3) return;
+
+        _supportTool.FormgenUtils.DistributeFields(selected, mode);
+        foreach (var f in FilteredFieldsList.Where(f => f.IsSelected))
+        {
+            f.RefreshProperties();
+        }
+        OnPropertyChanged(nameof(HasChanged));
+        UpdateSelectedNodeProperties();
+    }
+
+    [RelayCommand]
+    private void BulkToggleBold()
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        var targets = FilteredFieldsList.Where(f => f.IsSelected).ToList();
+        if (targets.Count == 0) targets = FilteredFieldsList.ToList();
+        if (targets.Count == 0) return;
+
+        bool anyBold = targets.Any(f => f.Bold);
+        bool targetBold = !anyBold;
+
+        _supportTool.FormgenUtils.BulkSetFieldProperties(targets.Select(f => f.Field), bold: targetBold);
+        foreach (var f in targets) f.RefreshProperties();
+        OnPropertyChanged(nameof(HasChanged));
+        UpdateSelectedNodeProperties();
+    }
+
+    [RelayCommand]
+    private void BulkSetFontSize(object sizeParam)
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+        int size = sizeParam is int s ? s : (int.TryParse(sizeParam?.ToString(), out int parsed) ? parsed : 10);
+
+        var targets = FilteredFieldsList.Where(f => f.IsSelected).ToList();
+        if (targets.Count == 0) targets = FilteredFieldsList.ToList();
+        if (targets.Count == 0) return;
+
+        _supportTool.FormgenUtils.BulkSetFieldProperties(targets.Select(f => f.Field), fontSize: size);
+        foreach (var f in targets) f.RefreshProperties();
+        OnPropertyChanged(nameof(HasChanged));
+        UpdateSelectedNodeProperties();
+    }
+
+    [RelayCommand]
+    private void BulkSetFontAlignment(string alignStr)
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+        if (!Enum.TryParse<FormFieldSettings.Alignment>(alignStr, true, out var align)) return;
+
+        var targets = FilteredFieldsList.Where(f => f.IsSelected).ToList();
+        if (targets.Count == 0) targets = FilteredFieldsList.ToList();
+        if (targets.Count == 0) return;
+
+        _supportTool.FormgenUtils.BulkSetFieldProperties(targets.Select(f => f.Field), fontAlignment: align);
+        foreach (var f in targets) f.RefreshProperties();
+        OnPropertyChanged(nameof(HasChanged));
+        UpdateSelectedNodeProperties();
+    }
+
+    [RelayCommand]
+    private void AlignAcrossPages()
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        int alignedCount = _supportTool.FormgenUtils.AlignFieldsAcrossPages(sourcePageIndex: 0);
+        foreach (var f in FieldsList) f.RefreshProperties();
+        OnPropertyChanged(nameof(HasChanged));
+        _dialogService.ShowMessageBox($"Synchronized {alignedCount} matching field coordinates across pages.", "Align Across Pages", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+    #endregion
+
+    #region Code Parsing & Diagnostic Commands
+    [RelayCommand]
+    private void ScanAllCode()
+    {
+        if (_supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        IsCodeScanning = true;
+        CodeValidationIssues.Clear();
+
+        int totalInspected = 0;
+        int issuesFound = 0;
+
+        var file = _supportTool.FormgenUtils.ParsedFormgenFile;
+
+        // Inspect Code Lines
+        foreach (var cl in file.CodeLines)
+        {
+            var expr = cl.Expression;
+            if (!string.IsNullOrWhiteSpace(expr))
+            {
+                totalInspected++;
+                var result = FormgenCodeParser.Parse(expr);
+                if (result.Status != FormgenParseStatus.Valid)
+                {
+                    issuesFound++;
+                    var loc = $"{cl.Settings?.Type} Line (Var: {cl.Settings?.Variable ?? "none"})";
+                    CodeValidationIssues.Add(new FormCodeValidationItem(loc, "CodeLine", expr, cl, result));
+                }
+            }
+        }
+
+        // Inspect Page Fields
+        for (int p = 0; p < file.Pages.Count; p++)
+        {
+            var page = file.Pages[p];
+            foreach (var f in page.Fields)
+            {
+                var expr = f.Expression;
+                if (!string.IsNullOrWhiteSpace(expr))
+                {
+                    totalInspected++;
+                    var result = FormgenCodeParser.Parse(expr);
+                    if (result.Status != FormgenParseStatus.Valid)
+                    {
+                        issuesFound++;
+                        var loc = $"Page {p + 1} - Field #{f.Settings?.ID}";
+                        CodeValidationIssues.Add(new FormCodeValidationItem(loc, "Field", expr, f, result));
+                    }
+                }
+            }
+        }
+
+        IsCodeScanning = false;
+        CodeValidationSummary = issuesFound == 0
+            ? $"Scan complete: Inspected {totalInspected} expressions. All code is valid FormGen syntax ✓"
+            : $"Scan complete: Inspected {totalInspected} expressions. Found {issuesFound} issue(s) needing attention.";
+    }
+
+    [RelayCommand]
+    private void ApplyCodeFix(FormCodeValidationItem? item)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.SuggestedFix)) return;
+
+        if (item.TargetObject is FormField f)
+        {
+            f.Expression = item.SuggestedFix;
+            var vm = FieldsList.FirstOrDefault(field => field.Field == f);
+            vm?.RefreshProperties();
+        }
+        else if (item.TargetObject is CodeLine cl)
+        {
+            cl.Expression = item.SuggestedFix;
+            var vm = PromptsList.FirstOrDefault(prompt => prompt.CodeLine == cl);
+            vm?.RefreshProperties();
+        }
+
+        var recheck = FormgenCodeParser.Parse(item.SuggestedFix);
+        item.Expression = item.SuggestedFix;
+        item.UpdateResult(recheck);
+
+        OnPropertyChanged(nameof(HasChanged));
+        UpdateSelectedNodeProperties();
+    }
+
+    [RelayCommand]
+    private void ValidateScratchpad()
+    {
+        if (string.IsNullOrWhiteSpace(ScratchpadExpression))
+        {
+            ScratchpadResult = null;
+            return;
+        }
+
+        ScratchpadResult = FormgenCodeParser.Parse(ScratchpadExpression);
+    }
+    #endregion
+
+    #region Cross-Form Transfer Commands
+    [RelayCommand]
+    private void BrowseTransferSource()
+    {
+        var filter = "Formgen Files (*.formgen)|*.formgen|All files (*.*)|*.*";
+        var selectedFile = _dialogService.ShowOpenFileDialog(filter);
+        if (string.IsNullOrEmpty(selectedFile) || !_fileSystem.FileExists(selectedFile)) return;
+
+        TransferSourceFilePath = selectedFile;
+        try
+        {
+            var content = _fileSystem.ReadAllText(selectedFile);
+            var doc = new XmlDocument();
+            doc.LoadXml(content);
+            if (doc.DocumentElement == null) return;
+            var sourceFormgen = new DotFormgen(doc.DocumentElement);
+
+            TransferSourceTitle = sourceFormgen.Title ?? _fileSystem.GetFileNameWithoutExtension(selectedFile);
+            TransferSourcePrompts.Clear();
+            foreach (var p in sourceFormgen.CodeLines.Where(cl => cl.Settings?.Type == AMFormsCST.Core.Types.FormgenUtils.FormgenFileStructure.CodeLineSettings.CodeType.PROMPT))
+            {
+                TransferSourcePrompts.Add(new PromptItemViewModel(p, null, UpdateAreAllTransferPromptsSelected));
+            }
+            UpdateAreAllTransferPromptsSelected();
+
+            TransferSourcePages.Clear();
+            for (int i = 1; i <= sourceFormgen.Pages.Count; i++)
+            {
+                TransferSourcePages.Add(i);
+            }
+            if (TransferSourcePages.Count > 0) SelectedTransferSourcePage = 1;
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowMessageBox($"Failed to read source form: {ex.Message}", "Transfer Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
+    private void ExecutePromptTransfer()
+    {
+        if (string.IsNullOrEmpty(TransferSourceFilePath) || _supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        var selectedVars = TransferSourcePrompts.Where(p => p.IsSelected).Select(p => p.Variable).ToList();
+        int imported = _supportTool.FormgenUtils.ImportPromptsFrom(TransferSourceFilePath, selectedVars.Count > 0 ? selectedVars : null);
+
+        RefreshTreeAndLists();
+        _dialogService.ShowMessageBox($"Imported {imported} prompts from source form.", "Transfer Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    [RelayCommand]
+    private void ExecuteFieldTransfer()
+    {
+        if (string.IsNullOrEmpty(TransferSourceFilePath) || _supportTool?.FormgenUtils.ParsedFormgenFile == null) return;
+
+        int imported = _supportTool.FormgenUtils.ImportFieldsFrom(TransferSourceFilePath, SelectedTransferSourcePage, SelectedTransferTargetPage);
+        RefreshTreeAndLists();
+        _dialogService.ShowMessageBox($"Imported {imported} fields from Page {SelectedTransferSourcePage} to Page {SelectedTransferTargetPage}.", "Transfer Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+    #endregion
+
+    private void RefreshTreeAndLists()
+    {
+        var file = _supportTool?.FormgenUtils.ParsedFormgenFile;
+        if (file == null) return;
+
+        TreeViewNodes.Clear();
+        var rootNode = new TreeItemNodeViewModel(file, this, _logger);
+        TreeViewNodes.Add(rootNode);
+        rootNode.IsExpanded = true;
+
+        PopulateInteractiveLists(file);
+        UpdateVmSafety();
+        OnPropertyChanged(nameof(HasChanged));
     }
 
     private void UpdateSelectedNodeProperties()
@@ -459,38 +1367,45 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
         var displayProps = new List<DisplayProperty>();
 
-        foreach (var p in properties.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
+        if (properties is FieldProperties fieldProps)
         {
-            if (p.Name.Equals("Settings") || p.Name.Equals("PromptData")) continue;
-
-            bool isReadOnly = readOnlyNames.Contains(p.Name) || !p.CanWrite;
-            displayProps.Add(new DisplayProperty(properties, p, isReadOnly, _logger));
+            displayProps.AddRange(fieldProps.GetDisplayProperties());
         }
-
-        if (properties.Settings != null)
+        else
         {
-            foreach (var p in properties.Settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
+            foreach (var p in properties.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
             {
-                if (p.Name == "LaserRect") continue;
+                if (p.Name.Equals("Settings") || p.Name.Equals("PromptData")) continue;
 
                 bool isReadOnly = readOnlyNames.Contains(p.Name) || !p.CanWrite;
-                displayProps.Add(new DisplayProperty(properties.Settings, p, isReadOnly, _logger));
-            }
-        }
-
-        if (properties is CodeLineProperties props && props.PromptData is not null)
-        {
-            foreach (var p in props.PromptData.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
-            {
-                if (p.Name.Equals("Settings")) continue;
-                displayProps.Add(new DisplayProperty(props.PromptData, p, false, _logger));
+                displayProps.Add(new DisplayProperty(properties, p, isReadOnly, _logger));
             }
 
-            if (props.PromptData.Settings != null)
+            if (properties.Settings != null)
             {
-                foreach (var p in props.PromptData.Settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
+                foreach (var p in properties.Settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
                 {
-                    displayProps.Add(new DisplayProperty(props.PromptData.Settings, p, false, _logger));
+                    if (p.Name == "LaserRect" || p.Name == "ImpactPosition") continue;
+
+                    bool isReadOnly = readOnlyNames.Contains(p.Name) || !p.CanWrite;
+                    displayProps.Add(new DisplayProperty(properties.Settings, p, isReadOnly, _logger));
+                }
+            }
+
+            if (properties is CodeLineProperties props && props.PromptData is not null)
+            {
+                foreach (var p in props.PromptData.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
+                {
+                    if (p.Name.Equals("Settings")) continue;
+                    displayProps.Add(new DisplayProperty(props.PromptData, p, false, _logger));
+                }
+
+                if (props.PromptData.Settings != null)
+                {
+                    foreach (var p in props.PromptData.Settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.GetMethod != null))
+                    {
+                        displayProps.Add(new DisplayProperty(props.PromptData.Settings, p, false, _logger));
+                    }
                 }
             }
         }
