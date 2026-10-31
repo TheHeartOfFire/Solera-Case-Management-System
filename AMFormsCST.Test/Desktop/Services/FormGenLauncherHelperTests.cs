@@ -5,6 +5,7 @@ using Xunit;
 
 namespace AMFormsCST.Test.Desktop.Services;
 
+[Collection("IpcSocketTests")]
 public class FormGenLauncherHelperTests
 {
     [Fact]

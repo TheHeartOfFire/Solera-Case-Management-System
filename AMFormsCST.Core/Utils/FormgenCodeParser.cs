@@ -155,8 +155,16 @@ public static class FormgenCodeParser
         // Reject multi-line prose paragraphs quickly unless it looks like a multi-line FormGen formula
         var normalizedWhitespace = CollapseMultilineWhitespace(input);
 
+        // Strip redundant matching outer parentheses for bare token/identifier inspection:
+        // e.g. "(CashDeal)" -> "CashDeal", "(F72)" -> "F72"
+        var normalizedCandidate = normalizedWhitespace;
+        while (IsWrappedInMatchingParens(normalizedCandidate))
+        {
+            normalizedCandidate = normalizedCandidate[1..^1].Trim();
+        }
+
         // A. Check for bare F-field token (e.g. F72, F10, f2490)
-        var fFieldMatch = Regex.Match(normalizedWhitespace, @"^[Ff](\d{1,5})$");
+        var fFieldMatch = Regex.Match(normalizedCandidate, @"^[Ff](\d{1,5})$");
         if (fFieldMatch.Success)
         {
             var fNum = int.Parse(fFieldMatch.Groups[1].Value, CultureInfo.InvariantCulture);
@@ -172,46 +180,46 @@ public static class FormgenCodeParser
         }
 
         // B. Check for single-quoted or double-quoted text literal (e.g. 'Debt Cancellation...', "N/A", ' ')
-        if ((normalizedWhitespace.StartsWith('\'') && normalizedWhitespace.EndsWith('\'') && normalizedWhitespace.Length >= 2) ||
-            (normalizedWhitespace.StartsWith('"') && normalizedWhitespace.EndsWith('"') && normalizedWhitespace.Length >= 2))
+        if ((normalizedCandidate.StartsWith('\'') && normalizedCandidate.EndsWith('\'') && normalizedCandidate.Length >= 2) ||
+            (normalizedCandidate.StartsWith('"') && normalizedCandidate.EndsWith('"') && normalizedCandidate.Length >= 2))
         {
             string? fix = null;
-            if (normalizedWhitespace.StartsWith('"'))
+            if (normalizedCandidate.StartsWith('"'))
             {
-                fix = $"'{normalizedWhitespace[1..^1]}'";
+                fix = $"'{normalizedCandidate[1..^1]}'";
             }
-            var leaf = new SmartFieldCode(normalizedWhitespace);
+            var leaf = new SmartFieldCode(normalizedCandidate);
             var title = "Text Literal";
-            var desc = $"Valid FormGen text literal ({normalizedWhitespace}).";
+            var desc = $"Valid FormGen text literal ({normalizedCandidate}).";
             var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
             return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc, fix);
         }
 
         // C. Check for pure numeric literal (e.g. 0, 100, 1.05)
-        if (decimal.TryParse(normalizedWhitespace, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
+        if (decimal.TryParse(normalizedCandidate, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
         {
-            var leaf = new SmartFieldCode(normalizedWhitespace);
-            var title = $"Number: {normalizedWhitespace}";
-            var desc = $"Valid FormGen numeric value ({normalizedWhitespace}).";
+            var leaf = new SmartFieldCode(normalizedCandidate);
+            var title = $"Number: {normalizedCandidate}";
+            var desc = $"Valid FormGen numeric value ({normalizedCandidate}).";
             var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
             return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
         }
 
         // D. Check for pure static symbol/placeholder text (e.g. ***, ---, N/A)
-        if (Regex.IsMatch(normalizedWhitespace, @"^[\*\-_/\\#@!?+=]+$") ||
-            string.Equals(normalizedWhitespace, "N/A", StringComparison.OrdinalIgnoreCase))
+        if (Regex.IsMatch(normalizedCandidate, @"^[\*\-_/\\#@!?+=]+$") ||
+            string.Equals(normalizedCandidate, "N/A", StringComparison.OrdinalIgnoreCase))
         {
-            var leaf = new SmartFieldCode(normalizedWhitespace);
-            var title = $"Static Text: {normalizedWhitespace}";
-            var desc = $"Valid FormGen static text symbol ('{normalizedWhitespace}').";
+            var leaf = new SmartFieldCode(normalizedCandidate);
+            var title = $"Static Text: {normalizedCandidate}";
+            var desc = $"Valid FormGen static text symbol ('{normalizedCandidate}').";
             var condensed = new CustomSnippetCode(title, desc, leaf, exposeVariableIdentifiers: false);
             return new FormgenParseResult(FormgenParseStatus.Valid, input, leaf, condensed, title, desc);
         }
 
         // E. Check for bare identifier (Smart Field, named variable, or function missing parens)
-        if (Regex.IsMatch(normalizedWhitespace, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+        if (Regex.IsMatch(normalizedCandidate, @"^[A-Za-z_][A-Za-z0-9_]*$"))
         {
-            var upper = normalizedWhitespace.ToUpperInvariant();
+            var upper = normalizedCandidate.ToUpperInvariant();
             if (string.Equals(upper, "PI", StringComparison.OrdinalIgnoreCase))
             {
                 var leaf = CreateFunctionInstance(KnownFunctions["PI"], 0);
@@ -235,7 +243,7 @@ public static class FormgenCodeParser
                     fix);
             }
 
-            if (KnownFunctions.TryGetValue(normalizedWhitespace, out var spec) && spec.UsesParentheses)
+            if (KnownFunctions.TryGetValue(normalizedCandidate, out var spec) && spec.UsesParentheses)
             {
                 var fix = $"{spec.Prefix}()";
                 return new FormgenParseResult(
@@ -248,7 +256,7 @@ public static class FormgenCodeParser
                     fix);
             }
 
-            if (CommonFunctionAliases.TryGetValue(normalizedWhitespace, out var canonicalFunc))
+            if (CommonFunctionAliases.TryGetValue(normalizedCandidate, out var canonicalFunc))
             {
                 var fix = $"{canonicalFunc}()";
                 return new FormgenParseResult(
@@ -257,12 +265,12 @@ public static class FormgenCodeParser
                     null,
                     null,
                     "Malformed FormGen Syntax Detected",
-                    $"Unrecognized function '{normalizedWhitespace}' (did you mean '{canonicalFunc}'?) and missing parentheses: write {canonicalFunc}(...).",
+                    $"Unrecognized function '{normalizedCandidate}' (did you mean '{canonicalFunc}'?) and missing parentheses: write {canonicalFunc}(...).",
                     fix);
             }
 
             // Otherwise, check whether this identifier is a predefined FormGen smart field or a user-defined variable
-            if (FormgenReferenceCatalog.TryGetSmartField(normalizedWhitespace, out var smartField))
+            if (FormgenReferenceCatalog.TryGetSmartField(normalizedCandidate, out var smartField))
             {
                 var sfLeaf = new SmartFieldCode(smartField!.Name, isPredefined: true, smartField.Category, smartField.Description);
                 var sfTitle = $"Predefined Smart Field: {smartField.Name}";
@@ -271,9 +279,9 @@ public static class FormgenCodeParser
                 return new FormgenParseResult(FormgenParseStatus.Valid, input, sfLeaf, sfCondensed, sfTitle, sfDesc);
             }
 
-            var uvLeaf = new SmartFieldCode(normalizedWhitespace, isPredefined: false, "User Variable", $"User-defined variable '{normalizedWhitespace}'.");
-            var uvTitle = $"User-Defined Variable: {normalizedWhitespace}";
-            var uvDesc = $"Valid FormGen user-defined calculation or prompt variable '{normalizedWhitespace}'.";
+            var uvLeaf = new SmartFieldCode(normalizedCandidate, isPredefined: false, "User Variable", $"User-defined variable '{normalizedCandidate}'.");
+            var uvTitle = $"User-Defined Variable: {normalizedCandidate}";
+            var uvDesc = $"Valid FormGen user-defined calculation or prompt variable '{normalizedCandidate}'.";
             var uvCondensed = new CustomSnippetCode(uvTitle, uvDesc, uvLeaf, exposeVariableIdentifiers: false);
             return new FormgenParseResult(FormgenParseStatus.Valid, input, uvLeaf, uvCondensed, uvTitle, uvDesc);
         }
@@ -472,6 +480,38 @@ public static class FormgenCodeParser
         suggestedFix = null;
         alternativeFixes = null;
         string workingFix = text;
+
+        // Strip redundant matching outer parentheses: e.g. "(Registrant = 'BUYER' || ...)"
+        while (IsWrappedInMatchingParens(workingFix))
+        {
+            workingFix = workingFix[1..^1].Trim();
+        }
+
+        // Strip redundant leading unary plus: e.g. "+ F2289 + F2302"
+        if (workingFix.StartsWith('+') && workingFix.Length > 1 && !workingFix.StartsWith("++"))
+        {
+            syntaxIssues.Add("Stripped redundant leading '+' operator.");
+            workingFix = workingFix[1..].TrimStart();
+        }
+
+        // Backslash escaped single quotes \' -> ''
+        if (workingFix.Contains(@"\'"))
+        {
+            syntaxIssues.Add("FormGen escapes quotes inside text literals with double single-quotes ('') instead of backslash (\\').");
+            workingFix = workingFix.Replace(@"\'", "''");
+        }
+
+        // Double quotes -> Single quotes (escaping any internal apostrophes to '' so "MANUFACTURER'S" -> 'MANUFACTURER''S')
+        if (workingFix.Contains('"'))
+        {
+            syntaxIssues.Add("FormGen requires single quotes ('...') for text literals instead of double quotes (\"...\").");
+            workingFix = Regex.Replace(workingFix, @"""([^""]*)""", m => "'" + m.Groups[1].Value.Replace("'", "''") + "'");
+            if (workingFix.Contains('"'))
+            {
+                workingFix = workingFix.Replace('"', '\'');
+            }
+        }
+
         workingFix = RepairGluedFunctionsAndTokens(workingFix, syntaxIssues);
         bool hasRecognizedFunctionOrCloseMatch = false;
 
@@ -573,12 +613,7 @@ public static class FormgenCodeParser
         }
 
         // Now inspect workingFix for common syntax mistakes:
-        // 1. Double quotes -> Single quotes
-        if (workingFix.Contains('"'))
-        {
-            syntaxIssues.Add("FormGen requires single quotes ('...') for text literals instead of double quotes (\"...\").");
-            workingFix = workingFix.Replace('"', '\'');
-        }
+        // 1. Semicolons outside quotes -> commas
 
         // 2. Semicolons outside quotes -> commas
         if (ContainsCharOutsideQuotes(workingFix, ';'))
@@ -669,8 +704,13 @@ public static class FormgenCodeParser
     private static bool TryParseSimpleArithmeticOrComparison(string text)
     {
         if (!OperatorTokenRegex.IsMatch(text)) return false;
+
+        // Strip string literals before prose checking so "'Literal...' + Var" is not rejected as prose
+        string textWithoutQuotes = Regex.Replace(text, @"'[^']*'", "''");
+        textWithoutQuotes = Regex.Replace(textWithoutQuotes, @"""[^""]*""", "''");
+
         // Check for adjacent words separated only by whitespace without operators (e.g. "this is a sentence + 1")
-        var proseMatch = Regex.Match(text, @"\b(?!AND\b|OR\b)[A-Za-z]{2,}\s+(?!AND\b|OR\b)[A-Za-z]{2,}\b", RegexOptions.IgnoreCase);
+        var proseMatch = Regex.Match(textWithoutQuotes, @"\b(?!AND\b|OR\b)[A-Za-z]{2,}\s+(?!AND\b|OR\b)[A-Za-z]{2,}\b", RegexOptions.IgnoreCase);
         if (proseMatch.Success) return false;
         return FindTopLevelOperator(text, out _, out _, out _);
     }
@@ -845,6 +885,13 @@ public static class FormgenCodeParser
             return true;
         }
 
+        // Check if this argument is already a valid quoted string literal (which can contain parentheses in the text!)
+        if (unwrapped.StartsWith('\'') && IsValidFormgenLeaf(unwrapped, out _))
+        {
+            parent.SetInputValue(slotIndex, unwrapped);
+            return true;
+        }
+
         // Check if it looks like a malformed function call inside an argument (e.g. contains '(' or unknown function call)
         if (unwrapped.Contains('(') || unwrapped.Contains(')'))
         {
@@ -896,8 +943,8 @@ public static class FormgenCodeParser
                 return false;
             }
 
-            // Inside the quotes, any internal quote must be escaped as ''
-            var interior = text[1..^1].Replace("''", "");
+            // Inside the quotes, any internal quote must be escaped as '' or \'
+            var interior = text[1..^1].Replace("''", "").Replace(@"\'", "");
             if (interior.Contains('\''))
             {
                 error = $"Malformed string literal or unescaped quotes in '{text}'.";
@@ -1273,7 +1320,13 @@ public static class FormgenCodeParser
                 {
                     if (MatchesOperatorAt(expr, i, candidateOp))
                     {
-                        // Ignore unary minus at the very start of an expression or immediately after another operator
+                        // A binary operator cannot split if there is no left-hand operand
+                        if (i == 0 || string.IsNullOrWhiteSpace(expr[..i]))
+                        {
+                            continue;
+                        }
+
+                        // Ignore unary minus immediately after another operator
                         if (candidateOp == "-" && IsUnaryMinusAt(expr, i))
                         {
                             continue;
@@ -1551,18 +1604,41 @@ public static class FormgenCodeParser
             }
         }
 
-        // D. IF or CONTAINS followed directly by an identifier without '(': e.g. IFWPAD -> IF(WPAD, IFRebate -> IF(Rebate
-        var gluedIfVarRegex = new Regex(@"\b(IF|CONTAINS)\s*([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*(?:[=!<>]|\bCONTAINS\b|\bAND\b|\bOR\b|&&|\|\||,|\)))", RegexOptions.IgnoreCase);
-        var matches4 = gluedIfVarRegex.Matches(text);
-        if (matches4.Count > 0)
+        // D. IF or CONTAINS followed by an identifier without '(':
+        // 1) Spaced: e.g. "IF WPAD = 'Y'", "IF WPAD, 'Y', 'N'"
+        var spacedIfVarRegex = new Regex(@"\b(IF|CONTAINS)\s+([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*(?:[=!<>]|\bCONTAINS\b|\bAND\b|\bOR\b|&&|\|\||,|\)))", RegexOptions.IgnoreCase);
+        var matchesSpaced = spacedIfVarRegex.Matches(text);
+        if (matchesSpaced.Count > 0)
         {
-            for (int i = matches4.Count - 1; i >= 0; i--)
+            for (int i = matchesSpaced.Count - 1; i >= 0; i--)
             {
-                var m = matches4[i];
+                var m = matchesSpaced[i];
                 if (!IsIndexInsideQuotes(text, m.Index))
                 {
                     var varName = m.Groups[2].Value;
-                    // Do not split if the identifier is an alias like IFF or IFELSE
+                    if (string.Equals(varName, "F", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(varName, "ELSE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    syntaxIssues.Add($"Missing opening parenthesis '(' after function '{m.Groups[1].Value}'.");
+                    text = text[..m.Index] + m.Groups[1].Value + "(" + varName + text[(m.Index + m.Length)..];
+                }
+            }
+        }
+
+        // 2) Glued without space: e.g. "IFWPAD = 'Y'". Must NOT match "IfOther, 'val'" where IfOther is an argument to an enclosing function.
+        var gluedIfVarRegex = new Regex(@"\b(IF|CONTAINS)([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*(?:[=!<>]|\bCONTAINS\b|\bAND\b|\bOR\b|&&|\|\|))", RegexOptions.IgnoreCase);
+        var matchesGlued = gluedIfVarRegex.Matches(text);
+        if (matchesGlued.Count > 0)
+        {
+            for (int i = matchesGlued.Count - 1; i >= 0; i--)
+            {
+                var m = matchesGlued[i];
+                if (!IsIndexInsideQuotes(text, m.Index))
+                {
+                    var varName = m.Groups[2].Value;
                     if (string.Equals(varName, "F", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(varName, "ELSE", StringComparison.OrdinalIgnoreCase))
                     {

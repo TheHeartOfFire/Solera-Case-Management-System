@@ -56,6 +56,15 @@ public class FormgenCodeParserTests
     }
 
     [Fact]
+    public void Parse_XifWithParensInLiteral_ReturnsValid()
+    {
+        var code = "XIF(Odom = '(1) I here by certify that the odometer reading reflects the amount of mileage in excess of its mechanical limits.')";
+        var result = FormgenCodeParser.Parse(code);
+        _output?.WriteLine($"Status: {result.Status}, Diag: {result.DiagnosticMessage}, Fix: {result.SuggestedFix}");
+        Assert.Equal(FormgenParseStatus.Valid, result.Status);
+    }
+
+    [Fact]
     public void Parse_ValidNestedExpression_ReturnsValid()
     {
         var result = FormgenCodeParser.Parse("IF(CONTAINS(F10, 'TEST'), 'MATCH', 'NO')");
@@ -580,6 +589,11 @@ public class FormgenCodeParserTests
     [InlineData("IF(GapType = 'GAP - C. Other Optional Insurance Paid to Insurance Company or Companies' && F667 > 0, F14, ' ')")]
     [InlineData("IF(F72 = 'N', 'NEW', 'USED')")]
     [InlineData("SEPLIST(', ', F93, F94)")]
+    [InlineData("F3 + IF(F1404 = 5.00, F2230, 0) + IF(F1405 = 5.00, F2231, 0) - F2493 - F2008")]
+    [InlineData("CASE(VMAKE, 'Acura - ACUR', 'ACUR', 'Audi - AUDI', 'AUDI', 'BMW - BMW', 'BMW', 'Ford - FORD', 'FORD', '')")]
+    [InlineData("IF(Owner = 'Cobuyer', ' ', IF(Owner = 'Both', BUYERNAME, ' ')) + ' ' + IF(Owner = 'Cobuyer', COBUYERNAME, BUYERNAME)")]
+    [InlineData("SEPLIST(' ', IF(WPAD = 'WEEKLY', 'WEEKLY', IF(F678 = 1, 'MONTHLY', ' ')), IF(F670 > 0, 'AND', ' '), IF(F670 > 0, TRIM(ROUND(F670, 0)), ' '), F671)")]
+    [InlineData("IF(CONTAINS(F405, 'TIRE'), F1327, IF(CONTAINS(F1333, 'TIRE'), F1328, IF(CONTAINS(F1334, 'TIRE'), F1511, 0)))")]
     public void Parse_SingleCharacterDeletionMutation_ExaminesParserResilience(string originalFormula)
     {
         int validCount = 0;
@@ -652,6 +666,76 @@ public class FormgenCodeParserTests
         // Rule 1: A suggested fix MUST NEVER produce broken syntax!
         Assert.Equal(0, invalidFixCount);
     }
+
+    [Fact(Skip = "Local corpus benchmark")]
+    public void Parse_AllExtractedCorpusFormulas_DoesNotThrowAndReportsStats()
+    {
+        string corpusPath = @"C:\Users\heart\.gemini\antigravity\brain\9d011b5c-9313-4918-a920-5558cb74ed91\scratch\complex_formulas.txt";
+        if (!File.Exists(corpusPath)) return;
+
+        var lines = File.ReadAllLines(corpusPath);
+        int total = lines.Length;
+        int valid = 0;
+        int malformed = 0;
+        int unrecognized = 0;
+        var unrecognizedSamples = new List<string>();
+        var malformedSamples = new List<string>();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var res = FormgenCodeParser.Parse(line);
+            if (res.Status == FormgenParseStatus.Valid)
+            {
+                valid++;
+            }
+            else if (res.Status == FormgenParseStatus.MalformedSimilar)
+            {
+                malformed++;
+                if (malformedSamples.Count < 25)
+                {
+                    malformedSamples.Add($"{line}  ==>  [Fix: {res.SuggestedFix}] (Diag: {res.DiagnosticMessage})");
+                }
+            }
+            else
+            {
+                unrecognized++;
+                if (unrecognizedSamples.Count < 30)
+                {
+                    unrecognizedSamples.Add($"{line} => {res.DiagnosticMessage}");
+                }
+            }
+        }
+        sw.Stop();
+
+        _output?.WriteLine($"=== Real-World Corpus Parse Results ({total} formulas in {sw.ElapsedMilliseconds} ms) ===");
+        _output?.WriteLine($"  Valid:        {valid} ({valid * 100.0 / total:F1}%)");
+        _output?.WriteLine($"  Malformed:    {malformed} ({malformed * 100.0 / total:F1}%)");
+        _output?.WriteLine($"  Unrecognized: {unrecognized} ({unrecognized * 100.0 / total:F1}%)");
+        _output?.WriteLine("============================================================================");
+
+        if (malformedSamples.Count > 0)
+        {
+            _output?.WriteLine("\nSample Malformed Expressions:");
+            foreach (var m in malformedSamples)
+            {
+                _output?.WriteLine($"  * {m}");
+            }
+        }
+
+        if (unrecognizedSamples.Count > 0)
+        {
+            _output?.WriteLine("\nSample Unrecognized Expressions:");
+            foreach (var s in unrecognizedSamples)
+            {
+                _output?.WriteLine($"  * {s}");
+            }
+        }
+
+        Assert.True(valid > 0);
+    }
+
 
     private static string NormalizeWhitespace(string s)
     {
