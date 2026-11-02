@@ -763,7 +763,9 @@ public partial class FormgenUtilitiesViewModel : ViewModel
 
     public void LoadFormgenFile(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !_fileSystem.FileExists(path)) return;
+        if (string.IsNullOrWhiteSpace(path)) return;
+        path = path.Trim('\"', ' ');
+        if (!_fileSystem.FileExists(path)) return;
         FilePath = path;
         _backupLoaded = false;
         _logger?.LogInfo($"Formgen file loaded from external path: {path}");

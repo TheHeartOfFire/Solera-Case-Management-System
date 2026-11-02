@@ -136,5 +136,37 @@ public class NamedPipeIpcTests
         Assert.True(response.Success);
         Assert.Equal(testFormula, response.Data["parsedCode"]);
     }
+
+    [Fact]
+    public async Task SendMessageAsync_OpenFormgen_PayloadTransfersCorrectly()
+    {
+        var pipeName = $"SoleraCMS_TestPipe_{Guid.NewGuid():N}";
+        const string testPath = @"C:\Users\test\formgen\deal_form.formgen";
+
+        await using var server = new NamedPipeIpcServer(async message =>
+        {
+            if (message.Action == IpcActions.OpenFormgen)
+            {
+                message.Payload.TryGetValue("filePath", out var path);
+                return IpcResponse.Ok("OpenFormgen handled", new Dictionary<string, string> { ["receivedPath"] = path ?? "" });
+            }
+            return IpcResponse.Fail("Invalid action");
+        }, pipeName);
+
+        server.Start();
+
+        var request = new IpcMessage
+        {
+            Target = "SoleraCMS",
+            Action = IpcActions.OpenFormgen,
+            Payload = { ["filePath"] = testPath }
+        };
+
+        var response = await NamedPipeIpcClient.SendMessageAsync(request, pipeName, timeoutMs: 3000);
+
+        Assert.NotNull(response);
+        Assert.True(response.Success);
+        Assert.Equal(testPath, response.Data["receivedPath"]);
+    }
 }
 
