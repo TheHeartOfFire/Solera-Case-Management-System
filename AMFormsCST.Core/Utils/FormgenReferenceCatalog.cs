@@ -712,8 +712,13 @@ public static class FormgenReferenceCatalog
         return PredefinedSmartFields.TryGetValue(name.Trim(), out info);
     }
 
-    public static bool IsVmSafeField(int fieldNum) =>
-        VmFieldSubset.TryGetValue(fieldNum, out var vm) && vm.IsSafe;
+    public static bool IsVmSafeField(int fieldNum)
+    {
+        if (fieldNum == 0) return true; // F0: Separator and label prompt placeholder
+        if (fieldNum == 199) return true; // F199: N/A Field
+        if (fieldNum >= 101 && fieldNum <= 198) return true; // Programmer-reserved UDFs (holdover from earlier versions, no deal data required)
+        return VmFieldSubset.TryGetValue(fieldNum, out var vm) && vm.IsSafe;
+    }
 
     private static readonly Regex FFieldRegex = new(@"\b[Ff](\d+)\b", RegexOptions.Compiled);
     private static readonly Regex IdentRegex = new(@"\b[A-Za-z_][A-Za-z0-9_]*\b", RegexOptions.Compiled);
@@ -954,7 +959,7 @@ public static class FormgenReferenceCatalog
                     {
                         foreach (var rf in rawFields)
                         {
-                            if (rf.FieldNum <= 0) continue;
+                            if (rf.FieldNum < 0) continue;
                             bool hasVm = VmFieldSubset.TryGetValue(rf.FieldNum, out var vmEntry);
                             bool isVmSafe = hasVm && vmEntry.IsSafe;
                             bool isExcludedVm = hasVm && !vmEntry.IsSafe;
@@ -980,6 +985,60 @@ public static class FormgenReferenceCatalog
         catch
         {
             // Fallback to VM subset if stream cannot be read
+        }
+
+        // F0: Separator and label prompt placeholder (VM safe)
+        if (!dict.ContainsKey(0))
+        {
+            dict[0] = new FormgenFieldInfo(
+                0,
+                "F0",
+                "Separator and label prompt placeholder",
+                "SYSTEM",
+                "PROMPTS",
+                "X(1)",
+                string.Empty,
+                1,
+                0,
+                true,
+                "Separator / Label Placeholder");
+        }
+
+        // F199: N/A Field (VM safe)
+        if (!dict.ContainsKey(199))
+        {
+            dict[199] = new FormgenFieldInfo(
+                199,
+                "NA",
+                "N/A Field",
+                "SYSTEM",
+                "STANDARD",
+                "X(10)",
+                string.Empty,
+                10,
+                0,
+                true,
+                "N/A Field");
+        }
+
+        // F101..F198: Programmer-reserved UDFs (holdover from earlier versions, no deal data required, VM safe)
+        for (int udf = 101; udf <= 198; udf++)
+        {
+            if (!dict.ContainsKey(udf))
+            {
+                dict[udf] = new FormgenFieldInfo(
+                    udf,
+                    $"UDF{udf}",
+                    $"User-defined field #{udf}",
+                    "USER DEFINED",
+                    "UDF",
+                    "X(20)",
+                    string.Empty,
+                    20,
+                    0,
+                    true,
+                    $"User Defined Field {udf}");
+            }
         }
 
         // Ensure all VM subset fields exist even if any were missing in fields.json

@@ -551,13 +551,48 @@ public class IpcService : IHostedService, IAsyncDisposable
 
     private IpcResponse OpenFormgen(IpcMessage message)
     {
-        if (!message.Payload.TryGetValue("filePath", out var filePath) || string.IsNullOrWhiteSpace(filePath))
+        string? filePath = null;
+        if (message.Payload.TryGetValue("filePath", out var rawPath) && !string.IsNullOrWhiteSpace(rawPath))
         {
-            return IpcResponse.Fail("Missing filePath argument in payload.");
+            filePath = rawPath.Trim('\"', ' ');
+        }
+        else if (!string.IsNullOrWhiteSpace(message.RawData))
+        {
+            filePath = message.RawData.Trim('\"', ' ');
+        }
+
+        var mainWindow = Application.Current?.MainWindow;
+        bool isMainWindowActive = mainWindow != null && mainWindow.IsVisible;
+
+        if (isMainWindowActive)
+        {
+            try
+            {
+                _navigationService.Navigate(typeof(FormgenUtilitiesPage));
+                if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+                {
+                    _formgenViewModel.LoadFormgenFile(filePath);
+                }
+                else if (!string.IsNullOrWhiteSpace(filePath))
+                {
+                    _logger.LogWarning($"Form file not found: '{filePath}'");
+                }
+
+                BringWindowToFront();
+                return IpcResponse.Ok(!string.IsNullOrWhiteSpace(filePath)
+                    ? $"Loaded '{filePath}' into Formgen Utilities."
+                    : "Navigated to Formgen Utilities.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Failed to load form in active MainWindow, falling back to dialog.", ex);
+            }
         }
 
         OpenFormgenUtilsDialogWithFile(filePath);
-        return IpcResponse.Ok($"Opened {filePath} in Formgen Utilities.");
+        return IpcResponse.Ok(!string.IsNullOrWhiteSpace(filePath)
+            ? $"Opened '{filePath}' in Formgen Utilities dialog."
+            : "Opened Formgen Utilities dialog.");
     }
 
     public void OpenFormgenUtilsDialogWithFile(string? filePath = null)

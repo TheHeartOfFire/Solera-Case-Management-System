@@ -1212,6 +1212,11 @@ public class FormGenAgent {
     }
 
     public static boolean onPreOpenFormgenFile(Object nfgInstance, File file) {
+        try {
+            if (file != null && file.exists()) {
+                lastOpenedFilePath = file.getAbsolutePath();
+            }
+        } catch (Throwable ignored) {}
         if (!isFeatureEnabled("FormGenAlreadyOpenToast")) return false;
         try {
             if (nfgInstance != null && formGenInstance == null) {
@@ -2842,6 +2847,31 @@ public class FormGenAgent {
             }
 
             if (contextMenusEnabled) {
+                boolean canPushUtils = canOpenInFormgenUtils(lastRmbControl);
+
+                // Direct "Set as Form Title in SCMT" for Table / Tree controls (e.g. search / checkout dialogs)
+                if (lastRmbControl != null && !isDisposed(lastRmbControl)) {
+                    String cls = lastRmbControl.getClass().getName();
+                    if (cls.contains("Table") || cls.contains("Tree")) {
+                        Object sepTable = itemCons.newInstance(menu, SWT_SEPARATOR);
+                        setDataMethod.invoke(sepTable, "SoleraItem", Boolean.TRUE);
+
+                        Object itemDirectTitle = itemCons.newInstance(menu, SWT_PUSH);
+                        itemDirectTitle.getClass().getMethod("setText", String.class).invoke(itemDirectTitle, "Set as Form Title in SCMT");
+                        setDataMethod.invoke(itemDirectTitle, "SoleraItem", Boolean.TRUE);
+                        Object listenerDirect = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                            @Override
+                            public void run() {
+                                String title = resolveCandidateFormTitle(display);
+                                if (!title.isEmpty()) {
+                                    notifyScmtSetFormTitle(title);
+                                }
+                            }
+                        });
+                        addListenerMethod.invoke(itemDirectTitle, SWT_Selection, listenerDirect);
+                    }
+                }
+
                 // Separator
                 Object sep = itemCons.newInstance(menu, SWT_SEPARATOR);
                 setDataMethod.invoke(sep, "SoleraItem", Boolean.TRUE);
@@ -2854,16 +2884,19 @@ public class FormGenAgent {
                 Object soleraSubMenu = subMenuCons.newInstance(soleraCascade);
                 soleraCascade.getClass().getMethod("setMenu", menuClass).invoke(soleraCascade, soleraSubMenu);
 
-                // Sub-item 1: Open in FormGen Utilities
-                Object itemOpenUtils = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
-                itemOpenUtils.getClass().getMethod("setText", String.class).invoke(itemOpenUtils, "Open in FormGen Utilities");
-                Object listenerOpenUtils = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
-                    @Override
-                    public void run() {
-                        notifyScmtOpenFormgenUtils(getActiveFormFilePath());
-                    }
-                });
-                addListenerMethod.invoke(itemOpenUtils, SWT_Selection, listenerOpenUtils);
+                // Sub-item 1: Open in FormGen Utilities (ONLY when an active form file actually exists and can be pushed)
+                if (canPushUtils) {
+                    Object itemOpenUtils = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
+                    itemOpenUtils.getClass().getMethod("setText", String.class).invoke(itemOpenUtils, "Open in FormGen Utilities");
+                    setDataMethod.invoke(itemOpenUtils, "SoleraItem", Boolean.TRUE);
+                    Object listenerOpenUtils = createListenerProxy(display.getClass().getClassLoader(), new Runnable() {
+                        @Override
+                        public void run() {
+                            notifyScmtOpenFormgenUtils(getActiveFormFilePath());
+                        }
+                    });
+                    addListenerMethod.invoke(itemOpenUtils, SWT_Selection, listenerOpenUtils);
+                }
 
                 // Sub-item 2: Send Selection to Code Snippets
                 Object itemParseCode = itemCons.newInstance(soleraSubMenu, SWT_PUSH);
@@ -3859,6 +3892,170 @@ public class FormGenAgent {
     // Focus Control Text Helpers
     // ==========================================
 
+    private static String cleanFormTitle(String s) {
+        if (s == null) return "";
+        s = s.trim();
+        while (s.endsWith("*")) s = s.substring(0, s.length() - 1).trim();
+        if (s.toLowerCase().endsWith(".formgen")) s = s.substring(0, s.length() - 8).trim();
+        if (s.toLowerCase().endsWith(".fga")) s = s.substring(0, s.length() - 4).trim();
+        return s;
+    }
+
+    public static String extractTextFromTableOrTree(Object control) {
+        if (control == null || isDisposed(control)) return "";
+        try {
+            String clsName = control.getClass().getName();
+            if (clsName.contains("Table")) {
+                Method getSelMethod = control.getClass().getMethod("getSelection");
+                Object[] selection = (Object[]) getSelMethod.invoke(control);
+                if (selection != null && selection.length > 0 && selection[0] != null) {
+                    return extractTitleFromItem(control, selection[0]);
+                }
+            } else if (clsName.contains("Tree")) {
+                Method getSelMethod = control.getClass().getMethod("getSelection");
+                Object[] selection = (Object[]) getSelMethod.invoke(control);
+                if (selection != null && selection.length > 0 && selection[0] != null) {
+                    return extractTitleFromItem(control, selection[0]);
+                }
+            }
+        } catch (Throwable t) {
+            log("Error extracting text from Table/Tree: " + t.getMessage());
+        }
+        return "";
+    }
+
+    private static String extractTitleFromItem(Object parentControl, Object item) {
+        if (item == null || isDisposed(item)) return "";
+        // 1. Try item.getData() (often contains a domain object like CheckoutInfo, FormDef, FormInfo)
+        try {
+            Method getDataMethod = item.getClass().getMethod("getData");
+            Object data = getDataMethod.invoke(item);
+            if (data != null) {
+                for (String mName : new String[]{"getFormTitle", "getTitle", "getDescription", "getFormName", "getName", "getDisplayName"}) {
+                    try {
+                        Method m = data.getClass().getMethod(mName);
+                        Object val = m.invoke(data);
+                        if (val instanceof String && !((String) val).trim().isEmpty()) {
+                            String s = cleanFormTitle((String) val);
+                            if (!s.isEmpty()) return s;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        // 2. Try Table Columns by Header (e.g. Title, Description, Name)
+        int titleCol = -1;
+        try {
+            Method getColsMethod = parentControl.getClass().getMethod("getColumns");
+            Object[] cols = (Object[]) getColsMethod.invoke(parentControl);
+            if (cols != null) {
+                for (int i = 0; i < cols.length; i++) {
+                    String header = (String) cols[i].getClass().getMethod("getText").invoke(cols[i]);
+                    if (header != null) {
+                        String h = header.toLowerCase();
+                        if (h.contains("title") || h.contains("description") || h.contains("name") || h.contains("form name")) {
+                            titleCol = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        if (titleCol >= 0) {
+            try {
+                Method getTextCol = item.getClass().getMethod("getText", int.class);
+                String text = (String) getTextCol.invoke(item, titleCol);
+                if (text != null && !text.trim().isEmpty()) {
+                    String s = cleanFormTitle(text);
+                    if (!s.isEmpty()) return s;
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 3. Scan visible columns (e.g. Col 1 vs Col 0)
+        String col0 = "";
+        String col1 = "";
+        try {
+            col0 = (String) item.getClass().getMethod("getText", int.class).invoke(item, 0);
+        } catch (Throwable ignored) {
+            try {
+                col0 = (String) item.getClass().getMethod("getText").invoke(item);
+            } catch (Throwable ignored2) {}
+        }
+        try {
+            col1 = (String) item.getClass().getMethod("getText", int.class).invoke(item, 1);
+        } catch (Throwable ignored) {}
+
+        col0 = col0 != null ? cleanFormTitle(col0) : "";
+        col1 = col1 != null ? cleanFormTitle(col1) : "";
+
+        if (!col1.isEmpty()) {
+            boolean col0IsId = col0.matches("^\\d+$") || col0.length() <= 6;
+            if (col0IsId || col1.length() > col0.length()) {
+                return col1;
+            }
+        }
+        if (!col0.isEmpty()) {
+            return col0;
+        }
+
+        return "";
+    }
+
+    public static boolean hasAnyOpenFormTabs() {
+        if (formGenInstance == null) return false;
+        try {
+            Field f = formGenInstance.getClass().getDeclaredField("mainTabFolder");
+            f.setAccessible(true);
+            Object mainTabFolder = f.get(formGenInstance);
+            if (mainTabFolder != null && !isDisposed(mainTabFolder)) {
+                Method getItemCount = mainTabFolder.getClass().getMethod("getItemCount");
+                int count = (Integer) getItemCount.invoke(mainTabFolder);
+                return count > 0;
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    public static boolean canOpenInFormgenUtils(Object rmbControl) {
+        if (!isFeatureEnabled("FormGenContextMenus")) return false;
+        if (rmbControl != null && !isDisposed(rmbControl)) {
+            String clsName = rmbControl.getClass().getName();
+            // In tables or trees (search/checkout dialogs, form lists), forms cannot be pushed to utils
+            if (clsName.contains("Table") || clsName.contains("Tree")) {
+                return false;
+            }
+            try {
+                Method getShellMethod = rmbControl.getClass().getMethod("getShell");
+                Object shell = getShellMethod.invoke(rmbControl);
+                if (shell != null && !isDisposed(shell)) {
+                    String title = (String) shell.getClass().getMethod("getText").invoke(shell);
+                    if (title != null) {
+                        String lower = title.toLowerCase();
+                        if (lower.contains("search") || lower.contains("checkout") || lower.contains("check out") || lower.contains("repository") || lower.contains("check-out")) {
+                            return false;
+                        }
+                    }
+                    String shellCls = shell.getClass().getName().toLowerCase();
+                    if (shellCls.contains("checkout") || shellCls.contains("search")) {
+                        return false;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        if (!hasAnyOpenFormTabs()) return false;
+
+        String activePath = getActiveFormFilePath();
+        if (activePath == null || activePath.trim().isEmpty()) return false;
+        try {
+            return new File(activePath.trim()).exists();
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
     public static String getSelectedTextFromFocusControl(Object display) {
         if (display == null) return "";
         try {
@@ -3868,6 +4065,12 @@ public class FormGenAgent {
                 control = lastRmbControl;
             }
             if (control == null || isDisposed(control)) return "";
+
+            // 0. Check Table or Tree selection
+            String tableOrTreeText = extractTextFromTableOrTree(control);
+            if (!tableOrTreeText.isEmpty()) {
+                return tableOrTreeText;
+            }
 
             // 1. Try getSelectionText() (e.g. StyledText)
             try {
@@ -3994,14 +4197,27 @@ public class FormGenAgent {
     }
 
     public static String resolveCandidateFormTitle(Object display) {
+        // 1. First check if lastRmbControl was a Table/Tree (e.g. search / checkout dialog)
+        if (lastRmbControl != null && !isDisposed(lastRmbControl)) {
+            String tableText = extractTextFromTableOrTree(lastRmbControl);
+            if (!tableText.isEmpty()) return tableText;
+        }
+
+        // 2. Selected text from focus control
         String selected = getSelectedTextFromFocusControl(display);
         if (selected != null && !selected.trim().isEmpty()) {
             return selected.trim();
         }
-        String activeName = getActiveFormName();
-        if (activeName != null && !activeName.trim().isEmpty()) {
-            return activeName.trim();
+
+        // 3. Only if in main editor and tabs are open, try active form editor tab name
+        if (hasAnyOpenFormTabs()) {
+            String activeName = getActiveFormName();
+            if (activeName != null && !activeName.trim().isEmpty()) {
+                return activeName.trim();
+            }
         }
+
+        // 4. Fallback to clipboard
         String clip = getClipboardText();
         if (clip != null && !clip.trim().isEmpty() && clip.trim().length() < 120 && !clip.contains("\n") && !clip.contains("\r")) {
             return clip.trim();
@@ -4068,6 +4284,63 @@ public class FormGenAgent {
             } catch (Throwable ignored) {}
 
             try {
+                Field fvField = formGenInstance.getClass().getDeclaredField("formViewer");
+                fvField.setAccessible(true);
+                Object fv = fvField.get(formGenInstance);
+                if (fv != null) {
+                    for (Method dm : fv.getClass().getDeclaredMethods()) {
+                        String name = dm.getName().toLowerCase();
+                        if (name.contains("file") || name.contains("path")) {
+                            try {
+                                dm.setAccessible(true);
+                                Object res = dm.invoke(fv);
+                                if (res instanceof File && ((File) res).exists()) return ((File) res).getAbsolutePath();
+                                if (res instanceof String && new File((String) res).exists()) return (String) res;
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+
+            try {
+                Field f = formGenInstance.getClass().getDeclaredField("mainTabFolder");
+                f.setAccessible(true);
+                Object mainTabFolder = f.get(formGenInstance);
+                if (mainTabFolder != null && !isDisposed(mainTabFolder)) {
+                    Method getSelectionMethod = mainTabFolder.getClass().getMethod("getSelection");
+                    Object selectedTab = getSelectionMethod.invoke(mainTabFolder);
+                    if (selectedTab != null && !isDisposed(selectedTab)) {
+                        Object viewer = selectedTab.getClass().getMethod("getControl").invoke(selectedTab);
+                        if (viewer != null && !isDisposed(viewer)) {
+                            for (Method dm : viewer.getClass().getDeclaredMethods()) {
+                                String name = dm.getName().toLowerCase();
+                                if (name.contains("file") || name.contains("path")) {
+                                    try {
+                                        dm.setAccessible(true);
+                                        Object res = dm.invoke(viewer);
+                                        if (res instanceof File && ((File) res).exists()) return ((File) res).getAbsolutePath();
+                                        if (res instanceof String && new File((String) res).exists()) return (String) res;
+                                    } catch (Throwable ignored) {}
+                                }
+                            }
+                        }
+
+                        try {
+                            String tabText = (String) selectedTab.getClass().getMethod("getText").invoke(selectedTab);
+                            String extracted = extractPathFromText(tabText);
+                            if (extracted != null) return extracted;
+                        } catch (Throwable ignored) {}
+
+                        try {
+                            String toolTip = (String) selectedTab.getClass().getMethod("getToolTipText").invoke(selectedTab);
+                            String extracted = extractPathFromText(toolTip);
+                            if (extracted != null) return extracted;
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            } catch (Throwable ignored) {}
+
+            try {
                 Method m = formGenInstance.getClass().getDeclaredMethod("getFormDef");
                 m.setAccessible(true);
                 Object formDef = m.invoke(formGenInstance);
@@ -4111,7 +4384,7 @@ public class FormGenAgent {
             } catch (Throwable ignored) {}
         }
 
-        if (lastOpenedFilePath != null && new File(lastOpenedFilePath).exists()) {
+        if (hasAnyOpenFormTabs() && lastOpenedFilePath != null && new File(lastOpenedFilePath).exists()) {
             return lastOpenedFilePath;
         }
 
@@ -4120,7 +4393,7 @@ public class FormGenAgent {
 
     private static String extractPathFromText(String text) {
         if (text == null) return null;
-        Pattern p = Pattern.compile("([a-zA-Z]:\\\\[^<>:\"/\\\\|?*\\r\\n]+\\.(?:formgen|fga))", Pattern.CASE_INSENSITIVE);
+        Pattern p = Pattern.compile("((?:[a-zA-Z]:\\\\|\\\\\\\\[^<>:\"/\\\\|?*\\r\\n]+\\\\)[^<>:\"/\\\\|?*\\r\\n]+\\.(?:formgen|fga))", Pattern.CASE_INSENSITIVE);
         Matcher m = p.matcher(text);
         if (m.find()) {
             String candidate = m.group(1).trim();
@@ -4134,10 +4407,12 @@ public class FormGenAgent {
     // ==========================================
 
     public static void notifyScmtOpenFormgenUtils(String filePath) {
-        Map<String, String> payload = new LinkedHashMap<String, String>();
-        if (filePath != null && !filePath.trim().isEmpty()) {
-            payload.put("filePath", filePath);
+        if (filePath == null || filePath.trim().isEmpty() || !new File(filePath.trim()).exists()) {
+            showToastNotification("Cannot open FormGen Utilities: No active form file found on disk.\nPlease check out the form first.");
+            return;
         }
+        Map<String, String> payload = new LinkedHashMap<String, String>();
+        payload.put("filePath", filePath.trim());
         sendIpcMessageToScmt("OpenFormgen", payload, null);
     }
 
@@ -4156,6 +4431,7 @@ public class FormGenAgent {
         payload.put("value", title.trim());
         log("Sending SetDashboardField (formtitle: " + title.trim() + ") to SCMT");
         sendIpcMessageToScmt("SetDashboardField", payload, title.trim());
+        showToastNotification("Form Title set in SCMT:\n" + title.trim());
     }
 
     public static boolean sendIpcMessageToScmt(String action, Map<String, String> payload, String rawData) {
