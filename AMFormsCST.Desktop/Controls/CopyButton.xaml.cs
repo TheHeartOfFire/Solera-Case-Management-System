@@ -32,12 +32,21 @@ public partial class CopyButton : UserControl
             return;
         }
 
-        try
+        for (int i = 0; i < 10; i++)
         {
-            Clipboard.SetText(text);
-        }
-        catch
-        {
+            try
+            {
+                Clipboard.SetText(text);
+                break;
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+            catch
+            {
+                break;
+            }
         }
     }
 }

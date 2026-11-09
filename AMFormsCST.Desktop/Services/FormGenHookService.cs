@@ -40,6 +40,17 @@ public class FormGenHookService : IHostedService, IDisposable
         public IntPtr dwExtraInfo;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public IntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public POINT pt;
+    }
+
     private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
@@ -54,6 +65,24 @@ public class FormGenHookService : IHostedService, IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    private static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage([In] ref MSG lpMsg);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DispatchMessage([In] ref MSG lpMsg);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostThreadMessage(uint idThread, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private const uint WM_QUIT = 0x0012;
 
     [DllImport("user32.dll")]
     private static extern IntPtr WindowFromPoint(POINT pt);
@@ -80,6 +109,9 @@ public class FormGenHookService : IHostedService, IDisposable
     private LowLevelMouseProc? _hookCallback;
     private IntPtr _hookId = IntPtr.Zero;
     private FormgenQuickPasteWindow? _quickPasteWindow;
+    private Thread? _hookThread;
+    private uint _hookThreadId;
+    private readonly ManualResetEventSlim _hookReadyEvent = new(false);
 
     public FormGenHookService(IpcService ipcService, ILogService logger, ISupportTool? supportTool = null)
     {
@@ -93,20 +125,17 @@ public class FormGenHookService : IHostedService, IDisposable
     {
         try
         {
-            _hookCallback = HookProcedure;
-            using var curProcess = Process.GetCurrentProcess();
-            using var curModule = curProcess.MainModule;
-            var modHandle = GetModuleHandle(curModule?.ModuleName);
+            _hookThread = new Thread(HookThreadStart)
+            {
+                IsBackground = true,
+                Name = "FormGenMouseHookThread",
+                Priority = ThreadPriority.AboveNormal
+            };
+            _hookThread.SetApartmentState(ApartmentState.STA);
+            _hookThread.Start();
 
-            _hookId = SetWindowsHookEx(WH_MOUSE_LL, _hookCallback, modHandle, 0);
-            if (_hookId == IntPtr.Zero)
-            {
-                _logger.LogWarning("Failed to install FormGen low-level mouse hook.");
-            }
-            else
-            {
-                _logger.LogInfo("FormGen low-level mouse hook installed successfully.");
-            }
+            // Wait briefly for the hook to finish installing on the dedicated thread
+            _hookReadyEvent.Wait(TimeSpan.FromSeconds(2), cancellationToken);
 
             _ = Task.Run(() =>
             {
@@ -124,10 +153,64 @@ public class FormGenHookService : IHostedService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError("Exception while installing FormGen mouse hook.", ex);
+            _logger.LogError("Exception while starting FormGen mouse hook thread.", ex);
         }
 
         return Task.CompletedTask;
+    }
+
+    private void HookThreadStart()
+    {
+        try
+        {
+            _hookThreadId = GetCurrentThreadId();
+            _hookCallback = HookProcedure;
+
+            using var curProcess = Process.GetCurrentProcess();
+            using var curModule = curProcess.MainModule;
+            var modHandle = GetModuleHandle(curModule?.ModuleName);
+
+            _hookId = SetWindowsHookEx(WH_MOUSE_LL, _hookCallback, modHandle, 0);
+            if (_hookId == IntPtr.Zero)
+            {
+                _logger.LogWarning("Failed to install FormGen low-level mouse hook on dedicated thread.");
+            }
+            else
+            {
+                _logger.LogInfo("FormGen low-level mouse hook installed successfully on dedicated thread.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Exception while installing FormGen mouse hook on dedicated thread.", ex);
+        }
+        finally
+        {
+            _hookReadyEvent.Set();
+        }
+
+        // Dedicated Win32 message loop to service WH_MOUSE_LL independently of WPF UI thread
+        try
+        {
+            while (GetMessage(out MSG msg, IntPtr.Zero, 0, 0) > 0)
+            {
+                TranslateMessage(ref msg);
+                DispatchMessage(ref msg);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Error in FormGen mouse hook message loop.", ex);
+        }
+        finally
+        {
+            if (_hookId != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hookId);
+                _hookId = IntPtr.Zero;
+                _logger.LogInfo("FormGen mouse hook removed on dedicated thread.");
+            }
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
@@ -266,12 +349,28 @@ public class FormGenHookService : IHostedService, IDisposable
 
     public void Dispose()
     {
-        if (_hookId != IntPtr.Zero)
+        if (_hookThreadId != 0)
+        {
+            PostThreadMessage(_hookThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+            if (_hookThread?.Join(1000) == false)
+            {
+                if (_hookId != IntPtr.Zero)
+                {
+                    UnhookWindowsHookEx(_hookId);
+                    _hookId = IntPtr.Zero;
+                }
+            }
+            _hookThread = null;
+            _hookThreadId = 0;
+        }
+        else if (_hookId != IntPtr.Zero)
         {
             UnhookWindowsHookEx(_hookId);
             _hookId = IntPtr.Zero;
             _logger.LogInfo("FormGen mouse hook removed.");
         }
+
+        _hookReadyEvent.Dispose();
 
         if (_quickPasteWindow != null)
         {
