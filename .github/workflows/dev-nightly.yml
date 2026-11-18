@@ -1,0 +1,70 @@
+name: Dev / Nightly Build
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # Daily 06:00 UTC (midnight CST)
+  push:
+    branches: [ "develop" ]
+  workflow_dispatch:
+
+jobs:
+  build-dev:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Dev Channel)
+        run: dotnet build --no-restore --configuration Release -p:DevBuild=true
+
+      - name: Test (Dev Channel)
+        run: dotnet test --no-build --configuration Release
+
+      - name: Compute Dev Version
+        id: ver
+        shell: pwsh
+        run: |
+          $date = (Get-Date).ToUniversalTime().ToString("yyyyMMdd")
+          $run = "${{ github.run_number }}"
+          echo "version=2.10.3-dev.$date.$run" >> $env:GITHUB_OUTPUT
+
+      - name: Publish Dev App
+        run: >
+          dotnet publish AMFormsCST.Desktop\AMFormsCST.Desktop.csproj
+          -c Release
+          -r win-x64
+          --self-contained false
+          -p:DevBuild=true
+          -p:Version=${{ steps.ver.outputs.version }}
+          -o publish-dev
+
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+
+      - name: Package Dev Installer
+        run: >
+          vpk pack
+          --packId "SoleraCaseManagementSystem.Dev"
+          --packVersion "${{ steps.ver.outputs.version }}"
+          --packDir "publish-dev"
+          --packTitle "Solera Case Management System (Dev)"
+          --mainExe "AMFormsCST.Desktop.exe"
+          --channel "dev"
+          --outputDir "Releases.Dev"
+
+      - name: Upload Dev Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SoleraCMS-Dev-${{ steps.ver.outputs.version }}
+          path: Releases.Dev/**
+          retention-days: 14
+
