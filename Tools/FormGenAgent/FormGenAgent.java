@@ -4454,7 +4454,7 @@ public class FormGenAgent {
 
             RandomAccessFile pipe = null;
             try {
-                pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
+                pipe = openIpcPipe();
                 pipe.write(json.toString().getBytes("UTF-8"));
 
                 ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -4563,10 +4563,18 @@ public class FormGenAgent {
         return null;
     }
 
+    private static RandomAccessFile openIpcPipe() throws FileNotFoundException {
+        try {
+            return new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_Dev_IPC", "rw");
+        } catch (FileNotFoundException devNotRunning) {
+            return new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
+        }
+    }
+
     public static void refreshLiveVariablesSync() {
         RandomAccessFile pipe = null;
         try {
-            pipe = new RandomAccessFile("\\\\.\\pipe\\SoleraCMS_IPC", "rw");
+            pipe = openIpcPipe();
             pipe.write("{\"target\":\"SoleraCMS\",\"action\":\"GetLiveVariables\"}\n".getBytes("UTF-8"));
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             int b;

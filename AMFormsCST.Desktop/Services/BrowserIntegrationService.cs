@@ -12,7 +12,15 @@ namespace AMFormsCST.Desktop.Services;
 public class BrowserIntegrationService : IBrowserIntegrationService
 {
     public const string FixedExtensionId = "epjedpmecdfdbfalaklkfbjcpacpfhlp";
+#if DEV_BUILD
+    private const string HostName = "com.solera.cms.bridge.dev";
+    private const string ManifestFileName = "com.solera.cms.bridge.dev.json";
+    private const string ExtensionAppFolder = "AMFormsCST.Dev";
+#else
     private const string HostName = "com.solera.cms.bridge";
+    private const string ManifestFileName = "com.solera.cms.bridge.json";
+    private const string ExtensionAppFolder = "AMFormsCST";
+#endif
 
     private static readonly string[] RegistryKeys =
     [
@@ -387,14 +395,25 @@ public class BrowserIntegrationService : IBrowserIntegrationService
         var extDir = GetExtensionDirectory();
         if (string.IsNullOrWhiteSpace(extDir)) return null;
 
-        var manifestPath = Path.Combine(extDir, "com.solera.cms.bridge.json");
-        if (!File.Exists(manifestPath)) return null;
+        var baseManifestPath = Path.Combine(extDir, "com.solera.cms.bridge.json");
+        var manifestPath = Path.Combine(extDir, ManifestFileName);
+        if (!File.Exists(manifestPath))
+        {
+            if (File.Exists(baseManifestPath))
+            {
+                File.Copy(baseManifestPath, manifestPath, overwrite: true);
+            }
+            else
+            {
+                return null;
+            }
+        }
 
         var appExePath = ResolveDesktopExecutablePath();
         if (string.IsNullOrWhiteSpace(appExePath)) return manifestPath;
 
         // Never overwrite the git repository template manifest directly if localAppData copy failed
-        var localAppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AMFormsCST", "BrowserExtension");
+        var localAppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ExtensionAppFolder, "BrowserExtension");
         if (!manifestPath.StartsWith(localAppDataDir, StringComparison.OrdinalIgnoreCase))
         {
             return manifestPath;
@@ -406,6 +425,10 @@ public class BrowserIntegrationService : IBrowserIntegrationService
             var escapedExe = appExePath.Replace("\\", "\\\\");
             var updated = System.Text.RegularExpressions.Regex.Replace(
                 content,
+                "\"name\"\\s*:\\s*\"[^\"]*\"",
+                $"\"name\": \"{HostName}\"");
+            updated = System.Text.RegularExpressions.Regex.Replace(
+                updated,
                 "\"path\"\\s*:\\s*\"[^\"]*\"",
                 $"\"path\": \"{escapedExe}\"");
 
@@ -447,7 +470,7 @@ public class BrowserIntegrationService : IBrowserIntegrationService
         {
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "AMFormsCST.Desktop", "bin", "Debug", "net9.0-windows", "AMFormsCST.Desktop.exe")),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "AMFormsCST.Desktop", "bin", "Release", "net9.0-windows", "AMFormsCST.Desktop.exe")),
-            Path.Combine(localAppData, "AMFormsCST", "current", "AMFormsCST.Desktop.exe"),
+            Path.Combine(localAppData, ExtensionAppFolder, "current", "AMFormsCST.Desktop.exe"),
             Path.Combine(localAppData, "SoleraCaseManagement", "current", "AMFormsCST.Desktop.exe"),
             Path.Combine(AppContext.BaseDirectory, "AMFormsCST.Desktop.exe")
         };
@@ -457,7 +480,7 @@ public class BrowserIntegrationService : IBrowserIntegrationService
 
     public static string? GetExtensionDirectory()
     {
-        var localAppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AMFormsCST", "BrowserExtension");
+        var localAppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ExtensionAppFolder, "BrowserExtension");
 
         var sourceCandidates = new[]
         {
