@@ -7,296 +7,108 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml" 
       xmlns:viewModels="clr-namespace:AMFormsCST.Desktop.ViewModels.Pages"
       xmlns:controls="clr-namespace:AMFormsCST.Desktop.Controls"
-      xmlns:converters="clr-namespace:AMFormsCST.Desktop.Converters"
-      xmlns:helpers="clr-namespace:AMFormsCST.Desktop.Helpers"
+      xmlns:dashboard="clr-namespace:AMFormsCST.Desktop.Controls.Dashboard"
       mc:Ignorable="d"
       d:DesignHeight="900" d:DesignWidth="1200"
       Title="DashboardPage"
-      d:DataContext="{d:DesignInstance viewModels:DashboardViewModel,  IsDesignTimeCreatable=true}" ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="False">
-    <Page.Resources>
-        <converters:FlowDocumentToTextConverter x:Key="FlowDocumentToTextConverter" />
-    </Page.Resources>
+      d:DataContext="{d:DesignInstance viewModels:DashboardViewModel, IsDesignTimeCreatable=true}"
+      ScrollViewer.VerticalScrollBarVisibility="Disabled"
+      ScrollViewer.CanContentScroll="False">
 
-    <Grid ScrollViewer.VerticalScrollBarVisibility="Disabled" x:Name="OutermostGrid">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="auto"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="auto"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+    <Grid x:Name="OutermostGrid" Margin="10,4,10,10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="50" />
+            <!-- Top Case Tab Bar & Quick Tools -->
+            <RowDefinition Height="Auto" />
+            <!-- Case Header -->
+            <RowDefinition Height="Auto" />
+            <!-- Progressive Disclosure 2-Pane Body -->
             <RowDefinition Height="*" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="auto" />
         </Grid.RowDefinitions>
 
-        <ui:SymbolIcon Symbol="BuildingPeople20" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="2" Grid.Column="0" Margin="0,0,15,0" ToolTip="Dealership and company information" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-        <ui:SymbolIcon Symbol="Note24" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="1" Margin="0,0,15,0" ToolTip="Case and general notes" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-        <ui:SymbolIcon Symbol="ContactCardGroup16" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="2" Grid.Column="2" Margin="0,0,15,0" ToolTip="Contact information" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-        <ui:SymbolIcon Symbol="FormMultiple20" Filled="True" VerticalAlignment="Center" HorizontalAlignment="Left" FontSize="64" Grid.Row="1" Grid.Column="2" Margin="0,0,15,0" ToolTip="Form and deal information" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-
-        <Separator Grid.Row="2" Grid.Column="2" HorizontalAlignment="Right" Margin="5" BorderThickness="2"/>
-        <Separator Grid.Row="1" HorizontalAlignment="Right" Margin="5" BorderThickness="2"/>
-        <Separator Grid.Row="2" Grid.Column="0" HorizontalAlignment="Right" Margin="5" BorderThickness="2"/>
-        <Separator Grid.Row="1" Grid.Column="2" HorizontalAlignment="Right" Margin="5" BorderThickness="2"/>
-
-<WrapPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Grid.Row="3"  Margin="0,0,0,10" Grid.Column="3">
-                <ui:Button Margin="0,0,5,0" Command="{Binding OpenTemplateDialogCommand}" ToolTip="Open email template generator">
-                    <ui:SymbolIcon Symbol="MailTemplate24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24" />
-                </ui:Button>
-                <ui:Button Margin="0,0,5,0" Command="{Binding OpenCodeSnippetDialogCommand}" ToolTip="Open code snippet generator">
-                    <ui:SymbolIcon Symbol="Code20" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
-            </ui:Button>
-            <ui:Button Margin="0,0,5,0" Command="{Binding OpenFormgenUtilsDialogCommand}" ToolTip="Open Formgen utilities">
-                <ui:SymbolIcon Symbol="DocumentTextToolbox24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
-            </ui:Button>
-            <ui:Button Margin="0,0,5,0" Command="{Binding LoadCaseCommand}" ToolTip="Load case from file">
-                <ui:SymbolIcon Symbol="ArrowDownload24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
-                </ui:Button>
-            </WrapPanel>
-
-        <controls:ManagedObservableCollectionSelector Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="4" ItemsSource="{Binding Notes}" 
-                             RadioButtonCommand="{Binding NoteClickedCommand}" 
-                             CommandParameterPath="Id"
-                             ContentBindingPath="CaseNumber"
-                             ContentFallbackValue="Enter a Case Number..."
-                             GroupName="CaseNumbers"
-                             RefreshTrigger="{Binding UiRefreshCounter}"
-                             DeleteCommand="{Binding DeleteItemClickedCommand}"
-                             ToolTip="Select, add, or delete a case note."
-                             NextCommand="{Binding SelectNextNoteCommand}"
-                             PreviousCommand="{Binding SelectPreviousNoteCommand}"/>
-
-
-        <Grid  Grid.Row="1" Grid.Column="1" VerticalAlignment="Stretch">
-
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <StackPanel Orientation="Horizontal">
-                <Label Content="Case #: " VerticalAlignment="Center" HorizontalAlignment="Center" />
-                <ui:TextBox Text="{Binding SelectedNote.CaseNumber, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
-                              ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="150" PlaceholderText="Enter a case number..." ToolTip="The case number for this note."/>
-                <controls:CopyButton TextToCopy="{Binding SelectedNote.CaseNumber}" Margin="5,0,0,0" ToolTip="Copy case number to clipboard."/>
-            </StackPanel>
-
-            
-
-            <Label Content="Notes:"  Margin=" 0, 0, 0, 0" Grid.Row="1" VerticalAlignment="Bottom"/>
-            <controls:RichTextToolbar Grid.Row="2" Target="{Binding ElementName=NoteRichTextBox}" Margin="0,0,0,2" HorizontalAlignment="Left"/>
-            <ui:RichTextBox x:Name="NoteRichTextBox" helpers:RichTextBoxHelper.Xaml="{Binding SelectedNote.NotesXaml, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                            helpers:RichTextBoxHelper.TextChangedCommand="{Binding DataContext.GeneralNotesChangedCommand, RelativeSource={RelativeSource AncestorType={x:Type local:DashboardPage}}}"
-                            AcceptsReturn="True" VerticalAlignment="Stretch" Grid.Row="3"
-                            Margin="0,0,0,10" ToolTip="General notes for this case." VerticalScrollBarVisibility="Auto"/>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.NotesXaml, Converter={StaticResource FlowDocumentToTextConverter}}"
-                                 Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="5" Grid.RowSpan="2" ToolTip="Copy notes to clipboard."/>
-        </Grid>
-
-        <Grid Margin="0,0,0,0" HorizontalAlignment="Stretch" Grid.Row="2" Grid.Column="1" VerticalAlignment="Center">
+        <!-- Top Bar: Case Tabs + Quick Tool Buttons -->
+        <Grid Grid.Row="0" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="auto"/>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+            <!-- Case Tabs Selector -->
+            <controls:ManagedObservableCollectionSelector Grid.Column="0"
+                                                         ItemsSource="{Binding Notes}" 
+                                                         RadioButtonCommand="{Binding NoteClickedCommand}" 
+                                                         CommandParameterPath="Id"
+                                                         ContentBindingPath="CaseNumber"
+                                                         ContentFallbackValue="Enter a Case Number..."
+                                                         GroupName="CaseNumbers"
+                                                         RefreshTrigger="{Binding UiRefreshCounter}"
+                                                         DeleteCommand="{Binding DeleteItemClickedCommand}"
+                                                         ToolTip="Select, add, or delete a case note."
+                                                         NextCommand="{Binding SelectNextNoteCommand}"
+                                                         PreviousCommand="{Binding SelectPreviousNoteCommand}"/>
 
-            <controls:ManagedObservableCollectionSelector ItemsSource="{Binding SelectedNote.Dealers}" 
-                                                         RadioButtonCommand="{Binding DealerClickedCommand}" 
-                                                         CommandParameterPath="DataContext"
-                                                         ContentBindingPath="CompositeDealerName"
-                                                         ContentFallbackValue="Enter a Dealership Name..."
-                                                         GroupName="DealerNames"
-                                 RefreshTrigger="{Binding UiRefreshCounter}"
-                                 DeleteCommand="{Binding DeleteItemClickedCommand}" Margin="0,0,0,5" Grid.ColumnSpan="3" ToolTip="Select, add, or delete a dealership for this note."
-                                                         NextCommand="{Binding SelectNextDealerCommand}"
-                                                         PreviousCommand="{Binding SelectPreviousDealerCommand}"/>
-
-            <controls:ManagedObservableCollectionSelector ItemsSource="{Binding SelectedNote.SelectedDealer.Companies}" 
-                                                         RadioButtonCommand="{Binding CompanyClickedCommand}" 
-                                                         CommandParameterPath="DataContext"
-                                                         ContentBindingPath="CompositeCompanyName"
-                                                         ContentFallbackValue="Enter a Company Number..."
-                                                         GroupName="CompanyNames"
-                                 RefreshTrigger="{Binding UiRefreshCounter}"
-                                 DeleteCommand="{Binding DeleteItemClickedCommand}" Grid.ColumnSpan="3" Grid.Row="1" Margin="0,0,0,5" ToolTip="Select, add, or delete a company for the selected dealership."
-                                                         NextCommand="{Binding SelectNextCompanyCommand}"
-                                                         PreviousCommand="{Binding SelectPreviousCompanyCommand}"/>
-
-            <Label Content="Dealer/Group Name: " VerticalAlignment="Center" HorizontalAlignment="Right" Grid.Row="2"/>
-            <ui:TextBox Text="{Binding SelectedNote.SelectedDealer.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                            ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="150" Margin="0,0,0,0" Grid.Row="2" 
-                        Grid.Column="1" HorizontalAlignment="Stretch" ToolTip="Name of the dealership or dealer group."/>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedDealer.Name}" Grid.Row="2" 
-                        Grid.Column="2" HorizontalAlignment="right" Margin="5,0,0,0" ToolTip="Copy dealer/group name to clipboard."/>
-
-            <Label Content="Server ID: " VerticalAlignment="Center" HorizontalAlignment="Right"  Grid.Row="3"/>
-            <ui:TextBox Text="{Binding SelectedNote.SelectedDealer.ServerCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                            ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="64" 
-                        Margin="0,0,0,0"  Grid.Row="3" Grid.Column="1" HorizontalAlignment="Left" ToolTip="Server ID for the dealership."/>
-            <ToggleButton Grid.Row="3" Grid.Column="1" Margin="0,0,10,0" IsChecked="{Binding SelectedNote.SelectedDealer.Notable, Mode=TwoWay}" ToolTip="Mark this server ID as notable." HorizontalAlignment="Right">
-                <ui:SymbolIcon Symbol="Note24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
-            </ToggleButton>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedDealer.ServerCode}" Grid.Row="3" 
-                        Grid.Column="2" HorizontalAlignment="right" Margin="5,0,0,0" ToolTip="Copy server ID to clipboard."/>
-            
-            <Label Content="Company Name: " VerticalAlignment="Center" HorizontalAlignment="Right" Grid.Row="4"/>
-            <ui:TextBox Text="{Binding SelectedNote.SelectedDealer.SelectedCompany.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                            ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="150" 
-                        Margin="0,0,0,0" Grid.Row="4" Grid.Column="1" HorizontalAlignment="Stretch" ToolTip="Name of the company."/>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedDealer.SelectedCompany.Name}" Grid.Row="4" 
-                        Grid.Column="2" HorizontalAlignment="right" Margin="5,0,0,0" ToolTip="Copy company name to clipboard."/>
-            
-            <Label Content="Company Number: " VerticalAlignment="Center" HorizontalAlignment="Right" Grid.Row="5"/>
-            <ui:TextBox Text="{Binding SelectedNote.SelectedDealer.Companies.SelectedItem.CompanyCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                        ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="32" Margin="0,0,0,0" Grid.Row="5" Grid.Column="1" HorizontalAlignment="Left" ToolTip="Company number."/>
-            <ToggleButton Grid.Row="5" Grid.Column="1" Margin="0,0,10,0" IsChecked="{Binding SelectedNote.SelectedDealer.SelectedCompany.Notable, Mode=TwoWay}" ToolTip="Mark this company number as notable." HorizontalAlignment="Right">
-                <ui:SymbolIcon Symbol="Note24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
-            </ToggleButton>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedDealer.NotableCompanyCodes}" Grid.Row="5" 
-                        Grid.Column="2" HorizontalAlignment="right" Margin="5,0,0,0" ToolTip="Copy notable company number(s) to clipboard."/>
-        </Grid>
-
-
-        <Grid Grid.Row="1" Grid.Column="3" Margin="0,0,0,0" VerticalAlignment="Stretch">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="auto"/>
-            </Grid.ColumnDefinitions>
-
-            <Grid.RowDefinitions>
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <controls:ManagedObservableCollectionSelector ItemsSource="{Binding SelectedNote.Forms}" 
-                                         RadioButtonCommand="{Binding FormClickedCommand}" 
-                                         CommandParameterPath="DataContext"
-                                         ContentBindingPath="Name"
-                                         ContentFallbackValue="Enter a Form Name..."
-                                         GroupName="FormNames"
-                 RefreshTrigger="{Binding UiRefreshCounter}"
-                 DeleteCommand="{Binding DeleteItemClickedCommand}" Margin="0,0,0,5" Grid.ColumnSpan="2" ToolTip="Select, add, or delete a form for this note."
-                                         NextCommand="{Binding SelectNextFormCommand}"
-                                         PreviousCommand="{Binding SelectPreviousFormCommand}"/>
-
-            <controls:ManagedObservableCollectionSelector ItemsSource="{Binding SelectedNote.SelectedForm.TestDeals}" 
-                                         RadioButtonCommand="{Binding DealClickedCommand}" 
-                                         CommandParameterPath="DataContext"
-                                         ContentBindingPath="DealNumber"
-                                         ContentFallbackValue="Enter a Deal Number..."
-                                         GroupName="TestDeals"
-                 RefreshTrigger="{Binding UiRefreshCounter}"
-                 DeleteCommand="{Binding DeleteItemClickedCommand}" Grid.ColumnSpan="2" Grid.Row="1" Margin="0,0,0,5" ToolTip="Select, add, or delete a test deal for the selected form."
-                                         NextCommand="{Binding SelectNextTestDealCommand}"
-                                         PreviousCommand="{Binding SelectPreviousTestDealCommand}"/>
-
-            <Label Content="Name: " VerticalAlignment="Center" HorizontalAlignment="Center" Grid.Row="2" Grid.Column="0"/>
-            <ui:TextBox Text="{Binding SelectedNote.SelectedForm.Name, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
-                            ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="256" Margin="0,0,0,0"  Grid.Row="2" 
-                        Grid.Column="1" HorizontalAlignment="Stretch" ToolTip="Name of the form."/>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedForm.Name}" Grid.Row="2" Grid.Column="2" 
-                                 HorizontalAlignment="Left" Margin="5,0,0,0" ToolTip="Copy form name to clipboard."/>
-            
-            <Label Content="Deal#: " VerticalAlignment="Center" HorizontalAlignment="Center"  Grid.Row="3" Grid.Column="0"/>
-            <ui:TextBox Text="{Binding SelectedNote.SelectedForm.SelectedTestDeal.DealNumber, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
-                            ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="256" Margin="0,0,0,0"  Grid.Row="3" 
-                        Grid.Column="1" HorizontalAlignment="Stretch" ToolTip="Deal number for testing."/>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedForm.SelectedTestDeal.DealNumber}" Grid.Row="3" Grid.Column="2" 
-                                 HorizontalAlignment="Left" Margin="5,0,0,0" ToolTip="Copy deal number to clipboard."/>
-
-            <Label Content="Notes: " VerticalAlignment="Top" HorizontalAlignment="Center"  Grid.Row="6" Grid.Column="0"/>
-            <controls:RichTextToolbar Grid.Row="5" Grid.Column="0" Target="{Binding ElementName=FormNotesRichTextBox}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,0,0,2" Grid.ColumnSpan="3" />
-            
-            <StackPanel Orientation="Horizontal" Margin="0,5,0,0" Grid.Row="4" Grid.Column="1">
-                <Label Content="Pdf" VerticalAlignment="Center"/>
-                <ui:ToggleSwitch IsChecked="{Binding SelectedNote.SelectedForm.IsImpact, Mode=TwoWay}" Margin="5,0,5,0" ToolTip="Toggle PDF/Impact form type."/>
-                <Label Content="Impact" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                <ToggleButton Margin="0,0,5,0" IsChecked="{Binding SelectedNote.SelectedForm.Notable, Mode=TwoWay}" ToolTip="Mark this form as notable.">
-                    <ui:SymbolIcon Symbol="Note24" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
-                </ToggleButton>
-                <ui:Button Margin="0,0,5,0" Command="{Binding OpenFormNameGeneratorDialogCommand}" ToolTip="Open form name generator.">
-                    <ui:SymbolIcon Symbol="TextT12" Filled="True" VerticalAlignment="Top" HorizontalAlignment="Center" FontSize="24"/>
+            <!-- Quick Action Toolbar Buttons -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                <ui:Button Margin="0,0,6,0" Command="{Binding OpenTemplateDialogCommand}" ToolTip="Open Template Studio" Appearance="Secondary" Padding="8">
+                    <ui:SymbolIcon Symbol="MailTemplate24" FontSize="20" />
+                </ui:Button>
+                <ui:Button Margin="0,0,6,0" Command="{Binding OpenCodeSnippetDialogCommand}" ToolTip="Open Code Snippets" Appearance="Secondary" Padding="8">
+                    <ui:SymbolIcon Symbol="Code20" FontSize="20"/>
+                </ui:Button>
+                <ui:Button Margin="0,0,6,0" Command="{Binding OpenFormgenUtilsDialogCommand}" ToolTip="Open FormGen Utilities" Appearance="Secondary" Padding="8">
+                    <ui:SymbolIcon Symbol="DocumentTextToolbox24" FontSize="20"/>
+                </ui:Button>
+                <ui:Button Command="{Binding LoadCaseCommand}" ToolTip="Import / Paste Case from Clipboard" Appearance="Secondary" Padding="8">
+                    <ui:SymbolIcon Symbol="ArrowDownload24" FontSize="20"/>
                 </ui:Button>
             </StackPanel>
-            
-            <ui:RichTextBox x:Name="FormNotesRichTextBox" 
-                            helpers:RichTextBoxHelper.Document="{Binding SelectedNote.SelectedForm.Notes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                            helpers:RichTextBoxHelper.TextChangedCommand="{Binding DataContext.FormNotesChangedCommand, RelativeSource={RelativeSource AncestorType={x:Type local:DashboardPage}}}"
-                            VerticalAlignment="Stretch" Margin="0" AcceptsReturn="True" Grid.Row="6" 
-                            Grid.Column="1" HorizontalAlignment="Stretch" ToolTip="Notes specific to this form." VerticalScrollBarVisibility="Auto" />
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedForm.Notes, Converter={StaticResource FlowDocumentToTextConverter}}" Grid.Row="6" Grid.Column="2" 
-                                 HorizontalAlignment="Left" Margin="5,0,0,0" VerticalAlignment="Top" ToolTip="Copy form notes to clipboard."/>
-
         </Grid>
 
-        <Grid Margin="0,0,0,0" HorizontalAlignment="Left" Grid.Row="2" Grid.Column="3" VerticalAlignment="Center">
+        <!-- Case Header (Case #, Server, Dealership, Contact, Expandable Details Tray) -->
+        <dashboard:CaseHeaderControl Grid.Row="1" />
+
+        <!-- 2-Pane Progressive Disclosure Workspace -->
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="auto"/>
+                <!-- Left: The Workpad / Composer -->
+                <ColumnDefinition Width="420" MinWidth="340" />
+                <ColumnDefinition Width="8" />
+                <!-- Right: Output Preview & Action Timeline -->
+                <ColumnDefinition Width="*" MinWidth="450" />
             </Grid.ColumnDefinitions>
 
-            <Grid.RowDefinitions>
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="auto" />
-                <RowDefinition Height="auto" />
-            </Grid.RowDefinitions>
+            <!-- Left Pane: Work Item Composer -->
+            <dashboard:WorkItemComposerControl Grid.Column="0" />
 
-            <controls:ManagedObservableCollectionSelector ItemsSource="{Binding SelectedNote.Contacts}" 
-                                     RadioButtonCommand="{Binding ContactClickedCommand}" 
-                                     CommandParameterPath="DataContext"
-                                     ContentBindingPath="Name"
-                                     ContentFallbackValue="Enter a Contact Name..."
-                                     GroupName="ContactNames"
-                                     RefreshTrigger="{Binding UiRefreshCounter}"
-                                     DeleteCommand="{Binding DeleteItemClickedCommand}" 
-                                     Grid.ColumnSpan="2" 
-                                     Margin="0,0,0,5" 
-                                     ToolTip="Select, add, or delete a contact for this note."
-                                     NextCommand="{Binding SelectNextContactCommand}"
-                                     PreviousCommand="{Binding SelectPreviousContactCommand}"/>
+            <!-- Grid Splitter for Flexible Resizing -->
+            <GridSplitter Grid.Column="1"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          Background="Transparent"
+                          ShowsPreview="True"
+                          Cursor="SizeWE" />
 
-            <Label Content="Name: " VerticalAlignment="Center" HorizontalAlignment="Center" Grid.Row="1"/>
-            <ui:TextBox Text="{Binding SelectedNote.SelectedContact.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                        ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="256" 
-                        Margin="0,0,0,0" Grid.Row="1" Grid.Column="1" ToolTip="Contact's full name."/>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedContact.Name}" Grid.Row="1" Grid.Column="2"
-                                  Margin="5,0,0,0" ToolTip="Copy contact's name to clipboard."/>
-            
-            <Label Content="Email: " VerticalAlignment="Center" HorizontalAlignment="Center" Grid.Row="2" />
-            <ui:TextBox Text="{Binding SelectedNote.SelectedContact.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="256" Margin="0,0,0,0" Grid.Row="2" Grid.Column="1" ToolTip="Contact's email address."/>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedContact.Email}" Grid.Row="2" Grid.Column="2"
-                                  Margin="5,0,0,0" ToolTip="Copy contact's email to clipboard."/>
-            
-            <Label Content="Phone #: " VerticalAlignment="Center" HorizontalAlignment="Center" Grid.Row="3" />
+            <!-- Right Pane: Live Output Preview & Case Action Timeline -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3*" MinHeight="180" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition Height="4*" MinHeight="180" />
+                </Grid.RowDefinitions>
 
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,0" Grid.Row="3" Grid.Column="1">
-                <ui:TextBox Text="{Binding SelectedNote.SelectedContact.Phone, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="128" Margin="0,0,0,0" ToolTip="Contact's phone number."/>
-                <ui:TextBox Text="{Binding SelectedNote.SelectedContact.PhoneExtensionDelimiter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="32" Margin="15,0,15,0" ToolTip="Delimiter for phone extension (e.g., 'x')."/>
-                <ui:TextBox Text="{Binding SelectedNote.SelectedContact.PhoneExtension, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ClearButtonEnabled="True" VerticalAlignment="Center" MinWidth="64" ToolTip="Contact's phone extension."/>
-            </StackPanel>
-            <controls:CopyButton TextToCopy="{Binding SelectedNote.SelectedContact.FullPhone}" Grid.Row="3" Grid.Column="2"
-                                  Margin="5,0,0,0" ToolTip="Copy full phone number to clipboard."/>
+                <!-- Upper Right: Assembled Output Generator & Preview -->
+                <dashboard:AssembledOutputControl Grid.Row="0" />
+
+                <!-- Splitter between preview and timeline -->
+                <GridSplitter Grid.Row="1"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Background="Transparent"
+                              ShowsPreview="True"
+                              Cursor="SizeNS" />
+
+                <!-- Lower Right: Case Action Timeline -->
+                <dashboard:CaseActionTimelineControl Grid.Row="2" />
+            </Grid>
         </Grid>
     </Grid>
 </Page>

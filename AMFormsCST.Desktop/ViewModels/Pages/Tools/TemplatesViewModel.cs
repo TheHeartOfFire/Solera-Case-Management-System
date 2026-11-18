@@ -1,6 +1,8 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Types.BestPractices.TextTemplates.Models;
+using AMFormsCST.Core.Types.Notebook;
+using AMFormsCST.Core.Utils;
 using AMFormsCST.Desktop.Models.Templates;
 using AMFormsCST.Desktop.Services;
 using AMFormsCST.Desktop.ViewModels.Dialogs;
@@ -9,18 +11,21 @@ using AMFormsCST.Desktop.Views.Dialogs;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Documents;
+using static AMFormsCST.Core.Types.BestPractices.TextTemplates.Models.TextTemplate;
 
 namespace AMFormsCST.Desktop.ViewModels.Pages.Tools;
 
 public partial class TemplatesViewModel : ViewModel
 {
     private readonly ILogService? _logger;
+    private readonly ITemplateAssemblyService _assemblyService;
 
     [ObservableProperty]
     private ObservableCollection<TemplateItemViewModel> _templates;
@@ -43,6 +48,55 @@ public partial class TemplatesViewModel : ViewModel
                 TemplatesView.Refresh();
         }
     }
+
+    public ObservableCollection<string> TagFilterOptions { get; } = ["All", "#Internal", "#Email", "#Publish", "#Closure"];
+
+    private string _selectedTagFilter = "All";
+    public string SelectedTagFilter
+    {
+        get => _selectedTagFilter;
+        set
+        {
+            if (SetProperty(ref _selectedTagFilter, value))
+                TemplatesView.Refresh();
+        }
+    }
+
+    private TemplateCategoryKind? _selectedCategoryKind;
+    public TemplateCategoryKind? SelectedCategoryKind
+    {
+        get => _selectedCategoryKind;
+        set
+        {
+            if (SetProperty(ref _selectedCategoryKind, value))
+                TemplatesView.Refresh();
+        }
+    }
+
+    [ObservableProperty]
+    private string _livePreviewText = string.Empty;
+
+    [ObservableProperty]
+    private string _newTagInput = string.Empty;
+
+    public ObservableCollection<string> VariableTokens { get; } =
+    [
+        "{Contact:FirstName}",
+        "{StoreList}",
+        "{FormName}",
+        "{DealNumber}",
+        "{LinesAdjusted}",
+        "{CaseNumber}",
+        "{ServerID}",
+        "{Dealership}",
+        "{DealerEmail}"
+    ];
+
+    public IEnumerable<TemplateCategoryKind> AvailableCategoryKinds =>
+        Enum.GetValues(typeof(TemplateCategoryKind)).Cast<TemplateCategoryKind>();
+
+    public IEnumerable<CaseActionType> AvailableActionTypes =>
+        Enum.GetValues(typeof(CaseActionType)).Cast<CaseActionType>();
 
     public ObservableCollection<string> SortOptions { get; }
     private string _selectedSortOption;
@@ -68,10 +122,11 @@ public partial class TemplatesViewModel : ViewModel
         }
     }
 
-    public TemplatesViewModel(ISupportTool supportTool, IFileSystem fs, ILogService? logger = null)
+    public TemplatesViewModel(ISupportTool supportTool, IFileSystem fs, ITemplateAssemblyService? assemblyService = null, ILogService? logger = null)
     {
         _supportTool = supportTool ?? throw new ArgumentNullException(nameof(supportTool));
         _fileSystem = fs ?? throw new ArgumentNullException(nameof(fs));
+        _assemblyService = assemblyService ?? new TemplateAssemblyService();
         _logger = logger;
         _templates = new(_supportTool.Enforcer.Templates.Select(t => new TemplateItemViewModel(t, _supportTool) { Template = t }));
 
@@ -97,11 +152,13 @@ public partial class TemplatesViewModel : ViewModel
         }
         _logger?.LogInfo($"TemplatesViewModel initialized with {_templates.Count} templates.");
     }
+
     #region Design-Time Constructor
     public TemplatesViewModel()
     {
         _supportTool = new DesignTimeSupportTool();
         _fileSystem = new DesignTimeFileSystem();
+        _assemblyService = new TemplateAssemblyService();
         _templates = new(_supportTool.Enforcer.Templates.Select(t => new TemplateItemViewModel(t, _supportTool)));
 
         TemplatesView = CollectionViewSource.GetDefaultView(_templates);
@@ -128,7 +185,13 @@ public partial class TemplatesViewModel : ViewModel
         var typeMatch = SelectedFilterType?.Value is null ||
                         templateVm.Template.Type == SelectedFilterType.Value;
 
-        return nameMatch && typeMatch;
+        var tagMatch = SelectedTagFilter == "All" ||
+                       templateVm.Template.Tags.Any(t => t.Equals(SelectedTagFilter, StringComparison.OrdinalIgnoreCase));
+
+        var kindMatch = SelectedCategoryKind == null ||
+                        templateVm.Template.Kind == SelectedCategoryKind;
+
+        return nameMatch && typeMatch && tagMatch && kindMatch;
     }
 
     private void ApplySort()
@@ -267,25 +330,111 @@ public partial class TemplatesViewModel : ViewModel
     [RelayCommand]
     internal void SelectTemplate(TemplateItemViewModel? item)
     {
-        var itemInCollection = _templates.FirstOrDefault(t => t.Template.Id == item?.Template.Id);
+        var itemInCollection = Templates.FirstOrDefault(t => t.Template.Id == item?.Template.Id);
 
         if (itemInCollection == SelectedTemplate) return;
 
         SelectedTemplate?.Deselect();
         SelectedTemplate = itemInCollection;
         SelectedTemplate?.Select();
+        RefreshLivePreview();
         _logger?.LogInfo($"Template selected: {item?.Template.Name}");
     }
 
     [RelayCommand]
-    private void CopyTemplate(TemplateItemViewModel item)
+    private void InsertVariableToken(string? token)
+    {
+        if (SelectedTemplate == null || string.IsNullOrWhiteSpace(token)) return;
+
+        var currentText = TextTemplate.GetFlowDocumentPlainText(SelectedTemplate.Template.Text);
+        var updated = (currentText + " " + token).Trim();
+        var doc = new FlowDocument(new Paragraph(new Run(updated)));
+        SelectedTemplate.Template.Text = doc;
+        SelectedTemplate.RefreshTemplateData();
+        RefreshLivePreview();
+    }
+
+    [RelayCommand]
+    private void AddTag()
+    {
+        if (SelectedTemplate == null || string.IsNullOrWhiteSpace(NewTagInput)) return;
+        SelectedTemplate.AddTag(NewTagInput);
+        NewTagInput = string.Empty;
+        TemplatesView.Refresh();
+        RefreshLivePreview();
+    }
+
+    [RelayCommand]
+    private void RemoveTag(string? tag)
+    {
+        if (SelectedTemplate == null || string.IsNullOrWhiteSpace(tag)) return;
+        SelectedTemplate.RemoveTag(tag);
+        TemplatesView.Refresh();
+        RefreshLivePreview();
+    }
+
+    [RelayCommand]
+    private void SaveTemplateChanges()
+    {
+        if (SelectedTemplate == null) return;
+        _supportTool.Enforcer.UpdateTemplate(SelectedTemplate.Template);
+        RefreshLivePreview();
+        _logger?.LogInfo($"Saved template changes for: {SelectedTemplate.Template.Name}");
+    }
+
+    [RelayCommand]
+    public void RefreshLivePreview()
+    {
+        if (SelectedTemplate == null)
+        {
+            LivePreviewText = string.Empty;
+            return;
+        }
+
+        try
+        {
+            var note = _supportTool?.Notebook?.Notes?.SelectedItem
+                ?? _supportTool?.Notebook?.Notes?.FirstOrDefault();
+
+            if (SelectedTemplate.Template.Kind == TemplateCategoryKind.ActionPartial)
+            {
+                var entry = note?.LogEntries?.LastOrDefault(e => e.IncludeInOutput)
+                    ?? new CaseLogEntry
+                    {
+                        Action = SelectedTemplate.Template.AssociatedAction ?? CaseActionType.LineAdjustments,
+                        FormName = "F102 - Buyers Order",
+                        Details = "Shifted lines 14-16 down 2pt for dot matrix alignment",
+                        Timestamp = DateTime.Now
+                    };
+
+                LivePreviewText = _assemblyService.ResolveActionBlock(entry, SelectedTemplate.Template);
+            }
+            else
+            {
+                LivePreviewText = TextTemplate.GetFlowDocumentPlainText(SelectedTemplate.Output);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError("Error generating live preview.", ex);
+            LivePreviewText = $"Preview Error: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void CopyTemplate(TemplateItemViewModel? item)
     {
         try
         {
-            if (item == SelectedTemplate) return;
+            var target = item ?? SelectedTemplate;
+            if (target == null) return;
 
-            Clipboard.SetText(TextTemplate.GetFlowDocumentPlainText(SelectedTemplate?.Output));
-            _logger?.LogInfo($"Template output copied: {SelectedTemplate?.Template.Name}");
+            var text = !string.IsNullOrWhiteSpace(LivePreviewText)
+                ? LivePreviewText
+                : TextTemplate.GetFlowDocumentPlainText(target.Output);
+
+            Clipboard.SetText(text);
+            _logger?.LogInfo($"Template output copied: {target.Template.Name}");
         }
         catch (Exception ex)
         {
@@ -352,6 +501,7 @@ public partial class TemplatesViewModel : ViewModel
     public void Refresh()
     {
         TemplatesView.Refresh();
-        SelectedTemplate.RefreshTemplateData();
+        SelectedTemplate?.RefreshTemplateData();
+        RefreshLivePreview();
     }
 }

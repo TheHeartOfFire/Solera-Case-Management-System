@@ -101,16 +101,27 @@ public partial class SettingsViewModel : ViewModel
     private bool _isBrowserBridgeRegistered;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmailSignaturePreview))]
     private string _userName = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmailSignaturePreview))]
     private string _userEmail = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmailSignaturePreview))]
     private string _userPhone = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmailSignaturePreview))]
     private string _userTitle = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmailSignaturePreview))]
+    private string _emailSignatureTemplate = AMFormsCST.Core.Utils.UserSignatureFormatter.DefaultAutomateFormsSignature;
+
+    public string EmailSignaturePreview => AMFormsCST.Core.Utils.UserSignatureFormatter.FormatSignature(
+        EmailSignatureTemplate, UserName, UserTitle, UserEmail, UserPhone);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFormsRoleActive))]
@@ -216,6 +227,9 @@ public partial class SettingsViewModel : ViewModel
         UserEmail = userSettings.Email ?? string.Empty;
         UserPhone = userSettings.Phone ?? string.Empty;
         UserTitle = userSettings.Title ?? string.Empty;
+        EmailSignatureTemplate = string.IsNullOrWhiteSpace(userSettings.EmailSignatureTemplate)
+            ? AMFormsCST.Core.Utils.UserSignatureFormatter.DefaultAutomateFormsSignature
+            : userSettings.EmailSignatureTemplate;
         SelectedRole = userSettings.Role;
         SupportEmail = string.IsNullOrWhiteSpace(userSettings.SupportEmail) ? "automate-support@solera.com" : userSettings.SupportEmail;
         SupportPhone = string.IsNullOrWhiteSpace(userSettings.SupportPhone) ? "800-xxx-xxxx" : userSettings.SupportPhone;
@@ -297,6 +311,11 @@ public partial class SettingsViewModel : ViewModel
                 case nameof(UserTitle):
                     _supportTool.Settings.UserSettings.Title = UserTitle;
                     _logger?.LogInfo($"UserTitle changed: {UserTitle}");
+                    break;
+
+                case nameof(EmailSignatureTemplate):
+                    _supportTool.Settings.UserSettings.EmailSignatureTemplate = EmailSignatureTemplate;
+                    _logger?.LogInfo("EmailSignatureTemplate changed.");
                     break;
 
                 case nameof(SelectedRole):

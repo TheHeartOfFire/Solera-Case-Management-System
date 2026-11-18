@@ -664,4 +664,146 @@ Web Browser: 11
         Assert.Null(AMFormsCST.Desktop.Views.Dialogs.FormgenQuickPasteWindow.ExtractFormNameFromWindowTitle(""));
         Assert.Null(AMFormsCST.Desktop.Views.Dialogs.FormgenQuickPasteWindow.ExtractFormNameFromWindowTitle("Notepad - Untitled"));
     }
+
+    [Fact]
+    public void PostLogEntry_AddsLogEntryAndRefreshesAssembledNote()
+    {
+        // Arrange
+        var viewModel = new DashboardViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object, _mockDebounceService.Object);
+        var note = viewModel.SelectedNote;
+        Assert.NotNull(note);
+
+        viewModel.ComposerFormName = "F102 - Buyers Order";
+        viewModel.ComposerActionType = AMFormsCST.Core.Types.Notebook.CaseActionType.LineAdjustments;
+        viewModel.ComposerDetails = "Shifted line 18 down 2pt";
+        viewModel.ComposerIsCustomCopy = true;
+        viewModel.NewDealNumber = "54321";
+        viewModel.NewDealPurpose = "Retail Deal";
+        viewModel.AddComposerDealCommand.Execute(null);
+        viewModel.ToggleComposerStoreCommand.Execute("07");
+
+        // Act
+        viewModel.PostLogEntryCommand.Execute(null);
+
+        // Assert
+        var entry = note.LogEntries.First(e => !e.IsBlank);
+        Assert.Equal("F102 - Buyers Order", entry.FormName);
+        Assert.Equal(AMFormsCST.Core.Types.Notebook.CaseActionType.LineAdjustments, entry.Action);
+        Assert.True(entry.IsCustomCopy);
+        Assert.Equal("Shifted line 18 down 2pt", entry.Details);
+        Assert.Single(entry.Deals);
+        Assert.Equal("54321", entry.Deals[0].DealNumber);
+        Assert.Single(entry.Stores);
+        Assert.Equal("07", entry.Stores[0].CompanyCode);
+
+        // Inputs should be reset
+        Assert.Empty(viewModel.ComposerFormName);
+        Assert.Empty(viewModel.ComposerDetails);
+        Assert.False(viewModel.ComposerIsCustomCopy);
+        Assert.Empty(viewModel.ComposerDeals);
+        Assert.Empty(viewModel.ComposerSelectedStores);
+
+        // Assembled note should be populated
+        Assert.Contains("F102 - Buyers Order", viewModel.AssembledNoteText);
+    }
+
+    [Fact]
+    public void ToggleComposerStore_AddsAndRemovesStoreCode()
+    {
+        // Arrange
+        var viewModel = new DashboardViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object, _mockDebounceService.Object);
+
+        // Act & Assert - Toggle ON
+        viewModel.ToggleComposerStoreCommand.Execute("01");
+        Assert.Contains("01", viewModel.ComposerSelectedStores);
+        Assert.Equal("01", viewModel.ComposerStoresSummary);
+
+        // Act & Assert - Toggle OFF
+        viewModel.ToggleComposerStoreCommand.Execute("01");
+        Assert.DoesNotContain("01", viewModel.ComposerSelectedStores);
+        Assert.Equal("All Stores", viewModel.ComposerStoresSummary);
+    }
+
+    [Fact]
+    public void AddComposerDeal_AddsDealAndClearsInputs()
+    {
+        // Arrange
+        var viewModel = new DashboardViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object, _mockDebounceService.Object);
+        viewModel.NewDealNumber = "12345";
+        viewModel.NewDealPurpose = "Lease Deal";
+
+        // Act
+        viewModel.AddComposerDealCommand.Execute(null);
+
+        // Assert
+        Assert.Single(viewModel.ComposerDeals);
+        Assert.Equal("12345", viewModel.ComposerDeals[0].DealNumber);
+        Assert.Equal("Lease Deal", viewModel.ComposerDeals[0].Purpose);
+        Assert.Empty(viewModel.NewDealNumber);
+        Assert.Empty(viewModel.NewDealPurpose);
+
+        // Remove deal
+        viewModel.RemoveComposerDealCommand.Execute(viewModel.ComposerDeals[0]);
+        Assert.Empty(viewModel.ComposerDeals);
+    }
+
+    [Fact]
+    public void AddLinkedCase_AddsLinkedCaseAndRefreshesOutput()
+    {
+        // Arrange
+        var viewModel = new DashboardViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object, _mockDebounceService.Object);
+        var note = viewModel.SelectedNote;
+        Assert.NotNull(note);
+
+        viewModel.NewLinkedCaseNumber = "00998877";
+
+        // Act
+        viewModel.AddLinkedCaseCommand.Execute(null);
+
+        // Assert
+        Assert.Contains("00998877", note.LinkedCases);
+        Assert.Empty(viewModel.NewLinkedCaseNumber);
+
+        // Remove
+        viewModel.RemoveLinkedCaseCommand.Execute("00998877");
+        Assert.DoesNotContain("00998877", note.LinkedCases);
+    }
+
+    [Fact]
+    public void ParseCaseText_PopulatesHistoricalEntriesAndLinkedCases()
+    {
+        // Arrange
+        var viewModel = new DashboardViewModel(_mockSupportTool.Object, _mockDialogService.Object, _mockFileSystem.Object, _mockDebounceService.Object);
+        var salesforceText = @"
+Case Number: 00123456
+Subject: Adjustments
+Company Name: Apex Motors
+Server ID: SVR1
+Contact Name: Jane Doe
+Description:
+=== SCMT Work Log ===
+Primary Case: #00123456
+Linked Cases: #00123457, #00123480
+• [Line Adjustments] F301 Invoice (Store 07 - Custom)
+  - Deals: #54321 (Retail)
+  - Shifted down 2pt
+====================";
+
+        // Act
+        var note = viewModel.ParseCaseText(salesforceText);
+
+        // Assert
+        Assert.Equal("00123456", note.CaseNumber);
+        Assert.Equal(2, note.LinkedCases.Count);
+        Assert.Contains("00123457", note.LinkedCases);
+        Assert.Contains("00123480", note.LinkedCases);
+
+        var activeEntries = note.LogEntries.Where(e => !e.IsBlank).ToList();
+        Assert.Single(activeEntries);
+        var entry = activeEntries[0];
+        Assert.Equal("F301 Invoice", entry.FormName);
+        Assert.Equal(AMFormsCST.Core.Types.Notebook.CaseActionType.LineAdjustments, entry.Action);
+        Assert.True(entry.IsHistorical);
+        Assert.False(entry.IncludeInOutput); // Historical entries unchecked by default
+    }
 }

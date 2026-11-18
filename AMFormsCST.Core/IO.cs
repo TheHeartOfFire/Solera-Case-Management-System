@@ -36,7 +36,11 @@ public static class IO
 
     static IO()
     {
+#if DEV_BUILD
+        _rootPath = Path.Combine(_appData, "Solera Case Management Tool (Dev)");
+#else
         _rootPath = Path.Combine(_appData, "Solera Case Management Tool");
+#endif
         _notesPath = Path.Combine(_rootPath, "SavedNotes.json");
         _settingsPath = Path.Combine(_rootPath, "AppSettings.json");
         BackupPath = Path.Combine(_rootPath, "FormgenBackup");
@@ -198,17 +202,23 @@ public static class IO
     {
         if (!File.Exists(_templatesPath))
         {
-            SaveTemplates([]); 
-            Logger?.LogWarning("TextTemplates file not found. Created new file.");
-            return []; 
+            var defaults = Utils.DefaultTemplatesProvider.GetDefaultClosureTemplates();
+            SaveTemplates(defaults); 
+            Logger?.LogWarning("TextTemplates file not found. Created new file with default templates.");
+            return defaults; 
         }
 
         try
         {
             var json = File.ReadAllText(_templatesPath);
-            var templates = JsonSerializer.Deserialize<List<TextTemplate>>(json, _jsonOptions);
+            var templates = JsonSerializer.Deserialize<List<TextTemplate>>(json, _jsonOptions) ?? [];
+            if (!templates.Any(t => t.Type == TextTemplate.TemplateType.ClosureComments))
+            {
+                templates.AddRange(Utils.DefaultTemplatesProvider.GetDefaultClosureTemplates());
+                SaveTemplates(templates);
+            }
             Logger?.LogInfo("TextTemplates loaded.");
-            return templates ?? []; 
+            return templates; 
         }
         catch (JsonException ex)
         {

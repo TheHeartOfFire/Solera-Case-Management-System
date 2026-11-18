@@ -5,6 +5,7 @@ using AMFormsCST.Core.Interfaces.Utils;
 using AMFormsCST.Core.Types.BestPractices.TextTemplates.Models;
 using AMFormsCST.Desktop.Services;
 using AMFormsCST.Desktop.ViewModels.Pages.Tools;
+using AMFormsCST.Desktop.ViewModels.Pages.Tools.Templates;
 using Moq;
 using System.Collections.Generic;
 using System.Linq;
@@ -92,5 +93,90 @@ public class TemplatesViewModelTests
         // Assert
         Assert.Same(templateToSelect, viewModel.SelectedTemplate);
         Assert.Equal(TextTemplate.TemplateType.Email, viewModel.SelectedTemplate.Template.Type);
+    }
+
+    [Fact]
+    public void TagFiltering_FiltersTemplatesViewByAssignedTag()
+    {
+        // Arrange
+        _templateList[0].Tags = ["#Internal"];
+        _templateList[1].Tags = ["#Email"];
+        var viewModel = new TemplatesViewModel(_mockSupportTool.Object, _mockFileSystem.Object);
+
+        // Act - Filter by #Email
+        viewModel.SelectedTagFilter = "#Email";
+
+        // Assert
+        var filtered = viewModel.TemplatesView.Cast<TemplateItemViewModel>().ToList();
+        Assert.Single(filtered);
+        Assert.Equal("Template 2", filtered[0].Template.Name);
+
+        // Act - Reset to All
+        viewModel.SelectedTagFilter = "All";
+        filtered = viewModel.TemplatesView.Cast<TemplateItemViewModel>().ToList();
+        Assert.Equal(2, filtered.Count);
+    }
+
+    [Fact]
+    public void InsertVariableTokenCommand_AppendsTokenToSelectedTemplate()
+    {
+        // Arrange
+        var viewModel = new TemplatesViewModel(_mockSupportTool.Object, _mockFileSystem.Object);
+        var initialText = TextTemplate.GetFlowDocumentPlainText(viewModel.SelectedTemplate!.Template.Text);
+
+        // Act
+        viewModel.InsertVariableTokenCommand.Execute("{FormName}");
+
+        // Assert
+        var updatedText = TextTemplate.GetFlowDocumentPlainText(viewModel.SelectedTemplate.Template.Text);
+        Assert.Contains("{FormName}", updatedText);
+    }
+
+    [Fact]
+    public void AddTagAndRemoveTagCommand_UpdatesTemplateTags()
+    {
+        // Arrange
+        var viewModel = new TemplatesViewModel(_mockSupportTool.Object, _mockFileSystem.Object);
+        var template = viewModel.SelectedTemplate!;
+
+        // Act - Add tag
+        viewModel.NewTagInput = "Publish";
+        viewModel.AddTagCommand.Execute(null);
+
+        // Assert
+        Assert.Contains("#Publish", template.Tags);
+        Assert.Empty(viewModel.NewTagInput);
+
+        // Act - Remove tag
+        viewModel.RemoveTagCommand.Execute("#Publish");
+
+        // Assert
+        Assert.DoesNotContain("#Publish", template.Tags);
+    }
+
+    [Fact]
+    public void LivePreview_RendersActionBlock_ForActionPartial()
+    {
+        // Arrange
+        var actionPartial = new TextTemplate(
+            "Action Partial",
+            "Desc",
+            "<FlowDocument xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><Paragraph><Run Text=\"Action on {FormName}\"/></Paragraph></FlowDocument>",
+            TextTemplate.TemplateType.Other,
+            TextTemplate.TemplateCategoryKind.ActionPartial,
+            ["#Internal"],
+            AMFormsCST.Core.Types.Notebook.CaseActionType.LineAdjustments
+        );
+        _templateList.Add(actionPartial);
+
+        var viewModel = new TemplatesViewModel(_mockSupportTool.Object, _mockFileSystem.Object);
+        var item = viewModel.Templates.First(t => t.Template.Name == "Action Partial");
+
+        // Act
+        viewModel.SelectTemplateCommand.Execute(item);
+
+        // Assert
+        Assert.NotNull(viewModel.LivePreviewText);
+        Assert.Contains("Action on", viewModel.LivePreviewText);
     }
 }

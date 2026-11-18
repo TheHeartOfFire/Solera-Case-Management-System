@@ -21,12 +21,15 @@ public class TextTemplateJsonConverter : JsonConverter<TextTemplate>
         string description = string.Empty;
         string textXaml = string.Empty;
         TextTemplate.TemplateType type = default;
+        TextTemplate.TemplateCategoryKind kind = TextTemplate.TemplateCategoryKind.CompleteTemplate;
+        List<string> tags = [];
+        AMFormsCST.Core.Types.Notebook.CaseActionType? associatedAction = null;
 
         while (reader.Read())
         {
             if (reader.TokenType == JsonTokenType.EndObject)
             {
-                return new TextTemplate(id, name, description, textXaml, type);
+                return new TextTemplate(id, name, description, textXaml, type, kind, tags, associatedAction);
             }
 
             if (reader.TokenType != JsonTokenType.PropertyName)
@@ -55,6 +58,37 @@ public class TextTemplateJsonConverter : JsonConverter<TextTemplate>
                     else if (reader.TokenType == JsonTokenType.Number)
                         type = (TextTemplate.TemplateType)reader.GetInt32();
                     break;
+                case "kind":
+                    if (reader.TokenType == JsonTokenType.String)
+                        Enum.TryParse(reader.GetString(), true, out kind);
+                    else if (reader.TokenType == JsonTokenType.Number)
+                        kind = (TextTemplate.TemplateCategoryKind)reader.GetInt32();
+                    break;
+                case "tags":
+                    if (reader.TokenType == JsonTokenType.StartArray)
+                    {
+                        tags = [];
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                        {
+                            if (reader.TokenType == JsonTokenType.String)
+                            {
+                                var t = reader.GetString();
+                                if (!string.IsNullOrWhiteSpace(t)) tags.Add(t);
+                            }
+                        }
+                    }
+                    break;
+                case "associatedaction":
+                    if (reader.TokenType == JsonTokenType.String)
+                    {
+                        if (Enum.TryParse<AMFormsCST.Core.Types.Notebook.CaseActionType>(reader.GetString(), true, out var act))
+                            associatedAction = act;
+                    }
+                    else if (reader.TokenType == JsonTokenType.Number)
+                    {
+                        associatedAction = (AMFormsCST.Core.Types.Notebook.CaseActionType)reader.GetInt32();
+                    }
+                    break;
                 case "text":
                     var textValue = reader.GetString() ?? string.Empty;
                     try
@@ -77,7 +111,7 @@ public class TextTemplateJsonConverter : JsonConverter<TextTemplate>
         }
         
         // Construct using TextXaml string
-        return new TextTemplate(id, name, description, textXaml, type);
+        return new TextTemplate(id, name, description, textXaml, type, kind, tags, associatedAction);
     }
 
     public override void Write(Utf8JsonWriter writer, TextTemplate value, JsonSerializerOptions options)
@@ -89,6 +123,22 @@ public class TextTemplateJsonConverter : JsonConverter<TextTemplate>
         writer.WriteString("name", value.Name);
         writer.WriteString("description", value.Description);
         writer.WriteNumber("type", (int)value.Type);
+        writer.WriteNumber("kind", (int)value.Kind);
+
+        if (value.Tags != null && value.Tags.Count > 0)
+        {
+            writer.WriteStartArray("tags");
+            foreach (var tag in value.Tags)
+            {
+                writer.WriteStringValue(tag);
+            }
+            writer.WriteEndArray();
+        }
+
+        if (value.AssociatedAction.HasValue)
+        {
+            writer.WriteNumber("associatedAction", (int)value.AssociatedAction.Value);
+        }
 
         // Serialize stored XAML string directly
         writer.WriteString("text", value.TextXaml); 

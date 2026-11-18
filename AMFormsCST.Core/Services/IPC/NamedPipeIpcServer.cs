@@ -11,7 +11,11 @@ namespace AMFormsCST.Core.Services.IPC;
 /// </summary>
 public class NamedPipeIpcServer : IAsyncDisposable
 {
+#if DEV_BUILD
+    public const string DefaultPipeName = "SoleraCMS_Dev_IPC";
+#else
     public const string DefaultPipeName = "SoleraCMS_IPC";
+#endif
 
     private readonly string _pipeName;
     private readonly Func<IpcMessage, Task<IpcResponse>> _messageHandler;

@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Helpers;
+using AMFormsCST.Core.Helpers;
 using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Core.Interfaces;
 using System.Diagnostics.CodeAnalysis;
@@ -18,6 +18,8 @@ public class Note : INote
     public SelectableList<IDealer> Dealers { get; set; }
     public SelectableList<IContact> Contacts { get; set; }
     public SelectableList<IForm> Forms { get; set; }
+    public SelectableList<ICaseLogEntry> LogEntries { get; set; }
+    public List<string> LinkedCases { get; set; } = [];
 
     public Guid Id => _id;
 
@@ -29,6 +31,7 @@ public class Note : INote
         Dealers = new SelectableList<IDealer>(_logger);
         Contacts = new SelectableList<IContact>(_logger);
         Forms = new SelectableList<IForm>(_logger);
+        LogEntries = new SelectableList<ICaseLogEntry>(_logger);
         _logger?.LogInfo($"Note initialized. Id: {_id}");
     }
 
@@ -50,7 +53,9 @@ public class Note : INote
             NotesXaml = NotesXaml,
             Dealers = new SelectableList<IDealer>(Dealers.Select(d => d.Clone()), _logger),
             Contacts = new SelectableList<IContact>(Contacts.Select(c => c.Clone()), _logger),
-            Forms = new SelectableList<IForm>(Forms.Select(f => f.Clone()), _logger)
+            Forms = new SelectableList<IForm>(Forms.Select(f => f.Clone()), _logger),
+            LogEntries = new SelectableList<ICaseLogEntry>(LogEntries.Select(l => l.Clone()), _logger),
+            LinkedCases = new List<string>(LinkedCases)
         };
         _logger?.LogInfo($"Note cloned. Original Id: {_id}, Clone Id: {clone.Id}");
         return clone;

@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Helpers;
+using AMFormsCST.Core.Helpers;
 using AMFormsCST.Core.Types.Notebook;
 using System.Text.Json.Serialization;
 
@@ -12,4 +12,6 @@ public interface INote : INotebookItem<INote>
     SelectableList<IDealer> Dealers { get; set; }
     SelectableList<IContact> Contacts { get; set; }
     SelectableList<IForm> Forms { get; set; }
+    SelectableList<ICaseLogEntry> LogEntries { get; set; }
+    List<string> LinkedCases { get; set; }
 }

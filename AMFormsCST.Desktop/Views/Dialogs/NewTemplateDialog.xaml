@@ -1,4 +1,4 @@
-﻿<ui:FluentWindow x:Class="AMFormsCST.Desktop.Views.Dialogs.NewTemplateDialog"
+<ui:FluentWindow x:Class="AMFormsCST.Desktop.Views.Dialogs.NewTemplateDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -15,10 +15,18 @@
         WindowStartupLocation="CenterScreen"
         d:DataContext="{d:DesignInstance viewModels:NewTemplateDialogViewModel}"
         WindowStyle="ToolWindow" Topmost="True" WindowBackdropType="Mica"
+        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
         ExtendsContentIntoTitleBar="True">
     <Grid>
         <Grid Name="CustomTitleBarArea" Height="32" VerticalAlignment="Top" Background="Transparent"
-              MouseLeftButtonDown="CustomTitleBarArea_MouseLeftButtonDown" />
+              MouseLeftButtonDown="CustomTitleBarArea_MouseLeftButtonDown">
+            <TextBlock Text="Create New Template"
+                       FontWeight="SemiBold"
+                       FontSize="12"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                       VerticalAlignment="Center"
+                       Margin="14,0,0,0"/>
+        </Grid>
 
         <Grid Margin="15,40,15,15">
             <Grid.RowDefinitions>
@@ -34,18 +42,18 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Label Grid.Row="0" Grid.Column="0" Content="Template Name:"/>
+            <Label Grid.Row="0" Grid.Column="0" Content="Template Name:" Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
             <ui:TextBox Grid.Row="0" Grid.Column="1" Margin="5" Text="{Binding TemplateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-            <Label Grid.Row="1" Grid.Column="0" Content="Description:"/>
+            <Label Grid.Row="1" Grid.Column="0" Content="Description:" Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
             <ui:TextBox Grid.Row="1" Grid.Column="1" Margin="5" Text="{Binding TemplateDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             
-            <Label Grid.Row="2" Grid.Column="0" Content="Type:"/>
+            <Label Grid.Row="2" Grid.Column="0" Content="Type:" Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
             <ComboBox Grid.Row="2" Grid.Column="1" Margin="5"
                       ItemsSource="{Binding TemplateTypes}"
                       SelectedItem="{Binding TemplateType, Mode=TwoWay}" />
 
-            <Label Grid.Row="3" Grid.Column="0" Content="Content:"/>
+            <Label Grid.Row="3" Grid.Column="0" Content="Content:" Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
             <controls:RichTextToolbar Grid.Row="3" Grid.Column="1" Target="{Binding ElementName=ContentRichTextBox}" Margin="5,0,0,2"/>
             <ui:RichTextBox x:Name="ContentRichTextBox" Grid.Row="4" Grid.Column="1" Margin="5" 
                           helpers:RichTextBoxHelper.Document="{Binding TemplateContent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

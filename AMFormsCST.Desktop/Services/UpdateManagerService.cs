@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using System.Windows;
 using Velopack;
 using Velopack.Sources;
@@ -17,7 +17,13 @@ public class UpdateManagerService : IUpdateManagerService
     {
         _snackbarService = snackbarService;
         _logger = logger;
+#if DEV_BUILD
+        _updateManager = new UpdateManager(
+            new GithubSource("https://github.com/TheHeartOfFire/AutoMate-Forms-Customer-Support-Tool", null, true),
+            new UpdateOptions { ExplicitChannel = "dev" });
+#else
         _updateManager = new UpdateManager(new GithubSource("https://github.com/TheHeartOfFire/AutoMate-Forms-Customer-Support-Tool", null, false));
+#endif
         _logger?.LogInfo("UpdateManagerService initialized.");
     }
 

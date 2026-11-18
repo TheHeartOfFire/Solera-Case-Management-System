@@ -1,0 +1,151 @@
+<UserControl x:Class="AMFormsCST.Desktop.Controls.Dashboard.CaseActionTimelineControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:converters="clr-namespace:AMFormsCST.Desktop.Converters"
+             mc:Ignorable="d" 
+             Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+             d:DesignWidth="600" d:DesignHeight="300">
+    <UserControl.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BoolToVisConverter" />
+    </UserControl.Resources>
+
+    <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="14"
+            VerticalAlignment="Stretch">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Header Row -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:SymbolIcon Symbol="Timeline24" FontSize="20" Margin="0,0,8,0" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                    <TextBlock Text="Case Action Timeline" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
+                    <Border Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SelectedNote.LogEntries.Count, StringFormat='{}{0} Entries'}" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    </Border>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="Check items to include in output" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- Scrollable Timeline Items -->
+            <ui:DynamicScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding SelectedNote.LogEntries}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,8"
+                                    Margin="0,0,0,6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Output inclusion Checkbox -->
+                                    <CheckBox Grid.Column="0"
+                                              IsChecked="{Binding IncludeInOutput, Mode=TwoWay}"
+                                              ToolTip="Include in assembled note output"
+                                              VerticalAlignment="Top"
+                                              Margin="0,2,10,0"/>
+
+                                    <StackPanel Grid.Column="1" Orientation="Vertical">
+                                        <!-- Top Info Bar: Timestamp | Action Badge | Form Name | Custom Copy -->
+                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                            <TextBlock Text="{Binding Timestamp, StringFormat='{}{0:MMM dd, h:mm tt}'}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,8,0"/>
+
+                                            <Border Background="{DynamicResource AccentFillColorSecondaryBrush}"
+                                                    CornerRadius="4"
+                                                    Padding="6,2"
+                                                    Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding ActionDisplayName}"
+                                                           FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                                            </Border>
+
+                                            <ui:TextBox Text="{Binding FormName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                        FontWeight="SemiBold"
+                                                        FontSize="12"
+                                                        Padding="6,2"
+                                                        MinHeight="24"
+                                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                        VerticalAlignment="Center"
+                                                        Margin="0,0,6,0"
+                                                        ToolTip="Edit form title inline"/>
+
+                                            <Border Visibility="{Binding IsCustomCopy, Converter={StaticResource BoolToVisConverter}}"
+                                                    Background="#33FFAA00"
+                                                    CornerRadius="4"
+                                                    Padding="4,1"
+                                                    Margin="0,0,6,0">
+                                                <TextBlock Text="Custom Copy" FontSize="10" Foreground="#FFAA00" FontWeight="SemiBold"/>
+                                            </Border>
+
+                                            <Border Visibility="{Binding IsHistorical, Converter={StaticResource BoolToVisConverter}}"
+                                                    Background="#33888888"
+                                                    CornerRadius="4"
+                                                    Padding="4,1"
+                                                    Margin="0,0,6,0">
+                                                <TextBlock Text="Prior Session" FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                            </Border>
+
+                                            <ui:Button Command="{Binding DataContext.EditLogEntryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                       CommandParameter="{Binding}"
+                                                       Appearance="Transparent"
+                                                       Padding="4,2"
+                                                       ToolTip="Reopen in Work Item Composer">
+                                                <ui:SymbolIcon Symbol="Edit16" FontSize="12"/>
+                                            </ui:Button>
+                                        </WrapPanel>
+
+                                        <!-- Stores & Deals Summary -->
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="{Binding StoresSummary, StringFormat='{}Stores: {0}'}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                       Margin="0,0,12,0"/>
+                                            <TextBlock Text="{Binding DealsSummary, StringFormat='{}Deals: {0}'}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        </WrapPanel>
+
+                                        <!-- Change Details (Inline Editable) -->
+                                        <ui:TextBox Text="{Binding Details, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                    AcceptsReturn="True"
+                                                    TextWrapping="Wrap"
+                                                    FontSize="12"
+                                                    Padding="6,4"
+                                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                    Margin="0,2,0,0"
+                                                    ToolTip="Edit details inline"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ui:DynamicScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>
+

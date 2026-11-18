@@ -1,0 +1,176 @@
+<ui:FluentWindow x:Class="AMFormsCST.Desktop.Views.Dialogs.AutoCloseDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        mc:Ignorable="d"
+        Title="Validate &amp; Prepare Case Closure"
+        Height="640"
+        Width="720"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="ToolWindow"
+        Topmost="True"
+        WindowBackdropType="Mica"
+        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+        ExtendsContentIntoTitleBar="True">
+    <Grid>
+        <Grid Name="CustomTitleBarArea" Height="32" VerticalAlignment="Top" Background="Transparent"
+              MouseLeftButtonDown="CustomTitleBarArea_MouseLeftButtonDown">
+            <TextBlock Text="Validate &amp; Prepare Case Closure"
+                       FontWeight="SemiBold"
+                       FontSize="12"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                       VerticalAlignment="Center"
+                       Margin="14,0,0,0"/>
+        </Grid>
+
+        <Grid Margin="16,40,16,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Status & Template Selection -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="180"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Target Status:" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="TargetStatusCombo" SelectionChanged="TargetStatusCombo_SelectionChanged">
+                        <ComboBoxItem Content="Closed" IsSelected="True"/>
+                        <ComboBoxItem Content="Resolved"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="Closure Template:" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="ClosureTemplateCombo"
+                              DisplayMemberPath="Name"
+                              SelectionChanged="ClosureTemplateCombo_SelectionChanged"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Required Salesforce Fields -->
+            <Border Grid.Row="1"
+                    Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="10"
+                    Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="Salesforce Case Fields (Pre-Close Check):" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,8"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,8">
+                            <TextBlock Text="Parent Product:" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <ui:TextBox x:Name="ParentProductBox" PlaceholderText="e.g. Auto/Mate Forms" TextChanged="FieldBox_TextChanged"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,8">
+                            <TextBlock Text="Case Reason:" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <ui:TextBox x:Name="CaseReasonBox" PlaceholderText="e.g. Form Modification" TextChanged="FieldBox_TextChanged"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" Grid.Column="0">
+                            <TextBlock Text="Sub-Category:" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <ui:TextBox x:Name="SubCategoryBox" PlaceholderText="e.g. Line Adjustments" TextChanged="FieldBox_TextChanged"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" Grid.Column="2">
+                            <TextBlock Text="Support Category:" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <ui:TextBox x:Name="SupportCategoryBox" PlaceholderText="e.g. F&amp;I Forms" TextChanged="FieldBox_TextChanged"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Closure Comment + KB Articles -->
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <DockPanel Grid.Row="0" Margin="0,0,0,8">
+                    <TextBlock DockPanel.Dock="Top" Text="Closure Comment:" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,4"/>
+                    <ui:TextBox x:Name="ClosureCommentBox"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                VerticalContentAlignment="Top"
+                                VerticalScrollBarVisibility="Auto"
+                                TextChanged="FieldBox_TextChanged"/>
+                </DockPanel>
+
+                <StackPanel Grid.Row="1">
+                    <TextBlock Text="KB Articles (comma-separated, optional):" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                    <ui:TextBox x:Name="KbArticlesBox" PlaceholderText="e.g. KB-00123, KB-00456"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Validation Checklist -->
+            <Border Grid.Row="3"
+                    x:Name="ValidationBanner"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="10,8"
+                    Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock x:Name="ValidationSummaryText" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                    <ItemsControl x:Name="ValidationIssuesList" Margin="0,4,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,1,0,0">
+                                    <Run Text="• "/>
+                                    <Run Text="{Binding FieldName, Mode=OneWay}" FontWeight="SemiBold"/>
+                                    <Run Text=": "/>
+                                    <Run Text="{Binding Message, Mode=OneWay}"/>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ui:Button x:Name="ApplyDescriptionEmailBtn"
+                               Content="Apply Email from Description to Contact"
+                               Appearance="Secondary"
+                               Visibility="Collapsed"
+                               Margin="0,6,0,0"
+                               Click="ApplyDescriptionEmailBtn_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Footer Buttons -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                <ui:Button Content="Copy Closure Comment"
+                           Icon="{ui:SymbolIcon Copy24}"
+                           Appearance="Primary"
+                           Margin="0,0,8,0"
+                           Click="CopyClosureBtn_Click"/>
+                <ui:Button Content="Apply &amp; Close"
+                           Appearance="Secondary"
+                           Margin="0,0,8,0"
+                           Click="ApplyBtn_Click"/>
+                <ui:Button Content="Cancel" IsCancel="True" Click="CancelBtn_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>
+

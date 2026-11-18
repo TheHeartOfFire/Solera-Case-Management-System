@@ -1,12 +1,13 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.BestPractices;
 using AMFormsCST.Core.Types.BestPractices.TextTemplates.Models;
 using AMFormsCST.Desktop.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows.Documents;
 using System.Windows.Markup;
+using AMFormsCST.Core.Types.Notebook;
+using static AMFormsCST.Core.Types.BestPractices.TextTemplates.Models.TextTemplate;
 
 namespace AMFormsCST.Desktop.ViewModels.Pages.Tools.Templates;
 
@@ -15,6 +16,69 @@ public partial class TemplateItemViewModel : ObservableObject, ISelectable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Output))]
     private TextTemplate _template;
+
+    public TemplateCategoryKind Kind
+    {
+        get => Template.Kind;
+        set
+        {
+            if (Template.Kind != value)
+            {
+                Template.Kind = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(KindDisplayName));
+            }
+        }
+    }
+
+    public string KindDisplayName => Kind switch
+    {
+        TemplateCategoryKind.CompleteTemplate => "Complete Template",
+        TemplateCategoryKind.HeaderPartial => "Header Partial",
+        TemplateCategoryKind.ActionPartial => "Action Partial",
+        TemplateCategoryKind.FooterPartial => "Footer Partial",
+        _ => Kind.ToString()
+    };
+
+    public CaseActionType? AssociatedAction
+    {
+        get => Template.AssociatedAction;
+        set
+        {
+            if (Template.AssociatedAction != value)
+            {
+                Template.AssociatedAction = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public ObservableCollection<string> Tags { get; } = [];
+
+    public string TagsDisplay => Tags.Count > 0 ? string.Join(", ", Tags) : "No Tags";
+
+    public void AddTag(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return;
+        var formatted = tag.Trim();
+        if (!formatted.StartsWith("#")) formatted = "#" + formatted;
+        if (!Template.Tags.Contains(formatted))
+        {
+            Template.Tags.Add(formatted);
+            Tags.Add(formatted);
+            OnPropertyChanged(nameof(TagsDisplay));
+        }
+    }
+
+    public void RemoveTag(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return;
+        if (Template.Tags.Remove(tag))
+        {
+            Tags.Remove(tag);
+            OnPropertyChanged(nameof(TagsDisplay));
+        }
+    }
 
     private ObservableCollection<TemplateVariableViewModel> _variables;
     public ObservableCollection<TemplateVariableViewModel> Variables
@@ -58,6 +122,10 @@ public partial class TemplateItemViewModel : ObservableObject, ISelectable
         _supportTool = supportTool ?? throw new ArgumentNullException(nameof(supportTool));
         _template = template;
         _logger = logger;
+        foreach (var tag in template.Tags)
+        {
+            Tags.Add(tag);
+        }
         _variables = new ObservableCollection<TemplateVariableViewModel>(
             template.GetVariables(_supportTool)
                     .Select(variable => new TemplateVariableViewModel(variable, _logger) { Variable = variable }));

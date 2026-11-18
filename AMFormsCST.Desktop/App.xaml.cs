@@ -158,6 +158,7 @@ public partial class App : Application
                 _ = services.AddSingleton<AutoMateFormModel>();
                 _ = services.AddSingleton<IFormNameBestPractice, AutoMateFormNameBestPractices>();
                 _ = services.AddSingleton<ITemplateRepository, TemplateRepository>();
+                _ = services.AddSingleton<ITemplateAssemblyService, TemplateAssemblyService>();
                 _ = services.AddSingleton<IBestPracticeEnforcer, BestPracticeEnforcer>();
                 _ = services.AddSingleton<INotebook, Notebook>();
                 _ = services.AddSingleton<ISupportTool, SupportTool>();
@@ -279,7 +280,11 @@ public partial class App : Application
         return _host.Services.GetService<T>();
     }
 
+#if DEV_BUILD
+    private const string AppMutexName = @"Local\SoleraCMS_Dev_SingleInstance_Mutex";
+#else
     private const string AppMutexName = @"Local\SoleraCMS_SingleInstance_Mutex";
+#endif
     private static Mutex? _instanceMutex;
 
     /// <summary>
@@ -287,12 +292,14 @@ public partial class App : Application
     /// </summary>
     private void OnStartup(object sender, StartupEventArgs e)
     {
-        if (e.Args.Any(a => a.Contains("--native-messaging", StringComparison.OrdinalIgnoreCase) || a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase)))
+        try
         {
-            Task.Run(() => NativeMessagingBridge.RunAsync()).GetAwaiter().GetResult();
-            Environment.Exit(0);
-            return;
-        }
+            if (e.Args.Any(a => a.Contains("--native-messaging", StringComparison.OrdinalIgnoreCase) || a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase)))
+            {
+                Task.Run(() => NativeMessagingBridge.RunAsync()).GetAwaiter().GetResult();
+                Environment.Exit(0);
+                return;
+            }
 
         // Initialize FormGen patch state early from user settings
         try
@@ -450,6 +457,18 @@ public partial class App : Application
                     ipcService.OpenCodeSnippetsDialogWithCode(coldParseCode);
                 });
             }
+        }
+    }
+    catch (Exception ex)
+        {
+            try
+            {
+                var crashLog = System.IO.Path.Combine(AppContext.BaseDirectory, "logs", "crash.log");
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(crashLog)!);
+                System.IO.File.AppendAllText(crashLog, $"[{DateTime.Now:O}] Exception during OnStartup:\n{ex}\n\n");
+            }
+            catch { }
+            throw;
         }
     }
 
@@ -690,6 +709,18 @@ public partial class App : Application
     /// <summary>
     /// Occurs when an exception is thrown by an application but not handled.
     /// </summary>
-    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e) { }
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        try
+        {
+            var logger = GetService<ILogService>();
+            logger?.LogError("Unhandled dispatcher exception.", e.Exception);
+
+            var crashLog = System.IO.Path.Combine(AppContext.BaseDirectory, "logs", "crash.log");
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(crashLog)!);
+            System.IO.File.AppendAllText(crashLog, $"[{DateTime.Now:O}] Unhandled dispatcher exception:\n{e.Exception}\n\n");
+        }
+        catch { }
+    }
 }
 

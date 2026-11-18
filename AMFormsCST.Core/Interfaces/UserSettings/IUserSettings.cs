@@ -12,6 +12,7 @@ public interface IUserSettings : ISetting
     string Email { get; set; }
     string Phone { get; set; }
     string Title { get; set; }
+    string EmailSignatureTemplate { get; set; }
     UserRole Role { get; set; }
 
     // General Solera Support Contact

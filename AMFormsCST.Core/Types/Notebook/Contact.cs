@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces.Notebook;
+using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Core.Interfaces;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
@@ -15,6 +15,9 @@ public class Contact : IContact
     public string Phone { get; set; } = string.Empty;
     public string PhoneExtension { get; set; } = string.Empty;
     public string PhoneExtensionDelimiter { get; set; } = " ";
+    public string Role { get; set; } = string.Empty;
+    public string Notes { get; set; } = string.Empty;
+    public bool IsPrimary { get; set; }
     public Guid Id => _id;
 
     public Contact() : this(null) { }
@@ -41,6 +44,9 @@ public class Contact : IContact
         sb.AppendLine($"Phone: {Phone}");
         sb.AppendLine($"Phone Extension: {PhoneExtension}");
         sb.AppendLine($"Phone Extension Delimiter: {PhoneExtensionDelimiter}");
+        sb.AppendLine($"Role: {Role}");
+        sb.AppendLine($"Notes: {Notes}");
+        sb.AppendLine($"IsPrimary: {IsPrimary}");
         _logger?.LogDebug($"Contact Dump called for Id: {Id}");
         return sb.ToString();
     }
@@ -75,7 +81,10 @@ public class Contact : IContact
             Email = Email,
             Phone = Phone,
             PhoneExtension = PhoneExtension,
-            PhoneExtensionDelimiter = PhoneExtensionDelimiter
+            PhoneExtensionDelimiter = PhoneExtensionDelimiter,
+            Role = Role,
+            Notes = Notes,
+            IsPrimary = IsPrimary
         };
         _logger?.LogInfo($"Contact cloned. Original Id: {_id}, Clone Id: {clone.Id}");
         return clone;

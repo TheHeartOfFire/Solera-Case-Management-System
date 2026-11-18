@@ -1,8 +1,7 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Desktop.BaseClasses;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Humanizer;
 using Serilog.Context;
 using System;
 using System.Globalization;
@@ -22,10 +21,18 @@ public partial class Contact : ManagedObservableCollectionItem
     private string _phoneExtension = string.Empty;
     [ObservableProperty]
     private string _phoneExtensionDelimiter = " ";
+    [ObservableProperty]
+    private string _role = string.Empty;
+    [ObservableProperty]
+    private string _notes = string.Empty;
+    [ObservableProperty]
+    private bool _isPrimary;
     public override bool IsBlank { get { return string.IsNullOrEmpty(Name) &&
                                  string.IsNullOrEmpty(Email) &&
                                  string.IsNullOrEmpty(Phone) &&
-                                 string.IsNullOrEmpty(PhoneExtension); } }
+                                 string.IsNullOrEmpty(PhoneExtension) &&
+                                 string.IsNullOrEmpty(Role) &&
+                                 string.IsNullOrEmpty(Notes); } }
     public override Guid Id { get; } = Guid.NewGuid();
     internal IContact? CoreType { get; set; }
     internal NoteModel? Parent { get; set; }
@@ -46,6 +53,9 @@ public partial class Contact : ManagedObservableCollectionItem
         Phone = contact.Phone ?? string.Empty;
         PhoneExtension = contact.PhoneExtension ?? string.Empty;
         PhoneExtensionDelimiter = contact.PhoneExtensionDelimiter;
+        Role = contact.Role ?? string.Empty;
+        Notes = contact.Notes ?? string.Empty;
+        IsPrimary = contact.IsPrimary;
         _logger?.LogInfo("Contact loaded from core type.");
         _isInitializing = false;
         UpdateCore();
@@ -75,7 +85,16 @@ public partial class Contact : ManagedObservableCollectionItem
     }
     partial void OnNameChanged(string value)
     {
-        Name = NameCase.NameCaser.ToNameCase(Name);
+        if (!string.IsNullOrEmpty(value))
+        {
+            var trimmedEnd = value.TrimEnd();
+            var trailingWhitespace = value[trimmedEnd.Length..];
+            var cased = NameCase.NameCaser.ToNameCase(trimmedEnd) + trailingWhitespace;
+            if (!string.Equals(Name, cased, StringComparison.Ordinal))
+            {
+                Name = cased;
+            }
+        }
         OnPropertyChanged(nameof(IsBlank));
         UpdateCore();
         using (LogContext.PushProperty("ContactId", Id))
@@ -155,6 +174,9 @@ public partial class Contact : ManagedObservableCollectionItem
         CoreType.Phone = Phone ?? string.Empty;
         CoreType.PhoneExtension = PhoneExtension ?? string.Empty;
         CoreType.PhoneExtensionDelimiter = PhoneExtensionDelimiter ?? " ";
+        CoreType.Role = Role ?? string.Empty;
+        CoreType.Notes = Notes ?? string.Empty;
+        CoreType.IsPrimary = IsPrimary;
         Parent?.UpdateCore();
         _logger?.LogDebug("Contact core updated.");
     }
@@ -169,7 +191,10 @@ public partial class Contact : ManagedObservableCollectionItem
             Email = contact.Email ?? string.Empty,
             Phone = contact.Phone ?? string.Empty,
             PhoneExtension = contact.PhoneExtension ?? string.Empty,
-            PhoneExtensionDelimiter = contact.PhoneExtensionDelimiter ?? " "
+            PhoneExtensionDelimiter = contact.PhoneExtensionDelimiter ?? " ",
+            Role = contact.Role ?? string.Empty,
+            Notes = contact.Notes ?? string.Empty,
+            IsPrimary = contact.IsPrimary
         };
     }
 }

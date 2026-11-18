@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Core.Types.Notebook;
 using AMFormsCST.Desktop.BaseClasses;
@@ -78,6 +78,10 @@ public partial class NoteModel : ManagedObservableCollectionItem
     public Contact? SelectedContact => Contacts.SelectedItem;
     public ManagedObservableCollection<Form> Forms { get; set; }
     public Form? SelectedForm => Forms.SelectedItem;
+    public ManagedObservableCollection<CaseLogEntryItem> LogEntries { get; set; }
+    public CaseLogEntryItem? SelectedLogEntry => LogEntries.SelectedItem;
+    public System.Collections.ObjectModel.ObservableCollection<string> LinkedCases { get; set; } = [];
+
     public override Guid Id { get; } = Guid.NewGuid();
     public override bool IsBlank
     {
@@ -94,7 +98,9 @@ public partial class NoteModel : ManagedObservableCollectionItem
 
             if (Dealers.Any(d => !d.IsBlank) ||
                 Contacts.Any(c => !c.IsBlank) ||
-                Forms.Any(f => !f.IsBlank))
+                Forms.Any(f => !f.IsBlank) ||
+                LogEntries.Any(l => !l.IsBlank) ||
+                LinkedCases.Count > 0)
                 return false;
             return true;
         }
@@ -124,6 +130,7 @@ public partial class NoteModel : ManagedObservableCollectionItem
         InitContacts(phoneExtensionDelimiter);
         InitDealers();
         InitForms();
+        InitLogEntries();
 
         _isInit = false;
         UpdateCore();
@@ -147,6 +154,16 @@ public partial class NoteModel : ManagedObservableCollectionItem
         InitDealers();
         InitContacts(phoneExtensionDelimiter);
         InitForms();
+        InitLogEntries();
+
+        if (note.LinkedCases != null)
+        {
+            foreach (var lc in note.LinkedCases)
+            {
+                if (!string.IsNullOrWhiteSpace(lc) && !LinkedCases.Contains(lc))
+                    LinkedCases.Add(lc);
+            }
+        }
 
         CaseNumber = note.CaseText;
         
@@ -236,6 +253,51 @@ public partial class NoteModel : ManagedObservableCollectionItem
         Forms.CollectionChanged += Forms_CollectionChanged;
         Forms.PropertyChanged += OnFormPropertyChanged;
         Forms.FirstOrDefault()?.Select();
+    }
+
+    private void InitLogEntries()
+    {
+        var entries = CoreType?.LogEntries.ToList()
+            .Select(coreEntry =>
+            {
+                var entry = new CaseLogEntryItem(coreEntry, _logger) { Parent = this };
+                entry.PropertyChanged += OnLogEntryPropertyChanged;
+                return entry;
+            });
+
+        LogEntries = new ManagedObservableCollection<CaseLogEntryItem>(
+            () => new CaseLogEntryItem(_logger) { Parent = this },
+            entries,
+            _logger,
+            (e) => e.PropertyChanged += OnLogEntryPropertyChanged
+        );
+        LogEntries.CollectionChanged += LogEntries_CollectionChanged;
+        LogEntries.PropertyChanged += OnLogEntryPropertyChanged;
+    }
+
+    private void OnLogEntryPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ManagedObservableCollection<CaseLogEntryItem>.SelectedItem))
+        {
+            OnPropertyChanged(nameof(SelectedLogEntry));
+        }
+        else
+        {
+            OnPropertyChanged(nameof(IsBlank));
+        }
+    }
+
+    private void LogEntries_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems != null)
+            foreach (CaseLogEntryItem item in e.NewItems)
+                item.PropertyChanged += OnLogEntryPropertyChanged;
+
+        if (e.OldItems != null)
+            foreach (CaseLogEntryItem item in e.OldItems)
+                item.PropertyChanged -= OnLogEntryPropertyChanged;
+
+        UpdateCore();
     }
 
     private void OnDealerPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -353,6 +415,35 @@ public partial class NoteModel : ManagedObservableCollectionItem
         CoreType.Forms.Clear();
         CoreType.Forms.AddRange(Forms.Select(f => (Core.Types.Notebook.Form)f));
         CoreType.Forms.SelectedItem = Forms?.SelectedItem?.CoreType;
+
+        CoreType.LogEntries.Clear();
+        foreach (var entry in LogEntries)
+        {
+            if (entry.CoreType is ICaseLogEntry cle)
+            {
+                CoreType.LogEntries.Add(cle);
+            }
+            else if (!entry.IsBlank)
+            {
+                var core = new CaseLogEntry
+                {
+                    Timestamp = entry.Timestamp,
+                    Action = entry.Action,
+                    FormName = entry.FormName,
+                    IsCustomCopy = entry.IsCustomCopy,
+                    Details = entry.Details,
+                    IncludeInOutput = entry.IncludeInOutput,
+                    IsHistorical = entry.IsHistorical,
+                    Stores = entry.Stores.Select(s => s.Clone()).ToList(),
+                    Deals = entry.Deals.Select(d => d.Clone()).ToList()
+                };
+                entry.CoreType = core;
+                CoreType.LogEntries.Add(core);
+            }
+        }
+        CoreType.LogEntries.SelectedItem = LogEntries?.SelectedItem?.CoreType;
+
+        CoreType.LinkedCases = [..LinkedCases];
         _logger?.LogDebug($"NoteModel core updated. ID: {Id}\tCore ID: {CoreType.Id}");
     }
     public static string GetFlowDocumentPlainText(FlowDocument document)
@@ -373,14 +464,13 @@ public partial class NoteModel : ManagedObservableCollectionItem
         return new Note(note.CoreType.Id)
         {
             CaseText = note.CaseNumber ?? string.Empty,
-            NotesText = note.CoreType.NotesText, // Use cached plain text ? Or re-extract from Xaml?
-            // Actually CoreType should already be updated if UpdateCore was called. 
-            // Better to re-derive to be safe or trust CoreType.
-            // Let's trust CoreType or re-parse if needed. Simpler to trust since UpdateCore runs.
+            NotesText = note.CoreType.NotesText,
             NotesXaml = note.NotesXaml,
             Dealers = [..note.Dealers.Select(d => (Core.Types.Notebook.Dealer)d)],
             Contacts = [..note.Contacts.Select(c => (Core.Types.Notebook.Contact)c)],
-            Forms = [..note.Forms.Select(f => (Core.Types.Notebook.Form)f)]
+            Forms = [..note.Forms.Select(f => (Core.Types.Notebook.Form)f)],
+            LogEntries = [..note.LogEntries.Select(l => l.CoreType ?? new CaseLogEntry())],
+            LinkedCases = [..note.LinkedCases]
         };
     }
 

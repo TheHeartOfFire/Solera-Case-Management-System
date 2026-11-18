@@ -40,24 +40,33 @@ flowchart LR
 - [x] Code parsing engine for form fields and code lines
 - [x] Unify FormGen Utilities workspace layout and responsive sizing
 
-#### Phase 2: Dashboard & Templates Integration (with CST Integration) `[NEXT UP]`
-*Note: Dropped drag-and-drop customization in favor of a single rock-solid, cohesive layout.*
-- [ ] **Dashboard Layout & Component Extraction**:
-  - [ ] Address layout, sizing, and scrolling pain points across various resolutions
-  - [ ] Extract Notes, Forms, Dealers, Contacts, and Misc controls into clean, dedicated user controls
+#### Phase 2: Dashboard & Templates Integration (with CST Integration) `[IN PROGRESS]`
+*Note: Dropped drag-and-drop customization in favor of a single rock-solid, cohesive progressive-disclosure layout.*
+- [x] **Dashboard Layout & Component Extraction**:
+  - [x] Progressive disclosure 2-pane workspace (Workpad Composer + Assembled Output & Action Timeline)
+  - [x] Log-based case action architecture (`CaseActionType`, Store assignments, Multi-deal chips)
+  - [x] Bi-directional recall (Salesforce SCMT log parser & linked cases importer)
+  - [x] Multi-contact roster with roles/notes and linked cases clustering
+  - [x] Extracted dedicated controls: `CaseHeaderControl`, `WorkItemComposerControl`, `CaseActionTimelineControl`, `AssembledOutputControl`
 - [ ] **Auto/Mate CST & Dealership Integration**:
   - [ ] Launch Auto/Mate support sessions directly for dealerships from CST database
   - [ ] Server ID, dealership name, and company number lookup tool
   - [ ] Direct injection of server/company details into active case notes
-- [ ] **Template System Overhaul**:
-  - [ ] Use Dashboard template tags to filter templates as default filter
-  - [ ] Default template presets tailored for each Org Role
-  - [ ] Template grouping: group templates by cause/workflow for rapid 1-click access
-  - [ ] New Template Dialog layout and group tag assignment
+- [x] **Template System Overhaul**:
+  - [x] 3-column Template Studio (Taxonomy/Explorer, Composer with token chips, Live Assembly Tester)
+  - [x] Modular partial templates (headers, action bullets, footers, closure notes)
+  - [x] Tag-based filtering (`#Internal`, `#Email`, `#Publish`, `#Closure`)
+  - [x] Dynamic variable token insertion chips into editor
+  - [x] Live Assembly Preview with real-time token resolution against active case note
 
 #### Phase 3: Proposal Form Toolkit
 - [ ] Dedicated 1-screen workspace for pulling and pushing proposal forms
+- [ ] Built-in lightweight PDF viewer/editor with drag-and-drop preconfigured fillable AcroForm fields (searchable proposal field catalog replacing external spreadsheet lookup)
 - [ ] Proposal coding assistant to simplify and automate proposal-specific programming
+- [ ] Automated FTP/SSH deployment pipeline to dealer servers:
+  - [ ] Windows Credential Manager integration (optional "Remember me" via `CredWrite`/`CredRead`, plus session-only in-memory fallback and prompt relay for nested SSH/Server ID/FTP prompts)
+  - [ ] Live terminal output viewer for troubleshooting deployment errors, with manual interactive terminal takeover if needed
+- [ ] Automated Git backup & versioning for the shared OneDrive proposal forms repository (commit/push or snapshot sync with OneDrive lock/conflict safety)
 - [ ] Proposal & Proposal Logo Management integration
 
 #### Phase 4: Whole-App Unified UI Pass
@@ -86,8 +95,11 @@ flowchart LR
 - [ ] Built-in themes:
   - [ ] Light Mode
   - [ ] Dark Mode
-  - [ ] Solera Theme (corporate styling)
-  - [ ] Auto/Mate Theme (classic DMS palette)
+  - [ ] Solera Theme (`solera.com` corporate palette: `#180A48` Cosmic, `#32255E` Jacarta, `#68368B` Eminence, `#194FA1` Cobalt, `#1A99B0` Pelorous, `#FFB132` Sun, `#3A8B6B` Viridian, `#7A064E` Rose, `#F8F8FB` Subtle, `#58595B` Gray)
+  - [ ] Auto/Mate Theme (2018 classic DMS palette: `#ED9E33` Amber, `#FAA41A` Gold, `#20252D` Slate, `#626365` Body Gray, `#F2F2F2` Surface, `#E6E6E6` Border, `#006DF1` Link Blue, `#2BA48D` Teal, `#BD7B22` Pressed)
+  - [ ] High Contrast — Obsidian & Gold (HC Black: `#000000` Base, `#0D0D0D` Card, `#FFFFFF` Text/Border, `#FFD600` Gold, `#00FFFF` Cyan, `#00FF7F` Green, `#FF4D4D` Red)
+  - [ ] High Contrast — Night Sky (HC Aquatic: `#0A0E17` Deep Navy, `#121826` Card, `#FFFFFF` Text, `#8EE3FF` Sky Cyan/Border, `#FFEE32` Yellow, `#70FF94` Mint, `#FF7A8A` Coral)
+  - [ ] High Contrast — Paper Ink (HC Light: `#FFFFFF` Base, `#F4F4F4` Paper, `#000000` Ink/Border, `#0000CC` Royal Blue, `#004D61` Deep Teal, `#005A00` Forest, `#7A4100` Amber, `#B00020` Crimson)
 - [ ] Customizable theme engine: read and write theme profiles to/from JSON for shareable community theme files
 
 ---

@@ -21,25 +21,25 @@
         Topmost="{Binding ViewModel.IsWindowTopmost, Mode=OneWay}">
     <Grid>
         <ui:NavigationView
-    x:Name="NavigationView"
-    IsPaneOpen="False"
-    Padding="42,0,42,0"
-    BreadcrumbBar="{Binding ElementName=BreadcrumbBar}"
-    EnableDebugMessages="True"
-    FooterMenuItemsSource="{Binding ViewModel.NavigationFooter, Mode=OneWay}"
-    FrameMargin="0"
-    IsBackButtonVisible="Visible"
-    IsPaneToggleVisible="True"
-    MenuItemsSource="{Binding ViewModel.NavigationItems, Mode=OneWay}"
-    OpenPaneLength="310"
-    PaneClosed="NavigationView_OnPaneClosed"
-    PaneDisplayMode="Left"
-    PaneOpened="NavigationView_OnPaneOpened"
-    SelectionChanged="OnNavigationSelectionChanged"
-    TitleBar="{Binding ElementName=TitleBar, Mode=OneWay}"
-    Transition="FadeInWithSlide">
+            x:Name="NavigationView"
+            IsPaneOpen="False"
+            Padding="0"
+            BreadcrumbBar="{Binding ElementName=BreadcrumbBar}"
+            EnableDebugMessages="True"
+            FooterMenuItemsSource="{Binding ViewModel.NavigationFooter, Mode=OneWay}"
+            FrameMargin="0"
+            IsBackButtonVisible="Visible"
+            IsPaneToggleVisible="True"
+            MenuItemsSource="{Binding ViewModel.NavigationItems, Mode=OneWay}"
+            OpenPaneLength="310"
+            PaneClosed="NavigationView_OnPaneClosed"
+            PaneDisplayMode="Left"
+            PaneOpened="NavigationView_OnPaneOpened"
+            SelectionChanged="OnNavigationSelectionChanged"
+            TitleBar="{Binding ElementName=TitleBar, Mode=OneWay}"
+            Transition="FadeInWithSlide">
             <ui:NavigationView.Header>
-                <StackPanel Margin="42,32,42,20">
+                <StackPanel Margin="12,14,12,6">
                     <ui:BreadcrumbBar x:Name="BreadcrumbBar" />
                 </StackPanel>
             </ui:NavigationView.Header>

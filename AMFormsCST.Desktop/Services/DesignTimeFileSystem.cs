@@ -30,6 +30,8 @@ public class DesignTimeFileSystem : IFileSystem, AMFormsCST.Core.Interfaces.Util
 
     public IFileVersionInfoFactory FileVersionInfo => _mockFileSystem.FileVersionInfo;
 
+    public IRandomAccess RandomAccess => _mockFileSystem.RandomAccess;
+
     public bool FileExists(string? path) => _mockFileSystem.FileExists(path);
     public string? GetDirectoryName(string? path) => _mockFileSystem.Path.GetDirectoryName(path);
     public string? GetFileNameWithoutExtension(string? path) => _mockFileSystem.Path.GetFileNameWithoutExtension(path);

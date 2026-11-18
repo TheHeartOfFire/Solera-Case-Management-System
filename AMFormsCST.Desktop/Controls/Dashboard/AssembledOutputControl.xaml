@@ -1,0 +1,159 @@
+<UserControl x:Class="AMFormsCST.Desktop.Controls.Dashboard.AssembledOutputControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:converters="clr-namespace:AMFormsCST.Desktop.Converters"
+             mc:Ignorable="d" 
+             Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+             d:DesignWidth="600" d:DesignHeight="300">
+    <UserControl.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BoolToVisConverter" />
+    </UserControl.Resources>
+    <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="14"
+            VerticalAlignment="Stretch">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Mode Switcher Tabs & Refresh -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:Button Command="{Binding SetOutputModeCommand}"
+                               CommandParameter="0"
+                               Content="Log"
+                               Appearance="Secondary"
+                               Margin="0,0,6,0"
+                               Padding="10,5"/>
+                    <ui:Button Command="{Binding SetOutputModeCommand}"
+                               CommandParameter="1"
+                               Content="Dealer Email"
+                               Appearance="Secondary"
+                               Margin="0,0,6,0"
+                               Padding="10,5"/>
+                    <ui:Button Command="{Binding SetOutputModeCommand}"
+                               CommandParameter="2"
+                               Content="Publish Note"
+                               Appearance="Secondary"
+                               Margin="0,0,6,0"
+                               Padding="10,5"/>
+                    <ui:Button Command="{Binding SetOutputModeCommand}"
+                               CommandParameter="3"
+                               Content="Closure"
+                               Appearance="Secondary"
+                               Margin="0,0,6,0"
+                               Padding="10,5"/>
+                    <ui:Button Command="{Binding SetOutputModeCommand}"
+                               CommandParameter="4"
+                               Content="Linked Cases"
+                               Appearance="Secondary"
+                               Padding="10,5"/>
+                </WrapPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Visibility="{Binding IsAssembledOutputDirty, Converter={StaticResource BoolToVisConverter}}"
+                            Background="#33FFAA00"
+                            CornerRadius="4"
+                            Padding="6,2"
+                            Margin="0,0,6,0"
+                            VerticalAlignment="Center"
+                            ToolTip="Output has manual edits">
+                        <TextBlock Text="Edited" FontSize="10" FontWeight="SemiBold" Foreground="#FFAA00"/>
+                    </Border>
+                    <ui:Button Command="{Binding ForceRefreshAssembledNoteCommand}"
+                               Appearance="Transparent"
+                               ToolTip="Reset &amp; refresh assembled output preview"
+                               Padding="6">
+                        <ui:SymbolIcon Symbol="ArrowSync24" FontSize="16"/>
+                    </ui:Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Assembled Note Preview Box + Optional Multi-Form Publish Picker -->
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0"
+                            Orientation="Horizontal"
+                            Margin="0,0,0,6"
+                            Visibility="{Binding IsPublishFormPickerVisible, Converter={StaticResource BoolToVisConverter}}">
+                    <TextBlock Text="Publish Form:" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox ItemsSource="{Binding AvailablePublishForms}"
+                              SelectedItem="{Binding SelectedPublishForm, Mode=TwoWay}"
+                              MinWidth="220"/>
+                </StackPanel>
+
+                <ui:TextBox Grid.Row="1"
+                            Text="{Binding AssembledNoteText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            IsReadOnly="False"
+                            AcceptsReturn="True"
+                            TextWrapping="Wrap"
+                            VerticalContentAlignment="Top"
+                            VerticalScrollBarVisibility="Auto"
+                            FontFamily="Cascadia Mono, Consolas, Courier New"
+                            FontSize="12"/>
+            </Grid>
+
+            <!-- Action Buttons Bar -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ui:Button Grid.Column="0"
+                           Command="{Binding CopyAssembledNoteCommand}"
+                           Appearance="Primary"
+                           Content="Copy Assembled Note"
+                           Icon="{ui:SymbolIcon Copy24}"
+                           FontWeight="SemiBold"
+                           FontSize="13"
+                           HorizontalAlignment="Stretch"
+                           Padding="16,8"
+                           Margin="0,0,8,0"
+                           ToolTip="Copy generated text to clipboard"/>
+
+                <ui:Button Grid.Column="1"
+                           Command="{Binding SendToSalesforceCommand}"
+                           Appearance="Secondary"
+                           Padding="12,8"
+                           Margin="0,0,8,0"
+                           ToolTip="Send note directly to active Salesforce tab">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="ArrowUpload24" FontSize="16" Margin="0,0,6,0"/>
+                        <TextBlock Text="Send to SF" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+
+                <ui:Button Grid.Column="2"
+                           Command="{Binding OpenAutoCloseDialogCommand}"
+                           Appearance="Secondary"
+                           Padding="12,8"
+                           ToolTip="Validate required Salesforce fields and prepare Case Closure / Resolved comments">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="CheckmarkCircle24" FontSize="16" Margin="0,0,6,0"/>
+                        <TextBlock Text="Validate &amp; Close" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>
+

@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.BestPractices;
 using System.Text.Json.Serialization;
 using System.Windows.Documents;
@@ -43,17 +43,33 @@ public class TextTemplate : IEquatable<TextTemplate>
         Email,
         Other
     }
-    public TextTemplate(string name, string description, string textXaml, TemplateType type)
+
+    public enum TemplateCategoryKind
+    {
+        CompleteTemplate,
+        HeaderPartial,
+        ActionPartial,
+        FooterPartial
+    }
+
+    public TemplateCategoryKind Kind { get; set; } = TemplateCategoryKind.CompleteTemplate;
+    public List<string> Tags { get; set; } = [];
+    public Notebook.CaseActionType? AssociatedAction { get; set; }
+
+    public TextTemplate(string name, string description, string textXaml, TemplateType type, TemplateCategoryKind kind = TemplateCategoryKind.CompleteTemplate, List<string>? tags = null, Notebook.CaseActionType? associatedAction = null)
     {
         Id = Guid.NewGuid(); 
         Name = name;
         Description = description;
         TextXaml = textXaml;
         Type = type;
+        Kind = kind;
+        Tags = tags ?? [];
+        AssociatedAction = associatedAction;
     }
     
     // Kept for compatibility if needed, or update consumers
-    public TextTemplate(string name, string description, FlowDocument text, TemplateType type)
+    public TextTemplate(string name, string description, FlowDocument text, TemplateType type, TemplateCategoryKind kind = TemplateCategoryKind.CompleteTemplate, List<string>? tags = null, Notebook.CaseActionType? associatedAction = null)
     {
         Id = Guid.NewGuid();
         Name = name;
@@ -61,16 +77,22 @@ public class TextTemplate : IEquatable<TextTemplate>
         Text = text;
         TextXaml = System.Windows.Markup.XamlWriter.Save(text);
         Type = type;
+        Kind = kind;
+        Tags = tags ?? [];
+        AssociatedAction = associatedAction;
     }
 
     [JsonConstructor]
-    public TextTemplate(Guid id, string name, string description, string textXaml, TemplateType type)
+    public TextTemplate(Guid id, string name, string description, string textXaml, TemplateType type, TemplateCategoryKind kind = TemplateCategoryKind.CompleteTemplate, List<string>? tags = null, Notebook.CaseActionType? associatedAction = null)
     {
         Id = id;
         Name = name;
         Description = description;
         TextXaml = textXaml;
         Type = type;
+        Kind = kind;
+        Tags = tags ?? [];
+        AssociatedAction = associatedAction;
     }
 
     public List<ITextTemplateVariable> GetVariables(ISupportTool supportTool)

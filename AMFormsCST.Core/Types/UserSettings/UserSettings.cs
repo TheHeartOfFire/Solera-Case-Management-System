@@ -15,6 +15,7 @@ public class UserSettings : IUserSettings
     private string _email = string.Empty;
     private string _phone = string.Empty;
     private string _title = string.Empty;
+    private string _emailSignatureTemplate = AMFormsCST.Core.Utils.UserSignatureFormatter.DefaultAutomateFormsSignature;
     private UserRole _role = UserRole.AutomateForms;
 
     private string _supportEmail = "automate-support@solera.com";
@@ -86,6 +87,20 @@ public class UserSettings : IUserSettings
             {
                 _title = value;
                 _logger?.LogInfo($"Title property set to '{value}'.");
+            }
+        }
+    }
+
+    public string EmailSignatureTemplate
+    {
+        get => _emailSignatureTemplate;
+        set
+        {
+            value ??= string.Empty;
+            if (_emailSignatureTemplate != value)
+            {
+                _emailSignatureTemplate = value;
+                _logger?.LogInfo("EmailSignatureTemplate property updated.");
             }
         }
     }
