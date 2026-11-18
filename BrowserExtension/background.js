@@ -1,6 +1,7 @@
 // Solera Case Management Extension - Background Service Worker
 // Communicates with native host com.solera.cms.bridge
 
+const DEV_HOST_NAME = "com.solera.cms.bridge.dev";
 const HOST_NAME = "com.solera.cms.bridge";
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -381,32 +382,54 @@ function setBadgeStatus(text, color, clearAfterMs) {
 }
 
 function sendIpcMessage(message, callback, tabId, successToast) {
-    try {
-        chrome.runtime.sendNativeMessage(HOST_NAME, message, (response) => {
-            const err = chrome.runtime.lastError;
-            if (err) {
-                console.warn("Communication error:", err.message);
+    sendViaHost(DEV_HOST_NAME, message, (devOk, devResponse) => {
+        if (devOk) {
+            handleIpcSuccess(devResponse, callback, tabId, successToast);
+            return;
+        }
+        sendViaHost(HOST_NAME, message, (liveOk, liveResponse, liveErr) => {
+            if (!liveOk) {
+                console.warn("Communication error:", liveErr);
                 setBadgeStatus("ERR", "#dc2626", 6000);
                 notifyTabToast(tabId, "⚠ Solera Case Management is not running. Please open the Solera app.", true);
-                if (callback) callback({ success: false, message: err.message });
+                if (callback) callback({ success: false, message: liveErr || "Unable to connect" });
                 return;
             }
-            if (response && response.success === false) {
-                setBadgeStatus("ERR", "#dc2626", 5000);
-                notifyTabToast(tabId, "⚠ Solera: " + (response.message || "Operation failed"), true);
-            } else {
-                setBadgeStatus("✓", "#16a34a", 2500);
-                if (successToast) {
-                    notifyTabToast(tabId, successToast, false);
-                }
+            handleIpcSuccess(liveResponse, callback, tabId, successToast);
+        });
+    });
+}
+
+function sendViaHost(hostName, message, done) {
+    try {
+        chrome.runtime.sendNativeMessage(hostName, message, (response) => {
+            const err = chrome.runtime.lastError;
+            if (err) {
+                done(false, null, err.message);
+                return;
             }
-            if (callback) callback(response);
+            if (hostName === DEV_HOST_NAME && response && response.success === false &&
+                typeof response.message === "string" && response.message.toLowerCase().includes("unable to connect")) {
+                done(false, response, response.message);
+                return;
+            }
+            done(true, response, null);
         });
     } catch (ex) {
-        console.error("Exception in sendNativeMessage:", ex);
-        setBadgeStatus("ERR", "#dc2626", 6000);
-        notifyTabToast(tabId, "⚠ Unable to communicate with Solera Case Management.", true);
-        if (callback) callback({ success: false, message: ex.toString() });
+        done(false, null, ex.toString());
     }
+}
+
+function handleIpcSuccess(response, callback, tabId, successToast) {
+    if (response && response.success === false) {
+        setBadgeStatus("ERR", "#dc2626", 5000);
+        notifyTabToast(tabId, "⚠ Solera: " + (response.message || "Operation failed"), true);
+    } else {
+        setBadgeStatus("✓", "#16a34a", 2500);
+        if (successToast) {
+            notifyTabToast(tabId, successToast, false);
+        }
+    }
+    if (callback) callback(response);
 }
 
