@@ -69,6 +69,7 @@ public static class NativeMessagingBridge
 
                 int timeoutMs = string.Equals(message.Action, "LoadCase", StringComparison.OrdinalIgnoreCase) ? 10000 : 3500;
                 var response = await NamedPipeIpcClient.SendMessageAsync(message, timeoutMs: timeoutMs).ConfigureAwait(false);
+#if !DEV_BUILD
                 if (!response.Success &&
                     string.Equals(message.Target, "SoleraCMS", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(Environment.GetEnvironmentVariable("SOLERA_NO_AUTOLAUNCH"), "1", StringComparison.OrdinalIgnoreCase))
@@ -94,6 +95,7 @@ public static class NativeMessagingBridge
                         LogBridge($"Desktop app is already running but pipe call timed out or failed ({response.Message}). Not launching another instance or retrying to prevent duplicates.");
                     }
                 }
+#endif
 
                 LogBridge($"Sending response: Success={response.Success}, Message={response.Message}");
                 await WriteResponseAsync(stdout, response).ConfigureAwait(false);
