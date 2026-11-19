@@ -1,4 +1,4 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Desktop.Models.UserSettings;
 using AMFormsCST.Desktop.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -110,7 +110,7 @@ public partial class MainWindowViewModel : ObservableObject
                 if (themeSetting.Theme != newTheme)
                 {
                     themeSetting.Theme = newTheme;
-                    ApplicationThemeManager.Apply(newTheme);
+                    ApplicationThemeManager.Apply(newTheme, Wpf.Ui.Controls.WindowBackdropType.Mica);
                     _supportTool.SaveAllSettings();
                     _logger?.LogInfo($"IsLightTheme changed: {value}");
                 }
