@@ -366,7 +366,7 @@ public partial class SettingsViewModel : ViewModel
                     if (themeSetting != null && themeSetting.Theme != CurrentTheme)
                     {
                         themeSetting.Theme = CurrentTheme;
-                        ApplicationThemeManager.Apply(CurrentTheme);
+                        ApplicationThemeManager.Apply(CurrentTheme, Wpf.Ui.Controls.WindowBackdropType.Mica);
                         _logger?.LogInfo($"Theme changed: {CurrentTheme}");
                     }
                     break;

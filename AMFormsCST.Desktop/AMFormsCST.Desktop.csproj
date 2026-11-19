@@ -12,7 +12,6 @@
     <FileVersion>$(assemblyversion)</FileVersion>
     <Version>$(assemblyversion)</Version>
     <UserSecretsId>8b2d1faf-aa49-46d4-aff5-f53d0b5a1380</UserSecretsId>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(DevBuild)' == 'true'">

@@ -52,7 +52,19 @@ public partial class MainWindow : IWindow
         InitializeComponent();
 
         NavigationView.SetCurrentValue(NavigationView.IsPaneOpenProperty, false);
-        Loaded += (_, _) => NavigationView.SetCurrentValue(NavigationView.IsPaneOpenProperty, false);
+        Loaded += (_, _) =>
+        {
+            NavigationView.SetCurrentValue(NavigationView.IsPaneOpenProperty, false);
+            if (WindowBackdrop.IsSupported(WindowBackdropType.Mica))
+            {
+                WindowBackdrop.ApplyBackdrop(this, WindowBackdropType.Mica);
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero && System.Windows.Interop.HwndSource.FromHwnd(hwnd)?.CompositionTarget is { } target)
+                {
+                    target.BackgroundColor = System.Windows.Media.Colors.Transparent;
+                }
+            }
+        };
 
         snackbarService.SetSnackbarPresenter(SnackbarPresenter);
         navigationService.SetNavigationControl(NavigationView);
