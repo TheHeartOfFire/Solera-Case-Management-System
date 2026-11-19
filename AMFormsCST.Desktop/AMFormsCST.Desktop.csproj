@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -8,10 +8,16 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\Solera_Logo_Symbol_Only.ico</ApplicationIcon>
-    <AssemblyVersion>2.10.4</AssemblyVersion>
+    <AssemblyVersion>2.10.5</AssemblyVersion>
     <FileVersion>$(assemblyversion)</FileVersion>
     <Version>$(assemblyversion)</Version>
     <UserSecretsId>8b2d1faf-aa49-46d4-aff5-f53d0b5a1380</UserSecretsId>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(DevBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);DEV_BUILD</DefineConstants>
+    <AssemblyTitle>Solera Case Management System (Dev)</AssemblyTitle>
+    <Product>Solera Case Management System (Dev)</Product>
   </PropertyGroup>
 
   <ItemGroup>
@@ -63,28 +69,27 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="Humanizer" Version="3.0.8" />
-    <PackageReference Include="Lepo.i18n" Version="2.0.0" />
-    <PackageReference Include="Lepo.i18n.DependencyInjection" Version="2.0.0" />
-    <PackageReference Include="Lepo.i18n.Wpf" Version="2.0.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Lepo.i18n" Version="2.1.0" />
+    <PackageReference Include="Lepo.i18n.DependencyInjection" Version="2.1.0" />
+    <PackageReference Include="Lepo.i18n.Wpf" Version="2.1.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.3" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.3" />
-    <PackageReference Include="Moq" Version="4.20.70" />
+    <PackageReference Include="Moq" Version="4.21.0" />
     <PackageReference Include="NameCase" Version="1.0.0" />
-    <PackageReference Include="Nodify" Version="7.2.0" />
+    <PackageReference Include="Nodify" Version="7.3.0" />
     <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.2" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.1-dev-00953" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-    <PackageReference Include="System.IO.Abstractions" Version="22.0.15" />
-    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="22.0.15" />
+    <PackageReference Include="System.IO.Abstractions" Version="23.0.1" />
+    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="23.0.1" />
     <PackageReference Include="System.ObjectModel" Version="4.3.0" />
-    <PackageReference Include="Velopack" Version="0.0.1350-g3ba32af" />
-    <PackageReference Include="WPF-UI" Version="4.0.2" />
-    <PackageReference Include="WPF-UI.DependencyInjection" Version="4.0.2" />
-    <PackageReference Include="WPF-UI.Tray" Version="4.0.2" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <PackageReference Include="WPF-UI.DependencyInjection" Version="4.3.0" />
+    <PackageReference Include="WPF-UI.Tray" Version="4.3.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -111,10 +116,10 @@
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
   </ItemGroup>
-	  <Target Name="VeloPack" AfterTargets="Publish">
+	  <Target Name="VeloPack" AfterTargets="Publish" Condition="'$(DevBuild)' != 'true'">
 		<Exec Command="vpk pack -u SoleraCaseManagementTool -v $(assemblyversion) -p .\bin\Release\net9.0-windows\publish -e AMFormsCST.Desktop.exe" />
 	</Target>
-	<Target Name="GitHub Release" AfterTargets="Publish">
+	<Target Name="GitHub Release" AfterTargets="Publish" Condition="'$(DevBuild)' != 'true'">
 		<Exec Command="gh release create $(assemblyversion) --generate-notes" />
 		<Exec Command="gh release upload $(assemblyversion) .\Releases\assets.win.json" />
 		<Exec Command="gh release upload $(assemblyversion) .\Releases\SoleraCaseManagementTool-win-Portable.zip" />

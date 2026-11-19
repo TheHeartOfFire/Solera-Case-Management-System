@@ -1,8 +1,7 @@
-﻿using AMFormsCST.Core.Interfaces;
+using AMFormsCST.Core.Interfaces;
 using AMFormsCST.Core.Interfaces.Notebook;
 using AMFormsCST.Desktop.BaseClasses;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Humanizer;
 using Serilog.Context;
 using System;
 using System.Globalization;
