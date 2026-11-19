@@ -55,6 +55,11 @@ public partial class MainWindow : IWindow
         Loaded += (_, _) =>
         {
             NavigationView.SetCurrentValue(NavigationView.IsPaneOpenProperty, false);
+            var initialTheme = ViewModel.IsLightTheme
+                ? Wpf.Ui.Appearance.ApplicationTheme.Light
+                : Wpf.Ui.Appearance.ApplicationTheme.Dark;
+            Wpf.Ui.Appearance.ApplicationThemeManager.Apply(initialTheme, WindowBackdropType.Mica);
+
             if (WindowBackdrop.IsSupported(WindowBackdropType.Mica))
             {
                 WindowBackdrop.ApplyBackdrop(this, WindowBackdropType.Mica);

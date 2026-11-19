@@ -17,7 +17,7 @@
         WindowCornerPreference="Default"
         WindowStartupLocation="CenterScreen"
         ExtendsContentIntoTitleBar="True"
-        Background="Transparent"
+        Background="{DynamicResource ApplicationBackgroundBrush}"
         MinWidth="1200" MinHeight="775"
         Topmost="{Binding ViewModel.IsWindowTopmost, Mode=OneWay}">
     <Grid>
