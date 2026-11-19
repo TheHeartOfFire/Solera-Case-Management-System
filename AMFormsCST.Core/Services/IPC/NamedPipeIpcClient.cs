@@ -27,8 +27,9 @@ public static class NamedPipeIpcClient
             using var timeoutCts = new CancellationTokenSource(timeoutMs);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-            await clientStream.ConnectAsync(timeoutMs, linkedCts.Token)
-                .WaitAsync(TimeSpan.FromMilliseconds(timeoutMs), linkedCts.Token)
+            var connectTimeoutMs = Math.Min(timeoutMs, 500);
+            await clientStream.ConnectAsync(connectTimeoutMs, linkedCts.Token)
+                .WaitAsync(TimeSpan.FromMilliseconds(connectTimeoutMs), linkedCts.Token)
                 .ConfigureAwait(false);
 
             var encoding = new UTF8Encoding(false);

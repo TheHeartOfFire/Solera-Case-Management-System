@@ -409,9 +409,12 @@ function sendViaHost(hostName, message, done) {
                 return;
             }
             if (hostName === DEV_HOST_NAME && response && response.success === false &&
-                typeof response.message === "string" && response.message.toLowerCase().includes("unable to connect")) {
-                done(false, response, response.message);
-                return;
+                typeof response.message === "string") {
+                const lowerMsg = response.message.toLowerCase();
+                if (lowerMsg.includes("unable to connect") || lowerMsg.includes("timed out") || lowerMsg.includes("ipc connection")) {
+                    done(false, response, response.message);
+                    return;
+                }
             }
             done(true, response, null);
         });
