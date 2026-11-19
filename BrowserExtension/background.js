@@ -381,22 +381,57 @@ function setBadgeStatus(text, color, clearAfterMs) {
     } catch (e) {}
 }
 
-function sendIpcMessage(message, callback, tabId, successToast) {
-    sendViaHost(DEV_HOST_NAME, message, (devOk, devResponse) => {
-        if (devOk) {
-            handleIpcSuccess(devResponse, callback, tabId, successToast);
-            return;
-        }
-        sendViaHost(HOST_NAME, message, (liveOk, liveResponse, liveErr) => {
-            if (!liveOk) {
-                console.warn("Communication error:", liveErr);
-                setBadgeStatus("ERR", "#dc2626", 6000);
-                notifyTabToast(tabId, "⚠ Solera Case Management is not running. Please open the Solera app.", true);
-                if (callback) callback({ success: false, message: liveErr || "Unable to connect" });
+function probeDevHost(done) {
+    let settled = false;
+    const finish = (available) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        done(available);
+    };
+
+    const timer = setTimeout(() => finish(false), 750);
+
+    try {
+        chrome.runtime.sendNativeMessage(DEV_HOST_NAME, { Action: "Ping", Target: "SoleraCMS" }, (response) => {
+            const err = chrome.runtime.lastError;
+            if (err || !response || response.success === false) {
+                finish(false);
                 return;
             }
-            handleIpcSuccess(liveResponse, callback, tabId, successToast);
+            finish(true);
         });
+    } catch (ex) {
+        finish(false);
+    }
+}
+
+function sendIpcMessage(message, callback, tabId, successToast) {
+    probeDevHost((devAvailable) => {
+        if (devAvailable) {
+            sendViaHost(DEV_HOST_NAME, message, (devOk, devResponse) => {
+                if (devOk) {
+                    handleIpcSuccess(devResponse, callback, tabId, successToast);
+                    return;
+                }
+                sendToLiveHost(message, callback, tabId, successToast);
+            });
+            return;
+        }
+        sendToLiveHost(message, callback, tabId, successToast);
+    });
+}
+
+function sendToLiveHost(message, callback, tabId, successToast) {
+    sendViaHost(HOST_NAME, message, (liveOk, liveResponse, liveErr) => {
+        if (!liveOk) {
+            console.warn("Communication error:", liveErr);
+            setBadgeStatus("ERR", "#dc2626", 6000);
+            notifyTabToast(tabId, "⚠ Solera Case Management is not running. Please open the Solera app.", true);
+            if (callback) callback({ success: false, message: liveErr || "Unable to connect" });
+            return;
+        }
+        handleIpcSuccess(liveResponse, callback, tabId, successToast);
     });
 }
 
